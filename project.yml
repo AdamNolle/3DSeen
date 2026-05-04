@@ -1,0 +1,58 @@
+name: 3DSeen
+options:
+  bundleIdPrefix: com.adamnolle
+  deploymentTarget:
+    iOS: 17.0
+    macOS: 14.0
+
+packages:
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation
+    from: 0.9.19
+
+targets:
+  3DSeen-iOS:
+    type: application
+    platform: iOS
+    sources:
+      - Sources/iOS
+      - Sources/Shared
+    dependencies:
+      - package: ZIPFoundation
+    info:
+      path: Sources/iOS/Info.plist
+      properties:
+        UILaunchScreen: {}
+        NSCameraUsageDescription: "3DSeen requires camera access for photogrammetry and spatial capture."
+        NSLocalNetworkUsageDescription: "3DSeen requires local network access to offload rendering to your Mac."
+        NSBonjourServices:
+          - "_3dseen._tcp"
+          - "_3dseen._udp"
+    settings:
+      base:
+        DEVELOPMENT_TEAM: "" # Set in Xcode
+        ENABLE_PREVIEWS: YES
+        SWIFT_VERSION: 5.9
+
+  3DSeen-macOS:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/macOS
+      - Sources/Shared
+    dependencies:
+      - package: ZIPFoundation
+    info:
+      path: Sources/macOS/Info.plist
+      properties:
+        NSLocalNetworkUsageDescription: "3DSeen requires local network access to receive renders from your iPhone."
+        NSBonjourServices:
+          - "_3dseen._tcp"
+          - "_3dseen._udp"
+    settings:
+      base:
+        DEVELOPMENT_TEAM: "" # Set in Xcode
+        ENABLE_PREVIEWS: YES
+        SWIFT_VERSION: 5.9
+        CODE_SIGN_ENTITLEMENTS: Sources/macOS/3DSeen-macOS.entitlements
+
