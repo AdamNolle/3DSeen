@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var stateMachine: ProcessingStateMachine
-    
+
     var body: some View {
         NavigationStack {
             if case let .capturing(mode) = stateMachine.state {
@@ -16,10 +16,10 @@ struct ContentView: View {
                         endPoint: .bottomTrailing
                     )
                     .ignoresSafeArea()
-                    
+
                     VStack(spacing: 30) {
                         Spacer()
-                        
+
                         // Glassmorphism Card
                         VStack(spacing: 20) {
                             Image(systemName: "camera.aperture")
@@ -32,11 +32,11 @@ struct ContentView: View {
                                     )
                                 )
                                 .shadow(color: .blue.opacity(0.5), radius: 10)
-                            
+
                             Text("3DSeen")
                                 .font(.system(size: 40, weight: .bold, design: .rounded))
                                 .foregroundStyle(.white)
-                            
+
                             Text(stateDescription)
                                 .font(.subheadline)
                                 .fontWeight(.medium)
@@ -47,9 +47,9 @@ struct ContentView: View {
                         .background(.ultraThinMaterial)
                         .clipShape(RoundedRectangle(cornerRadius: 40, style: .continuous))
                         .shadow(color: .black.opacity(0.2), radius: 20, x: 0, y: 10)
-                        
+
                         Spacer()
-                        
+
                         if stateMachine.state == .idle {
                             Button(action: {
                                 withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
@@ -78,7 +78,7 @@ struct ContentView: View {
             }
         }
     }
-    
+
     private var stateDescription: String {
         switch stateMachine.state {
         case .idle: return "Ready to Scan"

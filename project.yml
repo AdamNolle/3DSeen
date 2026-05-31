@@ -9,6 +9,9 @@ packages:
   ZIPFoundation:
     url: https://github.com/weichsel/ZIPFoundation
     from: 0.9.19
+  MetalSplatter:
+    url: https://github.com/scier/MetalSplatter
+    from: 0.1.1
 
 targets:
   3DSeen-iOS:
@@ -19,6 +22,12 @@ targets:
       - Sources/Shared
     dependencies:
       - package: ZIPFoundation
+      - package: MetalSplatter
+        product: MetalSplatter
+      - package: MetalSplatter
+        product: SplatIO
+      - package: MetalSplatter
+        product: PLYIO
     info:
       path: Sources/iOS/Info.plist
       properties:
@@ -33,6 +42,13 @@ targets:
         DEVELOPMENT_TEAM: "" # Set in Xcode
         ENABLE_PREVIEWS: YES
         SWIFT_VERSION: 5.9
+        PRODUCT_MODULE_NAME: ThreeDSeen
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    scheme:
+      testTargets:
+        - 3DSeen-iOSTests
+      gatherCoverageData: true
 
   3DSeen-macOS:
     type: application
@@ -54,5 +70,37 @@ targets:
         DEVELOPMENT_TEAM: "" # Set in Xcode
         ENABLE_PREVIEWS: YES
         SWIFT_VERSION: 5.9
+        PRODUCT_MODULE_NAME: ThreeDSeenMac
         CODE_SIGN_ENTITLEMENTS: Sources/macOS/3DSeen-macOS.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    scheme:
+      testTargets:
+        - 3DSeen-macOSTests
+      gatherCoverageData: true
 
+  3DSeen-iOSTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests/iOS
+    dependencies:
+      - target: 3DSeen-iOS
+      - package: MetalSplatter
+        product: SplatIO
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: 5.9
+
+  3DSeen-macOSTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/macOS
+    dependencies:
+      - target: 3DSeen-macOS
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: 5.9

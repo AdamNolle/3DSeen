@@ -3,12 +3,12 @@ import SwiftUI
 struct CaptureCoordinatorView: View {
     @EnvironmentObject var stateMachine: ProcessingStateMachine
     let captureMode: CaptureMode
-    
+
     var body: some View {
         ZStack {
             // Underlay: This represents the camera feed
             Color.black.ignoresSafeArea()
-            
+
             switch captureMode {
             case .object:
                 ObjectCaptureEngine()
@@ -22,11 +22,11 @@ struct CaptureCoordinatorView: View {
                     ProgressView()
                         .controlSize(.large)
                         .tint(.white)
-                    
+
                     Text("Analyzing Scene...")
                         .font(.headline)
                         .foregroundStyle(.white)
-                    
+
                     Text("Auto-Pilot active")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.6))
@@ -42,7 +42,7 @@ struct CaptureCoordinatorView: View {
                     }
                 }
             }
-            
+
             // Global overlay UI
             VStack {
                 HStack {

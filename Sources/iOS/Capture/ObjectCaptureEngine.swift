@@ -4,16 +4,16 @@ import os
 
 struct ObjectCaptureEngine: View {
     @EnvironmentObject var stateMachine: ProcessingStateMachine
-    
+
     // We instantiate the actual iOS 17 ObjectCaptureSession
     @State private var session = ObjectCaptureSession()
-    
+
     var body: some View {
         ZStack {
             // The native RealityKit Capture View driving the AR session
             ObjectCaptureView(session: session)
                 .ignoresSafeArea()
-            
+
             VStack {
                 // Top HUD
                 HStack {
@@ -28,9 +28,9 @@ struct ObjectCaptureEngine: View {
                 .background(.ultraThinMaterial)
                 .clipShape(Capsule())
                 .padding(.top, 10)
-                
+
                 Spacer()
-                
+
                 if case .ready = session.state {
                     Button(action: {
                         session.startDetecting()
@@ -47,7 +47,7 @@ struct ObjectCaptureEngine: View {
                     .padding(.horizontal, 40)
                     .padding(.bottom, 20)
                 }
-                
+
                 if case .detecting = session.state {
                     Text("Walk around the object slowly to build the bounding box.")
                         .font(.subheadline)
@@ -57,7 +57,7 @@ struct ObjectCaptureEngine: View {
                         .background(.ultraThinMaterial)
                         .clipShape(RoundedRectangle(cornerRadius: 15))
                         .padding(.bottom, 20)
-                        
+
                     Button(action: {
                         session.startCapturing()
                     }) {
@@ -73,12 +73,13 @@ struct ObjectCaptureEngine: View {
                     .padding(.horizontal, 40)
                     .padding(.bottom, 20)
                 }
-                
+
                 if case .capturing = session.state {
                     Button(action: {
                         session.finish()
-                        // Route completion to our State Machine
-                        stateMachine.send(.finishCapture(scanDataURL: session.checkpointDirectory ?? URL(fileURLWithPath: NSTemporaryDirectory())))
+                        // Route completion to our State Machine.
+                        // TODO(Phase D): pass the real captured-images directory; temp dir for now.
+                        stateMachine.send(.finishCapture(scanDataURL: URL(fileURLWithPath: NSTemporaryDirectory())))
                     }) {
                         Text("Finish Capture")
                             .font(.headline)
