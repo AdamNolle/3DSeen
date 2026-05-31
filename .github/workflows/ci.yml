@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: SwiftLint
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SwiftLint
+        run: brew install swiftlint
+      - name: Lint (strict)
+        run: swiftlint lint --strict --reporter github-actions-logging
+
+  test-ios:
+    name: Build & Test (iOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Ensure Metal Toolchain (no-op on stable Xcode)
+        run: xcodebuild -downloadComponent MetalToolchain 2>/dev/null || true
+      - name: Resolve packages
+        run: xcodebuild -resolvePackageDependencies -scheme 3DSeen-iOS
+      - name: Build & test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -scheme 3DSeen-iOS \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -enableCodeCoverage YES \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcpretty || xcodebuild test \
+            -scheme 3DSeen-iOS \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            CODE_SIGNING_ALLOWED=NO
+
+  test-macos:
+    name: Build & Test (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Build & test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -scheme 3DSeen-macOS \
+            -destination 'platform=macOS' \
+            -enableCodeCoverage YES \
+            CODE_SIGNING_ALLOWED=NO

@@ -2,12 +2,12 @@ import SwiftUI
 import SwiftData
 
 @main
-struct _DSeenApp: App {
+struct ThreeDSeenApp: App {
     @StateObject private var stateMachine = ProcessingStateMachine()
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            StudioRoot()
                 .environmentObject(stateMachine)
         }
         .modelContainer(for: ScanSession.self)

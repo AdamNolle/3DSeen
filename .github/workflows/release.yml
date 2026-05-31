@@ -1,0 +1,68 @@
+name: Release
+
+# Tag-driven CD. Produces unsigned build artifacts for download.
+# (Signed App Store / TestFlight distribution requires DEVELOPMENT_TEAM + signing
+#  secrets; wire those in as repository secrets to extend this into a full pipeline.)
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build-artifacts:
+    name: Build unsigned artifacts
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Ensure Metal Toolchain (no-op on stable Xcode)
+        run: xcodebuild -downloadComponent MetalToolchain 2>/dev/null || true
+
+      - name: Build iOS app (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -scheme 3DSeen-iOS \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/ios \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+      - name: Build macOS app (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -scheme 3DSeen-macOS \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath build/mac \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+
+      - name: Package artifacts
+        run: |
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$(find build/ios/Build/Products -name '3DSeen-iOS.app' | head -1)" dist/3DSeen-iOS-${{ github.ref_name }}.app.zip
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$(find build/mac/Build/Products -name '3DSeen-macOS.app' | head -1)" dist/3DSeen-macOS-${{ github.ref_name }}.app.zip
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: 3DSeen-${{ github.ref_name }}
+          path: dist/*.zip
+
+      - name: Attach to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          generate_release_notes: true

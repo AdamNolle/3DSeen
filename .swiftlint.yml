@@ -1,0 +1,80 @@
+# SwiftLint configuration for 3DSeen
+# Strict-but-practical: catches real problems, tolerant of the dense design-system
+# style (short token names, long screen bodies, nested view structs).
+
+excluded:
+  - .build
+  - .dd
+  - DerivedData
+  - "**/.build"
+  - Tests/**/*Generated*
+
+opt_in_rules:
+  - empty_count
+  - empty_string
+  - closure_spacing
+  - collection_alignment
+  - contains_over_filter_count
+  - first_where
+  - last_where
+  - sorted_first_last
+  - toggle_bool
+  - unneeded_parentheses_in_closure_argument
+  - redundant_nil_coalescing
+  - yoda_condition
+
+disabled_rules:
+  - todo                                    # TODO/FIXME notes are intentional milestones
+  - trailing_comma
+  - multiple_closures_with_trailing_closure # `Button {…} label: {…}` is idiomatic SwiftUI
+  - optional_data_string_conversion          # `String(decoding:as:)` is the intended modern form
+
+line_length:
+  warning: 200
+  error: 280
+  ignores_comments: true
+  ignores_urls: true
+
+type_body_length:
+  warning: 600
+  error: 900
+
+file_length:
+  warning: 800
+  error: 1200
+  ignore_comment_only_lines: true
+
+function_body_length:
+  warning: 160
+  error: 280
+
+cyclomatic_complexity:
+  warning: 20
+  error: 30
+
+large_tuple:
+  warning: 3
+  error: 5
+
+nesting:
+  type_level:
+    warning: 3
+  function_level:
+    warning: 5
+
+identifier_name:
+  min_length:
+    warning: 1
+    error: 0
+  max_length:
+    warning: 50
+    error: 60
+  allowed_symbols: ["_"]
+
+type_name:
+  min_length: 2
+  max_length:
+    warning: 50
+    error: 60
+
+reporter: "xcode"
