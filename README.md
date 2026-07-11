@@ -31,7 +31,7 @@ A native SwiftUI design system (`Sources/Shared/DesignSystem/`) — warm-paper l
 ## Requirements
 - **iOS / iPadOS** 17.0+ (LiDAR recommended for Space/Object).
 - **macOS** 14.0+ (Apple silicon recommended).
-- **Xcode** 16.0+ (Xcode 26 requires the Metal Toolchain component — see below).
+- **Xcode** 26.0+ (the Metal Toolchain component may need to be installed separately — see below).
 
 > **Mac local-training note:** the Mac build is intended for direct distribution, not the Mac App
 > Store sandbox. Its optional local splat trainer launches user-installed COLMAP and Nerfstudio

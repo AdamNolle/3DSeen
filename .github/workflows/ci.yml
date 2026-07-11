@@ -30,7 +30,7 @@ jobs:
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
         with:
-          xcode-version: '16.4'
+          xcode-version: '26.3'
       - name: Install pinned build tools
         run: tools/ci/install-tools.sh
       - name: Generate project
@@ -72,7 +72,7 @@ jobs:
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
         with:
-          xcode-version: '16.4'
+          xcode-version: '26.3'
       - name: Install pinned build tools
         run: tools/ci/install-tools.sh
       - name: Generate project
