@@ -52,16 +52,24 @@ struct WizardHeader: View {
 
 /// Bottom-pinned primary CTA used by wizard screens. Centered + width-capped on iPad.
 struct BottomCTA<Label: View>: View {
+    @Environment(\.theme) private var theme
     @ViewBuilder var label: Label
+
     var body: some View {
-        VStack {
-            Spacer()
-            label
-                .frame(maxWidth: 540)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 20)
-                .padding(.bottom, 28)
-        }
+        label
+            .frame(maxWidth: 540)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 10)
+            .background(
+                LinearGradient(
+                    colors: [theme.bg.opacity(0), theme.bg.opacity(0.96), theme.bg],
+                    startPoint: .top,
+                    endPoint: .init(x: 0.5, y: 0.42)
+                )
+                .ignoresSafeArea()
+            )
     }
 }
 
@@ -84,9 +92,6 @@ extension View {
     func readableContentWidth(_ max: CGFloat = 720) -> some View {
         modifier(ReadableContentWidth(max: max))
     }
-
-    /// Grid column count adapted to size class.
-    func adaptiveColumnCount(_ compact: Int, _ regular: Int) -> Int { compact }
 }
 
 /// Reads the current horizontal size class as a column count (compact vs regular).

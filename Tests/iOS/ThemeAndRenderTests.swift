@@ -12,11 +12,43 @@ final class ThemeTests: XCTestCase {
 }
 
 final class StudioScreenTests: XCTestCase {
+    func testAuditLaunchScreenAcceptsKnownStudioRoute() {
+        XCTAssertEqual(
+            StudioScreen.auditLaunchScreen(environment: ["THREEDSEEN_UI_AUDIT_SCREEN": "quality"]),
+            .quality
+        )
+    }
+
+    func testAuditLaunchScreenRejectsUnknownStudioRoute() {
+        XCTAssertNil(
+            StudioScreen.auditLaunchScreen(environment: ["THREEDSEEN_UI_AUDIT_SCREEN": "prototype"])
+        )
+    }
+
     func testFlowOrder() {
         let flow = StudioModel().flow
         XCTAssertEqual(flow.first, .library)
         XCTAssertEqual(flow.last, .settings)
         XCTAssertEqual(flow.count, StudioScreen.allCases.count)
+    }
+
+    func testNewStudioModelUsesTheFullDetailDefault() {
+        XCTAssertEqual(StudioModel().selectedDetailTier, SettingsStore.QualityTier.full.rawValue)
+    }
+
+    func testBeginningANewScanAppliesPersistedCaptureDefaults() {
+        let defaults = UserDefaults(suiteName: "StudioModelTests-\(UUID().uuidString)")!
+        let settings = SettingsStore(defaults: defaults)
+        settings.defaultMode = .landscape
+        settings.qualityTier = .reduced
+
+        let model = StudioModel()
+        model.beginNewScan(using: settings)
+
+        XCTAssertEqual(model.screen, .mode)
+        XCTAssertEqual(model.selectedCaptureModeID, CaptureMode.landscape.rawValue.lowercased())
+        XCTAssertEqual(model.selectedDetailTier, SettingsStore.QualityTier.reduced.rawValue)
+        XCTAssertNil(model.activeScanID)
     }
 
     @MainActor
@@ -29,6 +61,40 @@ final class StudioScreenTests: XCTestCase {
         XCTAssertEqual(m.screen, .library)
         m.prev() // clamp at start
         XCTAssertEqual(m.screen, .library)
+    }
+}
+
+final class MeasurementFormatterTests: XCTestCase {
+    func testMeasurementFormatterRespectsSelectedUnits() {
+        XCTAssertEqual(MeasurementFormatter.display(meters: 1.234, units: .centimeters), "123.4 cm")
+        XCTAssertEqual(MeasurementFormatter.display(meters: 1.234, units: .inches), "48.6 in")
+    }
+}
+
+extension StudioScreenTests {
+    func testSimulatorDoesNotAdvertiseLiveCaptureAvailability() {
+        #if targetEnvironment(simulator)
+        let status = CaptureAvailability.status(for: .object)
+        XCTAssertFalse(status.isAvailable)
+        XCTAssertNotNil(status.message)
+        #endif
+    }
+
+    func testSimulatorExplainsModeSpecificCaptureRequirement() {
+        #if targetEnvironment(simulator)
+        let space = CaptureAvailability.status(for: .space)
+        let landscape = CaptureAvailability.status(for: .landscape)
+
+        XCTAssertTrue(space.message?.localizedCaseInsensitiveContains("LiDAR") == true)
+        XCTAssertTrue(landscape.message?.localizedCaseInsensitiveContains("AR world tracking") == true)
+        #endif
+    }
+
+    func testStudioModeIDsMapToTheirCaptureEngines() {
+        XCTAssertEqual(STUDIO_MODES.first { $0.id == "auto" }?.captureMode, .autoPilot)
+        XCTAssertEqual(STUDIO_MODES.first { $0.id == "object" }?.captureMode, .object)
+        XCTAssertEqual(STUDIO_MODES.first { $0.id == "space" }?.captureMode, .space)
+        XCTAssertEqual(STUDIO_MODES.first { $0.id == "landscape" }?.captureMode, .landscape)
     }
 }
 

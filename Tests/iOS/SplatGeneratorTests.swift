@@ -1,5 +1,6 @@
 import XCTest
 import simd
+import ModelIO
 @testable import ThreeDSeen
 
 final class SplatGeneratorTests: XCTestCase {
@@ -18,6 +19,23 @@ final class SplatGeneratorTests: XCTestCase {
         XCTAssertEqual(splats.count, 2)
         XCTAssertEqual(splats[0].color, SIMD3<Float>(1, 0, 0))
         XCTAssertEqual(splats[1].position, SIMD3<Float>(1, 1, 1))
+    }
+
+    func testGeneratorBuildsSplatsFromModelIOVertices() throws {
+        let allocator = MDLMeshBufferDataAllocator()
+        let mesh = MDLMesh(
+            boxWithExtent: SIMD3<Float>(1, 1, 1),
+            segments: SIMD3<UInt32>(1, 1, 1),
+            inwardNormals: false,
+            geometryType: .triangles,
+            allocator: allocator
+        )
+        let asset = MDLAsset(bufferAllocator: allocator)
+        asset.add(mesh)
+
+        let splats = try GaussianSplatGenerator.splats(fromModelAsset: asset)
+
+        XCTAssertFalse(splats.isEmpty)
     }
 
     func testWritesValid3DGSHeaderAndExactBinarySize() throws {

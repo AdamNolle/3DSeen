@@ -8,6 +8,7 @@
 
 import Foundation
 import simd
+import ModelIO
 
 /// One Gaussian primitive in world space.
 public struct Splat {
@@ -31,6 +32,51 @@ public enum GaussianSplatGenerator {
     public static func splats(fromPoints points: [(position: SIMD3<Float>, color: SIMD3<Float>)],
                               scale: Float = 0.02, opacity: Float = 0.9) -> [Splat] {
         points.map { Splat(position: $0.position, color: $0.color, scale: scale, opacity: opacity) }
+    }
+
+    /// Converts vertices from a real ModelIO asset into a lightweight splat preview. This is a
+    /// geometry-derived representation of the computed scan, not a trained neural radiance field.
+    public static func splats(fromModelAsset asset: MDLAsset, maximumSplats: Int = 100_000) throws -> [Splat] {
+        let meshes = asset.childObjects(of: MDLMesh.self) as? [MDLMesh] ?? []
+        var points: [(position: SIMD3<Float>, color: SIMD3<Float>)] = []
+
+        for mesh in meshes {
+            guard let positions = mesh.vertexAttributeData(forAttributeNamed: MDLVertexAttributePosition, as: .float3) else {
+                continue
+            }
+            let colors = mesh.vertexAttributeData(forAttributeNamed: MDLVertexAttributeColor, as: .float3)
+            points.reserveCapacity(points.count + mesh.vertexCount)
+            for index in 0..<mesh.vertexCount {
+                let position = positions.dataStart
+                    .advanced(by: index * positions.stride)
+                    .assumingMemoryBound(to: SIMD3<Float>.self)
+                    .pointee
+                guard position.x.isFinite, position.y.isFinite, position.z.isFinite else { continue }
+                let color: SIMD3<Float>
+                if let colors {
+                    let sampled = colors.dataStart
+                        .advanced(by: index * colors.stride)
+                        .assumingMemoryBound(to: SIMD3<Float>.self)
+                        .pointee
+                    color = simd_clamp(sampled, .zero, .one)
+                } else {
+                    color = SIMD3<Float>(repeating: 0.72)
+                }
+                points.append((position, color))
+            }
+        }
+
+        guard !points.isEmpty else { throw SplatGenerationError.noVertexPositions }
+        let sampleStride = max(1, Int(ceil(Double(points.count) / Double(max(1, maximumSplats)))))
+        return splats(fromPoints: sampleStride == 1 ? points : Swift.stride(from: 0, to: points.count, by: sampleStride).map { points[$0] })
+    }
+
+    /// Generates and writes a durable preview PLY from a computed USD/USDZ/OBJ model.
+    @discardableResult
+    public static func writeModelPreview(from modelURL: URL, to outputURL: URL, maximumSplats: Int = 100_000) throws -> URL {
+        let asset = MDLAsset(url: modelURL)
+        let splats = try splats(fromModelAsset: asset, maximumSplats: maximumSplats)
+        return try SplatPLYWriter.write(splats, to: outputURL)
     }
 
     /// A demo radiance field: a Fibonacci-sphere of coloured Gaussians. Lets the on-device viewer
@@ -61,6 +107,16 @@ public enum GaussianSplatGenerator {
             .appendingPathComponent(base).appendingPathExtension("ply")
         try SplatPLYWriter.write(demoCloud(), to: url)
         return url
+    }
+}
+
+public enum SplatGenerationError: LocalizedError {
+    case noVertexPositions
+
+    public var errorDescription: String? {
+        switch self {
+        case .noVertexPositions: return "The computed model does not expose vertex positions for a splat preview."
+        }
     }
 }
 

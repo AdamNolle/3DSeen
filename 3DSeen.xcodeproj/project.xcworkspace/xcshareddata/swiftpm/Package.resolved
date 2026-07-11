@@ -1,0 +1,24 @@
+{
+  "originHash" : "1fb1245fa27634164e6ceaa412de69675b5cb20b7e705c6045da4f59276f8ae6",
+  "pins" : [
+    {
+      "identity" : "metalsplatter",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/scier/MetalSplatter",
+      "state" : {
+        "revision" : "221348301cae5e14388410b9ed080c3d61cbfbbc",
+        "version" : "0.1.1"
+      }
+    },
+    {
+      "identity" : "zipfoundation",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/weichsel/ZIPFoundation",
+      "state" : {
+        "revision" : "22787ffb59de99e5dc1fbfe80b19c97a904ad48d",
+        "version" : "0.9.20"
+      }
+    }
+  ],
+  "version" : 3
+}

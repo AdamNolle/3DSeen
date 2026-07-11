@@ -65,6 +65,15 @@ public final class AutoPilotVisionManager {
         }
     }
 
+    /// Keeps a Vision recommendation only when the target device can actually run that capture
+    /// engine. Object capture is the portable fallback for unsupported RoomPlan/ARKit modes.
+    public static func resolvedMode(for suggestion: Suggestion, supportedModes: Set<CaptureMode>) -> CaptureMode {
+        guard suggestion.mode != .autoPilot, supportedModes.contains(suggestion.mode) else {
+            return .object
+        }
+        return suggestion.mode
+    }
+
     /// Async convenience used by the live capture coordinator.
     public func analyzeFrame(pixelBuffer: CVPixelBuffer) async -> CaptureMode {
         suggestion(for: pixelBuffer).mode

@@ -37,4 +37,22 @@ final class AutoPilotTests: XCTestCase {
         ])
         XCTAssertEqual(s.mode, .space)
     }
+
+    func testResolutionKeepsACompatibleSuggestedMode() {
+        let suggestion = AutoPilotVisionManager.Suggestion(mode: .landscape, confidence: 0.9, label: "mountain")
+
+        XCTAssertEqual(
+            AutoPilotVisionManager.resolvedMode(for: suggestion, supportedModes: [.object, .landscape]),
+            .landscape
+        )
+    }
+
+    func testResolutionFallsBackToObjectWhenSuggestedModeIsUnavailable() {
+        let suggestion = AutoPilotVisionManager.Suggestion(mode: .space, confidence: 0.9, label: "room")
+
+        XCTAssertEqual(
+            AutoPilotVisionManager.resolvedMode(for: suggestion, supportedModes: [.object]),
+            .object
+        )
+    }
 }
