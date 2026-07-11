@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_call:
   push:
     branches: [main]
   pull_request:
@@ -15,9 +16,9 @@ jobs:
     name: SwiftLint
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
-      - name: Install SwiftLint
-        run: brew install swiftlint
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Install pinned build tools
+        run: tools/ci/install-tools.sh
       - name: Lint (strict)
         run: swiftlint lint --strict --reporter github-actions-logging
 
@@ -25,45 +26,61 @@ jobs:
     name: Build & Test (iOS)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Select Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
         with:
-          xcode-version: latest-stable
-      - name: Install XcodeGen
-        run: brew install xcodegen
+          xcode-version: '16.4'
+      - name: Install pinned build tools
+        run: tools/ci/install-tools.sh
       - name: Generate project
         run: xcodegen generate
       - name: Ensure Metal Toolchain (no-op on stable Xcode)
         run: xcodebuild -downloadComponent MetalToolchain 2>/dev/null || true
       - name: Resolve packages
         run: xcodebuild -resolvePackageDependencies -scheme 3DSeen-iOS
+      - name: Verify generated project and package lock
+        run: git diff --exit-code -- 3DSeen.xcodeproj/project.pbxproj 3DSeen.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+      - name: Select available iPhone simulator
+        id: simulator
+        run: |
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          candidates = [device for runtime in devices.values() for device in runtime
+                        if device.get("isAvailable") and device["name"].startswith("iPhone")]
+          if not candidates:
+              raise SystemExit("No available iPhone simulator")
+          print(candidates[0]["udid"])
+          ')
+          echo "id=$DEVICE_ID" >> "$GITHUB_OUTPUT"
+          echo "Using simulator $DEVICE_ID"
       - name: Build & test
         run: |
           set -o pipefail
           xcodebuild test \
             -scheme 3DSeen-iOS \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.id }}' \
             -enableCodeCoverage YES \
-            CODE_SIGNING_ALLOWED=NO \
-            | xcpretty || xcodebuild test \
-            -scheme 3DSeen-iOS \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
             CODE_SIGNING_ALLOWED=NO
 
   test-macos:
     name: Build & Test (macOS)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Select Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
         with:
-          xcode-version: latest-stable
-      - name: Install XcodeGen
-        run: brew install xcodegen
+          xcode-version: '16.4'
+      - name: Install pinned build tools
+        run: tools/ci/install-tools.sh
       - name: Generate project
         run: xcodegen generate
+      - name: Resolve packages
+        run: xcodebuild -resolvePackageDependencies -scheme 3DSeen-macOS
+      - name: Verify generated project and package lock
+        run: git diff --exit-code -- 3DSeen.xcodeproj/project.pbxproj 3DSeen.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
       - name: Build & test
         run: |
           set -o pipefail

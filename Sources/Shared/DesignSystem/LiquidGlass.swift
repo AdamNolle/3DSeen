@@ -32,7 +32,33 @@ struct LiquidGlassBackground: ViewModifier {
         dark ? Color(.sRGB, red: 0, green: 0, blue: 0, opacity: 0.28) : Color(.sRGB, red: 18/255, green: 18/255, blue: 28/255, opacity: 0.05)
     }
 
+    @ViewBuilder
     func body(content: Content) -> some View {
+        #if os(iOS)
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(.regular.tint(fill), in: .rect(cornerRadius: radius))
+                .overlay {
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .strokeBorder(border, lineWidth: 0.5)
+                }
+                .overlay(alignment: .top) {
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .strokeBorder(rimTop.opacity(shine ? 1 : 0), lineWidth: 0.9)
+                        .mask(
+                            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .init(x: 0.5, y: 0.2))
+                        )
+                }
+                .stShadow(theme.glassShadow)
+        } else {
+            fallback(content: content)
+        }
+        #else
+        fallback(content: content)
+        #endif
+    }
+
+    private func fallback(content: Content) -> some View {
         content
             .background {
                 ZStack {
@@ -72,8 +98,7 @@ struct LiquidGlassBackground: ViewModifier {
                         LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .init(x: 0.5, y: 0.2))
                     )
             }
-            .shadow(color: .black.opacity(dark ? 0.32 : 0.10), radius: dark ? 25 : 16, x: 0, y: dark ? 20 : 12)
-            .shadow(color: .black.opacity(dark ? 0.42 : 0.06), radius: dark ? 4 : 2, x: 0, y: dark ? 2 : 1)
+            .stShadow(theme.glassShadow)
     }
 }
 
@@ -91,7 +116,18 @@ struct StGlass<Content: View>: View {
     var shine: Bool = true
     @ViewBuilder var content: Content
 
+    @ViewBuilder
     var body: some View {
+        #if os(iOS)
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer(spacing: 12) {
+                content.liquidGlass(radius: radius, tone: tone, shine: shine)
+            }
+        } else {
+            content.liquidGlass(radius: radius, tone: tone, shine: shine)
+        }
+        #else
         content.liquidGlass(radius: radius, tone: tone, shine: shine)
+        #endif
     }
 }

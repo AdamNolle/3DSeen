@@ -22,7 +22,7 @@ struct StIcon: View {
         "thermal": "thermometer.medium", "ruler": "ruler", "layers": "square.stack.3d.up",
         "share": "square.and.arrow.up", "export": "square.and.arrow.up",
         "download": "square.and.arrow.down", "airdrop": "dot.radiowaves.up.forward",
-        "pin": "mappin", "light": "sun.max", "focus": "camera.metering.spot",
+        "pin": "mappin", "light": "sun.max", "moon": "moon", "focus": "camera.metering.spot",
         "refresh": "arrow.triangle.2.circlepath", "speed": "gauge.with.dots.needle.50percent",
         "hand": "hand.raised", "warning": "exclamationmark.triangle", "info": "info.circle",
         "clock": "clock", "folder": "folder", "cloud": "cloud", "lock": "lock",
@@ -58,8 +58,7 @@ struct StCard<Content: View>: View {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .strokeBorder(theme.line, lineWidth: 0.5)
             )
-            .shadow(color: .black.opacity(inset ? 0 : (elevated ? 0.10 : 0.06)),
-                    radius: inset ? 0 : (elevated ? 24 : 10), x: 0, y: inset ? 0 : (elevated ? 12 : 6))
+            .stShadow(inset ? StShadow(layers: []) : (elevated ? theme.cardShadowLg : theme.cardShadow))
     }
 }
 
@@ -70,6 +69,7 @@ enum StButtonSize { case lg, md, sm }
 
 struct StButton: View {
     @Environment(\.theme) private var theme
+    @Environment(\.isEnabled) private var isEnabled
     var title: String
     var kind: StButtonKind = .secondary
     var size: StButtonSize = .md
@@ -95,7 +95,21 @@ struct StButton: View {
         case .accent: Capsule().fill(theme.accent)
         case .secondary: Capsule().fill(theme.fieldFill).overlay(Capsule().strokeBorder(theme.line, lineWidth: 0.5))
         case .ghost: Capsule().fill(.clear)
-        case .glass: Capsule().fill(theme.glassFill)
+        case .glass:
+            Capsule().fill(.ultraThinMaterial)
+                .overlay(Capsule().fill(theme.glassFill))
+                .overlay(Capsule().strokeBorder(theme.glassBorder, lineWidth: 0.5))
+        }
+    }
+
+    /// Two-layer drop shadow per kind (empty = no shadow).
+    private var shadow: StShadow {
+        switch kind {
+        case .primary: return theme.primaryShadow
+        case .accent: return StShadow(layers: [.init(color: .black.opacity(0.12), radius: 1, y: 1),
+                                               .init(color: theme.accentSoft, radius: 8, y: 6)])
+        case .glass: return theme.glassShadow
+        case .secondary, .ghost: return StShadow(layers: [])
         }
     }
 
@@ -104,16 +118,31 @@ struct StButton: View {
             HStack(spacing: 8) {
                 if let icon { StIcon(name: icon, size: fontSize, color: fg, weight: .semibold) }
                 Text(title)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
             }
             .font(.sf(fontSize, .semibold))
-            .tracking(-0.2)
+            .tracking(0)
             .foregroundStyle(fg)
             .frame(maxWidth: full ? .infinity : nil)
-            .frame(height: height)
+            .frame(minHeight: height)
             .padding(.horizontal, hPad)
             .background(bg)
+            .stShadow(isEnabled ? shadow : StShadow(layers: []))
+            .opacity(isEnabled ? 1 : 0.42)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(StPressStyle())
+    }
+}
+
+// MARK: - Press feedback (mirrors `.st-tap:active { scale(.97) }`)
+
+/// Reusable button style that scales to 0.97 on press. Exported so screens can reuse it.
+struct StPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
@@ -128,6 +157,7 @@ struct StLabel: View {
             .font(.mono(10.5, .semibold))
             .tracking(1.4)
             .foregroundStyle(color ?? theme.text3)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -155,7 +185,7 @@ struct StStat: View {
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(v)
                     .font(.sf(fontSize, .bold))
-                    .tracking(-0.6)
+                    .tracking(0)
                     .monospacedDigit()
                     .foregroundStyle(color ?? theme.ink)
                 if let unit {
@@ -186,16 +216,19 @@ struct StSegmented: View {
                 Button { value = o.value } label: {
                     Text(o.label)
                         .font(.sf(size == .sm ? 12.5 : 13.5, .semibold))
-                        .tracking(-0.1)
+                        .tracking(0)
                         .foregroundStyle(on ? theme.ink : theme.text2)
                         .frame(height: height)
                         .padding(.horizontal, 14)
                         .background(
                             Capsule().fill(on ? theme.card : .clear)
-                                .shadow(color: .black.opacity(on ? 0.10 : 0), radius: on ? 2 : 0, y: 1)
+                                .stShadow(on
+                                    ? StShadow(layers: [.init(color: .black.opacity(0.10), radius: 1, y: 1),
+                                                        .init(color: .black.opacity(0.06), radius: 2, y: 1)])
+                                    : StShadow(layers: []))
                         )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(StPressStyle())
             }
         }
         .padding(3)
@@ -208,6 +241,9 @@ struct StSegmented: View {
 struct StToggle: View {
     @Environment(\.theme) private var theme
     @Binding var on: Bool
+    /// VoiceOver label for the control (caller-provided; empty leaves the inherited label).
+    var accessibilityLabel: String = ""
+
     var body: some View {
         Button { on.toggle() } label: {
             HStack {
@@ -221,9 +257,12 @@ struct StToggle: View {
             .frame(width: 50, height: 30)
             .background(Capsule().fill(on ? theme.good : theme.fieldFillHi))
             .overlay(Capsule().strokeBorder(on ? .clear : theme.line, lineWidth: 0.5))
+            .animation(.easeInOut(duration: 0.2), value: on)
         }
-        .buttonStyle(.plain)
-        .animation(.easeInOut(duration: 0.2), value: on)
+        .buttonStyle(StPressStyle())
+        .accessibilityAddTraits(.isToggle)
+        .accessibilityValue(on ? "On" : "Off")
+        .stAccessibilityLabel(accessibilityLabel)
     }
 }
 
@@ -250,7 +289,7 @@ struct StChip<Content: View>: View {
         let c = colors
         HStack(spacing: 5) { content }
             .font(.sf(12, .semibold))
-            .tracking(-0.1)
+            .tracking(0)
             .foregroundStyle(c.fg)
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
@@ -280,13 +319,24 @@ struct StMeter: View {
     var color: Color?
     var track: Color?
     var height: CGFloat = 6
+    /// Corner radius for the bar; `nil` (default) uses a Capsule.
+    var radius: CGFloat?
+
+    private var barShape: AnyShape {
+        if let radius {
+            AnyShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+        } else {
+            AnyShape(Capsule())
+        }
+    }
 
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
-                Capsule().fill(track ?? theme.fieldFillHi)
-                Capsule().fill(color ?? theme.accent)
+                barShape.fill(track ?? theme.fieldFillHi)
+                barShape.fill(color ?? theme.accent)
                     .frame(width: max(0, min(1, value)) * geo.size.width)
+                    .animation(.easeOut(duration: 0.5), value: value)
             }
         }
         .frame(height: height)
@@ -315,7 +365,7 @@ struct StRing: View {
                 if let label {
                     Text(label)
                         .font(.sf(size * 0.3, .bold))
-                        .tracking(-0.5)
+                        .tracking(0)
                         .monospacedDigit()
                         .foregroundStyle(theme.ink)
                 }
@@ -339,5 +389,18 @@ struct StRule: View {
     var body: some View {
         Rectangle().fill(theme.line)
             .frame(width: vertical ? 0.5 : nil, height: vertical ? nil : 0.5)
+    }
+}
+
+// MARK: - Accessibility helper
+
+extension View {
+    /// Apply an accessibility label only when non-empty (so callers can opt in).
+    @ViewBuilder func stAccessibilityLabel(_ text: String) -> some View {
+        if text.isEmpty {
+            self
+        } else {
+            self.accessibilityLabel(Text(text))
+        }
     }
 }

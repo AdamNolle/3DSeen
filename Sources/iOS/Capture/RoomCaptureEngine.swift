@@ -19,48 +19,31 @@ struct RoomCaptureEngine: View {
                     .font(.headline).foregroundStyle(.white).padding()
             }
 
-            VStack {
-                HStack {
-                    Image(systemName: "house").font(.system(size: 24))
-                    Text("Space Capture").font(.headline)
-                }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 20).padding(.vertical, 10)
-                .background(.ultraThinMaterial).clipShape(Capsule())
-                .padding(.top, 10)
-
-                Spacer()
-
-                if controller.isProcessing {
-                    ProgressView("Building room model…")
-                        .padding().background(.ultraThinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 15)).padding(.bottom, 20)
-                } else {
-                    Text("Pan the device across walls, windows, and furniture.")
-                        .font(.subheadline).multilineTextAlignment(.center).foregroundStyle(.white)
-                        .padding().background(.ultraThinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 15)).padding(.bottom, 20)
-                }
-
-                Button {
-                    controller.finish()
-                } label: {
-                    Text("Finish Space Scan")
-                        .font(.headline).frame(maxWidth: .infinity).padding()
-                        .background(Color.green.opacity(0.9)).foregroundColor(.white)
-                        .clipShape(Capsule()).shadow(color: .green.opacity(0.3), radius: 10, y: 5)
-                }
-                .disabled(controller.isProcessing)
-                .padding(.horizontal, 40).padding(.bottom, 40)
-            }
+            LiveCaptureHUD(status: captureStatus, onFinish: controller.isProcessing ? nil : controller.finish)
+                .allowsHitTesting(!controller.isProcessing)
         }
         .onAppear {
             controller.onExported = { url in
                 stateMachine.send(.finishCapture(scanDataURL: url))
             }
+            controller.onFailure = { message in
+                stateMachine.send(.errorOccurred(message))
+            }
+            guard RoomCaptureSession.isSupported else {
+                stateMachine.send(.errorOccurred("RoomPlan requires a LiDAR-equipped iPhone or iPad."))
+                return
+            }
             controller.start()
         }
-        .onDisappear { controller.stop() }
+        .onDisappear {
+            controller.onExported = nil
+            controller.onFailure = nil
+            controller.cancel()
+        }
+    }
+
+    private var captureStatus: LiveCaptureStatus {
+        LiveCaptureStatus(mode: .space, phase: controller.isProcessing ? .processing : .capturing)
     }
 }
 
@@ -69,9 +52,11 @@ final class RoomCaptureController: NSObject, ObservableObject, RoomCaptureViewDe
     private let logger = Logger(subsystem: "com.adamnolle.3DSeen", category: "RoomPlan")
     let roomCaptureView: RoomCaptureView
     private var finalResults: CapturedRoom?
+    private var isCancelled = false
 
     @Published var isProcessing = false
     var onExported: ((URL) -> Void)?
+    var onFailure: ((String) -> Void)?
 
     override init() {
         roomCaptureView = RoomCaptureView(frame: .zero)
@@ -90,30 +75,41 @@ final class RoomCaptureController: NSObject, ObservableObject, RoomCaptureViewDe
     func encode(with coder: NSCoder) {}
 
     func start() {
+        isCancelled = false
+        finalResults = nil
+        roomCaptureView.captureSession.delegate = self
+        roomCaptureView.delegate = self
         let config = RoomCaptureSession.Configuration()
         roomCaptureView.captureSession.run(configuration: config)
     }
 
     func finish() {
+        guard !isCancelled, !isProcessing else { return }
         isProcessing = true
         roomCaptureView.captureSession.stop()
     }
 
-    func stop() {
+    func cancel() {
+        guard !isCancelled else { return }
+        isCancelled = true
+        isProcessing = false
+        roomCaptureView.delegate = nil
+        roomCaptureView.captureSession.delegate = nil
         roomCaptureView.captureSession.stop()
     }
 
     // Allow the view to post-process the raw scan into a CapturedRoom.
     func captureView(shouldPresent roomDataForProcessing: CapturedRoomData, error: Error?) -> Bool {
-        return true
+        !isCancelled && isProcessing
     }
 
     // CapturedRoom is ready — export USDZ.
     func captureView(didPresent processedResult: CapturedRoom, error: Error?) {
+        guard !isCancelled, isProcessing else { return }
         finalResults = processedResult
         guard error == nil else {
             logger.error("RoomPlan processing error: \(error!.localizedDescription)")
-            isProcessing = false
+            publishFailure("RoomPlan could not process this scan: \(error!.localizedDescription)")
             return
         }
         do {
@@ -123,12 +119,24 @@ final class RoomCaptureController: NSObject, ObservableObject, RoomCaptureViewDe
             try processedResult.export(to: url, exportOptions: .parametric)
             logger.info("Exported room USDZ to \(url.lastPathComponent)")
             DispatchQueue.main.async {
+                guard !self.isCancelled else {
+                    try? FileManager.default.removeItem(at: url)
+                    return
+                }
                 self.isProcessing = false
                 self.onExported?(url)
             }
         } catch {
             logger.error("RoomPlan export failed: \(error.localizedDescription)")
-            DispatchQueue.main.async { self.isProcessing = false }
+            publishFailure("RoomPlan could not export this scan: \(error.localizedDescription)")
+        }
+    }
+
+    private func publishFailure(_ message: String) {
+        DispatchQueue.main.async {
+            guard !self.isCancelled else { return }
+            self.isProcessing = false
+            self.onFailure?(message)
         }
     }
 }

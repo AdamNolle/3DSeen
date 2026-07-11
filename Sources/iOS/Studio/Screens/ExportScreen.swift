@@ -1,297 +1,184 @@
-// ExportScreen.swift — file output flow: config → progress → done (iPhone bottom sheet),
-// ported from screens/export.jsx (PhoneExport). This is the "modal/screen for outputting files".
-
 import SwiftUI
+import SwiftData
 import UIKit
 
-struct ExportDestination: Identifiable {
-    let id: String
-    let label: String
-    let icon: String
-}
+/// The export screen only offers formats the bundled ModelIO pipeline can write. Sharing is
+/// presented after a real file is written rather than pretending to target a named device/cloud.
+struct ExportScreen: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @EnvironmentObject private var model: StudioModel
+    @Query(sort: \ScanSession.creationDate, order: .reverse) private var scans: [ScanSession]
+    @State private var format: ExportFormat = .usdz
+    @State private var isExporting = false
+    @State private var exportedURL: URL?
+    @State private var exportedMeasurementURL: URL?
+    @State private var errorMessage: String?
+    @State private var showShareSheet = false
 
-let EXPORT_DESTINATIONS: [ExportDestination] = [
-    .init(id: "air", label: "AirDrop", icon: "airdrop"),
-    .init(id: "mac", label: "Adam's MBP", icon: "laptop"),
-    .init(id: "icloud", label: "iCloud", icon: "cloud"),
-    .init(id: "files", label: "Files", icon: "folder"),
-]
-
-private let EXPORT_OPTIONS: [(String, String, Bool)] = [
-    ("measure", "Include measurements (3 pins)", true),
-    ("bake", "Bake materials to 2K", false),
-    ("scale", "Scale to scene · 1.0×", true),
-    ("color", "Color-managed (Display P3)", true),
-]
-
-final class ExportFlow: ObservableObject {
-    enum Stage { case config, progress, done }
-    @Published var stage: Stage = .config
-    @Published var fmt = "usdz"
-    @Published var dest = "air"
-    @Published var pct: Double = 0
-    @Published var opts: [String: Bool] = Dictionary(uniqueKeysWithValues: EXPORT_OPTIONS.map { ($0.0, $0.2) })
-    /// The real file written by ModelExporter, ready to share.
-    @Published var exportedURL: URL?
-    @Published var exportError: String?
-    private var timer: Timer?
-
-    var format: ExportFormatInfo { SampleData.exportFormats.first { $0.id == fmt } ?? SampleData.exportFormats[0] }
-
-    /// Map the UI format id to the engine's ExportFormat.
-    private var engineFormat: ExportFormat {
-        switch fmt {
-        case "usd": return .usd
-        case "glb": return .glb
-        case "obj": return .obj
-        case "fbx": return .fbx
-        case "ply": return .ply
-        default:    return .usdz
-        }
+    private var activeScan: ScanSession? {
+        if let id = model.activeScanID, let scan = scans.first(where: { $0.id == id }) { return scan }
+        return scans.first(where: \.hasRenderableAsset)
     }
+    private var availableFormats: [ExportFormat] { ExportFormat.allCases.filter(\.isModelIONative) }
+    private var canExport: Bool { activeScan?.hasRenderableAsset == true && !isExporting }
 
-    func start() {
-        stage = .progress; pct = 0; exportedURL = nil; exportError = nil
-        // Real export off the main thread (writes an actual file via ModelIO).
-        let format = engineFormat
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else { return }
-            do {
-                let url = try ModelExporter().exportSample(to: format)
-                DispatchQueue.main.async { self.exportedURL = url }
-            } catch {
-                DispatchQueue.main.async { self.exportError = error.localizedDescription }
-            }
-        }
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.18, repeats: true) { [weak self] t in
-            guard let self else { return }
-            let np = self.pct + Double.random(in: 3...12)
-            if np >= 100 {
-                self.pct = 100; t.invalidate()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.36) {
-                    self.stage = .done
-                    Haptics.success()
+    var body: some View {
+        ZStack {
+            theme.bg.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    header
+                    preview
+                    formatPicker
+                    status
+                    StButton(title: isExporting ? "Writing export…" : "Export \(format.rawValue)",
+                             kind: .accent, size: .lg, icon: "export", full: true) { export() }
+                        .disabled(!canExport)
                 }
-            } else {
-                self.pct = np
+                .padding(20).padding(.bottom, 28)
+            }
+        }
+        .sheet(isPresented: $showShareSheet) {
+            if let exportedURL { ShareSheet(items: shareItems(for: exportedURL)) }
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            CircleIconButton(icon: "back", size: 38) { model.go(.viewer) }
+            VStack(alignment: .leading, spacing: 2) {
+                StLabel(text: "Export")
+                Text(activeScan?.name ?? "No computed scan")
+                    .font(.sf(20, .bold))
+                    .foregroundStyle(theme.ink)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+            }
+            Spacer()
+        }
+    }
+
+    private var preview: some View {
+        Stage(radius: 8) {
+            VStack(spacing: 10) {
+                Image(systemName: activeScan?.hasRenderableAsset == true ? "cube" : "cube.transparent")
+                    .font(.system(size: 48, weight: .light)).foregroundStyle(theme.accentText)
+                Text(activeScan?.displayModelURL?.lastPathComponent ?? "Compute a scan to export it")
+                    .font(.mono(11))
+                    .foregroundStyle(theme.text3)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(24)
+        }
+        .frame(height: 220)
+    }
+
+    private var formatPicker: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            StLabel(text: "Format")
+            ForEach(availableFormats, id: \.self) { candidate in
+                Button { format = candidate } label: {
+                    HStack(spacing: 12) {
+                        Text(candidate.rawValue).font(.mono(12, .bold))
+                            .foregroundStyle(candidate == format ? theme.onAccent : theme.ink)
+                            .frame(width: 54, height: 34)
+                            .background(RoundedRectangle(cornerRadius: 7).fill(candidate == format ? theme.accent : theme.fieldFill))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(description(for: candidate)).font(.sf(14, .semibold)).foregroundStyle(theme.ink)
+                            Text(".\(candidate.fileExtension)").font(.mono(11)).foregroundStyle(theme.text3)
+                        }
+                        Spacer()
+                        if candidate == format { StIcon(name: "check", size: 14, color: theme.accentText, weight: .heavy) }
+                    }
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(candidate == format ? theme.accentSoft : theme.card))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(candidate == format ? theme.accentLine : theme.line, lineWidth: candidate == format ? 1 : 0.5))
+                }
+                .buttonStyle(.plain)
             }
         }
     }
-    func reset() { timer?.invalidate(); stage = .config; pct = 0; exportedURL = nil; exportError = nil }
-    deinit { timer?.invalidate() }
+
+    @ViewBuilder private var status: some View {
+        if isExporting {
+            HStack(spacing: 10) {
+                ProgressView().controlSize(.small)
+                Text("ModelIO is writing the selected format.").font(.sf(13)).foregroundStyle(theme.text2)
+            }
+        } else if let errorMessage {
+            Label(errorMessage, systemImage: "exclamationmark.triangle")
+                .font(.sf(13)).foregroundStyle(theme.bad)
+        } else if let exportedURL {
+            HStack(spacing: 10) {
+                Label(exportedMeasurementURL == nil
+                      ? "Wrote \(exportedURL.lastPathComponent)"
+                      : "Wrote model and measurements CSV", systemImage: "checkmark.circle")
+                    .font(.sf(13)).foregroundStyle(theme.good)
+                Spacer()
+                StButton(title: "Share", kind: .secondary, size: .sm, icon: "share") { showShareSheet = true }
+            }
+        } else if activeScan?.hasRenderableAsset != true {
+            Text("Compute the selected scan before exporting.").font(.sf(13)).foregroundStyle(theme.warn)
+        }
+    }
+
+    private func description(for format: ExportFormat) -> String {
+        switch format {
+        case .usdz: return "Apple USDZ"
+        case .usd: return "OpenUSD"
+        case .obj: return "Wavefront OBJ"
+        case .stl: return "STL mesh"
+        case .ply: return "Polygon file"
+        case .glb, .fbx: return "Unavailable"
+        }
+    }
+
+    private func export() {
+        guard let activeScan else { return }
+        isExporting = true
+        exportedURL = nil
+        exportedMeasurementURL = nil
+        errorMessage = nil
+        let selectedFormat = format
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let output = try ModelExporter().export(session: activeScan, to: selectedFormat)
+                let measurementOutput: URL?
+                if activeScan.measurements.isEmpty {
+                    measurementOutput = nil
+                } else {
+                    measurementOutput = try MeasurementExporter().exportCSV(
+                        activeScan.measurements,
+                        named: activeScan.exportFileBaseName,
+                        to: output.deletingLastPathComponent()
+                    )
+                }
+                DispatchQueue.main.async {
+                    exportedURL = output
+                    exportedMeasurementURL = measurementOutput
+                    isExporting = false
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    errorMessage = error.localizedDescription
+                    isExporting = false
+                }
+            }
+        }
+    }
+
+    private func shareItems(for modelURL: URL) -> [Any] {
+        var items: [Any] = [modelURL]
+        if let exportedMeasurementURL { items.append(exportedMeasurementURL) }
+        return items
+    }
 }
 
-/// UIKit share sheet for the exported file.
-struct ShareSheet: UIViewControllerRepresentable {
+private struct ShareSheet: UIViewControllerRepresentable {
     let items: [Any]
     func makeUIViewController(context: Context) -> UIActivityViewController {
         UIActivityViewController(activityItems: items, applicationActivities: nil)
     }
-    func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
-}
-
-struct ExportScreen: View {
-    @Environment(\.theme) private var theme
-    @EnvironmentObject private var model: StudioModel
-    @StateObject private var flow = ExportFlow()
-
-    var body: some View {
-        ZStack(alignment: .bottom) {
-            Stage { HeroModel() }.ignoresSafeArea()
-            (theme.mode == .dark ? Color.black.opacity(0.45) : Color(.sRGB, red: 20/255, green: 20/255, blue: 30/255, opacity: 0.28))
-                .ignoresSafeArea()
-
-            // sheet
-            StGlass(radius: 30) {
-                VStack(spacing: 0) {
-                    Capsule().fill(theme.lineStrong).frame(width: 38, height: 5).padding(.bottom, 14)
-                    switch flow.stage {
-                    case .config:   configView
-                    case .progress: ProgressView(pct: flow.pct, format: flow.format, dest: flow.dest)
-                    case .done:     DoneView(format: flow.format, dest: flow.dest, exportedURL: flow.exportedURL, error: flow.exportError, onAgain: { flow.reset() }, onDone: { model.go(.library) })
-                    }
-                }
-                .padding(.horizontal, 18).padding(.top, 12).padding(.bottom, 34)
-            }
-            .clipShape(UnevenRoundedRectangle(topLeadingRadius: 30, topTrailingRadius: 30))
-            .ignoresSafeArea(edges: .bottom)
-        }
-    }
-
-    private var configView: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 12) {
-                ModelBadge()
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Export Celestial Bust").font(.sf(17, .bold)).tracking(-0.3).foregroundStyle(theme.ink)
-                    Text("FULL · 4.2M tris · 184 MB").font(.mono(11)).foregroundStyle(theme.text3)
-                }
-                Spacer(minLength: 0)
-                Button { model.go(.viewer) } label: {
-                    StIcon(name: "close", size: 15, color: theme.text2).frame(width: 32, height: 32).background(Circle().fill(theme.fieldFill))
-                }.buttonStyle(.plain)
-            }
-
-            StLabel(text: "Send to").padding(.top, 18).padding(.bottom, 10)
-            DestRow(value: $flow.dest)
-
-            StLabel(text: "Format").padding(.top, 18).padding(.bottom, 10)
-            VStack(spacing: 8) {
-                ForEach(SampleData.exportFormats.prefix(3)) { f in
-                    FormatRow(f: f, on: flow.fmt == f.id) { flow.fmt = f.id }
-                }
-            }
-
-            VStack(spacing: 2) {
-                ForEach(EXPORT_OPTIONS.prefix(2), id: \.0) { key, label, _ in
-                    HStack {
-                        Text(label).font(.sf(13.5, .medium)).foregroundStyle(theme.ink)
-                        Spacer()
-                        StToggle(on: Binding(get: { flow.opts[key] ?? false }, set: { flow.opts[key] = $0 }))
-                    }
-                    .padding(.vertical, 8)
-                }
-            }
-            .padding(.top, 14)
-
-            StButton(title: "Export \(flow.format.name) · \(flow.format.size)", kind: .accent, size: .lg, icon: "export", full: true) { flow.start() }
-                .padding(.top, 16)
-        }
-    }
-}
-
-// MARK: - Pieces
-
-struct ModelBadge: View {
-    @Environment(\.theme) private var theme
-    var size: CGFloat = 50
-    var body: some View {
-        Stage(radius: 12) { HeroModel() }
-            .frame(width: size, height: size)
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(theme.line, lineWidth: 0.5))
-    }
-}
-
-struct FormatRow: View {
-    @Environment(\.theme) private var theme
-    let f: ExportFormatInfo
-    var on: Bool
-    var onPick: () -> Void
-    var body: some View {
-        Button(action: onPick) {
-            HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 10, style: .continuous).fill(on ? theme.accent : theme.card)
-                    .frame(width: 40, height: 40)
-                    .overlay(Text(f.name).font(.sf(11.5, .heavy)).tracking(-0.2).foregroundStyle(on ? theme.onAccent : theme.text2))
-                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(on ? .clear : theme.line, lineWidth: 0.5))
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(f.ext).font(.mono(14, .semibold)).foregroundStyle(theme.ink)
-                        if f.best { StTextChip(text: "BEST", tone: .accent) }
-                    }
-                    Text(f.desc).font(.sf(11.5)).foregroundStyle(theme.text3)
-                }
-                Spacer(minLength: 0)
-                Text(f.size).font(.mono(12)).foregroundStyle(theme.text2)
-                ZStack {
-                    Circle().fill(on ? theme.accent : .clear).frame(width: 20, height: 20)
-                        .overlay(Circle().strokeBorder(on ? .clear : theme.line, lineWidth: 1.5))
-                    if on { StIcon(name: "check", size: 13, color: theme.onAccent, weight: .heavy) }
-                }
-            }
-            .padding(12)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(on ? theme.accentSoft : theme.fieldFill))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(on ? theme.accentLine : theme.line, lineWidth: on ? 1 : 0.5))
-        }.buttonStyle(.plain)
-    }
-}
-
-struct DestRow: View {
-    @Environment(\.theme) private var theme
-    @Binding var value: String
-    var body: some View {
-        HStack(spacing: 12) {
-            ForEach(EXPORT_DESTINATIONS) { d in
-                let on = d.id == value
-                Button { value = d.id } label: {
-                    VStack(spacing: 8) {
-                        RoundedRectangle(cornerRadius: 18, style: .continuous).fill(on ? theme.accent : theme.fieldFill)
-                            .frame(width: 56, height: 56)
-                            .overlay(StIcon(name: d.icon, size: 24, color: on ? theme.onAccent : theme.text2))
-                            .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(on ? .clear : theme.line, lineWidth: 0.5))
-                        Text(d.label).font(.sf(11.5, on ? .semibold : .regular)).foregroundStyle(on ? theme.ink : theme.text2)
-                    }
-                    .frame(maxWidth: .infinity)
-                }.buttonStyle(.plain)
-            }
-        }
-    }
-}
-
-private struct ProgressView: View {
-    @Environment(\.theme) private var theme
-    var pct: Double
-    var format: ExportFormatInfo
-    var dest: String
-    var body: some View {
-        let d = EXPORT_DESTINATIONS.first { $0.id == dest } ?? EXPORT_DESTINATIONS[0]
-        VStack(spacing: 16) {
-            StRing(value: pct / 100, size: 104, stroke: 8, label: "\(Int(pct))", sub: "%")
-            VStack(spacing: 4) {
-                Text("Exporting \(format.name)…").font(.sf(16, .bold)).tracking(-0.3).foregroundStyle(theme.ink)
-                Text("\(pct < 40 ? "Triangulating mesh" : pct < 75 ? "Packing 4K textures" : "Writing \(format.ext)") · \(format.size)")
-                    .font(.sf(13)).foregroundStyle(theme.text2)
-            }
-            StChip(tone: .neutral) { StIcon(name: d.icon, size: 14, color: theme.text2); Text("to \(d.label)") }
-        }
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity)
-    }
-}
-
-private struct DoneView: View {
-    @Environment(\.theme) private var theme
-    var format: ExportFormatInfo
-    var dest: String
-    var exportedURL: URL?
-    var error: String?
-    var onAgain: () -> Void
-    var onDone: () -> Void
-    @State private var showShare = false
-
-    var body: some View {
-        let d = EXPORT_DESTINATIONS.first { $0.id == dest } ?? EXPORT_DESTINATIONS[0]
-        VStack(spacing: 14) {
-            Circle().fill(theme.goodSoft).frame(width: 68, height: 68)
-                .overlay(Circle().fill(theme.good).frame(width: 46, height: 46)
-                    .overlay(StIcon(name: "check", size: 24, color: .white, weight: .heavy)))
-            VStack(spacing: 5) {
-                Text("Export complete").font(.sf(18, .heavy)).tracking(-0.4).foregroundStyle(theme.ink)
-                if let url = exportedURL {
-                    Text("\(url.lastPathComponent) written · sent to \(d.label)")
-                        .font(.sf(13.5)).foregroundStyle(theme.text2).multilineTextAlignment(.center)
-                } else if let error {
-                    Text(error).font(.sf(12.5)).foregroundStyle(theme.warn).multilineTextAlignment(.center)
-                } else {
-                    Text("Celestial Bust\(format.ext) · \(format.size) · sent to \(d.label)")
-                        .font(.sf(13.5)).foregroundStyle(theme.text2).multilineTextAlignment(.center)
-                }
-            }
-            HStack(spacing: 8) {
-                if exportedURL != nil {
-                    StButton(title: "Share file", kind: .secondary, icon: "share") { showShare = true }
-                } else {
-                    StButton(title: "Export again", kind: .secondary, icon: "refresh", action: onAgain)
-                }
-                StButton(title: "Done", kind: .accent, icon: "check", action: onDone)
-            }
-            .padding(.top, 4)
-        }
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity)
-        .sheet(isPresented: $showShare) {
-            if let url = exportedURL { ShareSheet(items: [url]) }
-        }
-    }
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
