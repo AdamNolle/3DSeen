@@ -9,7 +9,7 @@ Last updated: 2026-07-10
 - [x] iOS Simulator: 70 tests pass on iPhone 17 / iOS 26.5.
 - [x] macOS: 33 tests pass, including the locally installed Blender integration.
 - [x] Swift package resolution is committed at `3DSeen.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`.
-- [ ] GitHub Actions CI run confirmed green on the remote repository.
+- [x] GitHub Actions CI passed for commit `1c35273`: [run 29135064656](https://github.com/AdamNolle/3DSeen/actions/runs/29135064656).
 - [ ] Tag-driven release run confirmed green on the remote repository.
 
 ## Workflow hardening completed
@@ -23,7 +23,6 @@ Last updated: 2026-07-10
 
 ## Remaining remote-only checks
 
-1. Push the completed commit to the GitHub repository and record the successful CI run URL.
-2. Push a release-candidate tag and verify the unsigned iOS/macOS artifacts and generated GitHub Release.
-3. If the `macos-15` image removes Xcode 26.3, deliberately advance the pinned version and rerun the full matrix; do not return to `latest-stable`.
-4. Blender is not provisioned in hosted CI, so the real Blender test skips there. Command construction, failure preservation, and format validation still run; the installed-runtime integration is local evidence documented in `docs/VERIFICATION-STATUS.md`.
+1. Push a release-candidate tag and verify the unsigned iOS/macOS artifacts and generated GitHub Release.
+2. If the `macos-15` image removes Xcode 26.3, deliberately advance the pinned version and rerun the full matrix; do not return to `latest-stable`.
+3. Blender is not provisioned in hosted CI, so the real Blender test skips there. Command construction, failure preservation, and format validation still run; the installed-runtime integration is local evidence documented in `docs/VERIFICATION-STATUS.md`.
