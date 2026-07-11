@@ -14,44 +14,30 @@ struct LandscapeCaptureEngine: View {
         ZStack {
             LandscapeARView(controller: capture).ignoresSafeArea()
 
-            VStack {
-                HStack {
-                    Image(systemName: "mountain.2").font(.system(size: 24))
-                    Text("Landscape · VIO").font(.headline)
-                }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 20).padding(.vertical, 10)
-                .background(.ultraThinMaterial).clipShape(Capsule())
-                .padding(.top, 10)
-
-                // live frame counter
-                Text("\(capture.frameCount) frames · \(capture.trackingState)")
-                    .font(.system(.subheadline, design: .monospaced))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 14).padding(.vertical, 7)
-                    .background(.ultraThinMaterial).clipShape(Capsule())
-                    .padding(.top, 8)
-
-                Spacer()
-
-                Text("LiDAR off · VIO world tracking. Walk a smooth arc; frames captured automatically.")
-                    .font(.subheadline).multilineTextAlignment(.center).foregroundStyle(.white)
-                    .padding().background(.ultraThinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 15)).padding(.bottom, 20)
-
-                Button {
-                    let folder = capture.finish()
-                    stateMachine.send(.finishCapture(scanDataURL: folder))
-                } label: {
-                    Text("Finish Landscape Scan")
-                        .font(.headline).frame(maxWidth: .infinity).padding()
-                        .background(Color.orange.opacity(0.9)).foregroundColor(.white)
-                        .clipShape(Capsule()).shadow(color: .orange.opacity(0.3), radius: 10, y: 5)
-                }
-                .padding(.horizontal, 40).padding(.bottom, 40)
-            }
+            LiveCaptureHUD(status: captureStatus, onFinish: finishCapture)
+                .allowsHitTesting(!capture.isFinishing)
         }
         .onDisappear { capture.stop() }
+    }
+
+    private var captureStatus: LiveCaptureStatus {
+        LiveCaptureStatus(
+            mode: .landscape,
+            phase: capture.isFinishing ? .finalizing : .capturing,
+            frameCount: capture.frameCount,
+            trackingStatus: capture.trackingState
+        )
+    }
+
+    private func finishCapture() {
+        capture.finish { result in
+            switch result {
+            case .success(let folder):
+                stateMachine.send(.finishCapture(scanDataURL: folder))
+            case .failure(let error):
+                stateMachine.send(.errorOccurred(error.localizedDescription))
+            }
+        }
     }
 }
 
@@ -60,13 +46,19 @@ final class LandscapeCaptureController: NSObject, ObservableObject, ARSessionDel
     private let logger = Logger(subsystem: "com.adamnolle.3DSeen", category: "Landscape")
     let session = ARSession()
     private let ciContext = CIContext()
+    private let writerQueue = DispatchQueue(label: "com.adamnolle.3DSeen.landscape-writer")
+    private let writerGroup = DispatchGroup()
+    private let stateLock = NSLock()
 
     @Published var frameCount = 0
     @Published var trackingState = "starting"
+    @Published var isFinishing = false
 
     private(set) var captureFolder: URL
     private var lastCapturePosition: SIMD3<Float>?
     private var lastCaptureTime: TimeInterval = 0
+    private var nextFrameIndex = 0
+    private var acceptsFrames = true
     private let minTranslation: Float = 0.08   // metres between frames
     private let minInterval: TimeInterval = 0.25
 
@@ -90,13 +82,31 @@ final class LandscapeCaptureController: NSObject, ObservableObject, ARSessionDel
         session.run(config, options: [.resetTracking, .removeExistingAnchors])
     }
 
-    func stop() { session.pause() }
-
-    /// Stops capture and returns the folder of captured frames.
-    func finish() -> URL {
+    func stop() {
+        stateLock.lock()
+        acceptsFrames = false
+        stateLock.unlock()
         session.pause()
-        logger.info("Landscape capture finished: \(self.frameCount) frames in \(self.captureFolder.lastPathComponent)")
-        return captureFolder
+    }
+
+    /// Stops capture and waits for every queued JPEG write before exposing the folder.
+    func finish(completion: @escaping (Result<URL, LandscapeCaptureError>) -> Void) {
+        guard !isFinishing else { return }
+        isFinishing = true
+        stateLock.lock()
+        acceptsFrames = false
+        stateLock.unlock()
+        session.pause()
+        writerGroup.notify(queue: .main) { [weak self] in
+            guard let self else { return }
+            self.logger.info("Landscape capture finished: \(self.frameCount) frames in \(self.captureFolder.lastPathComponent)")
+            self.isFinishing = false
+            guard CaptureArchiveInspector.containsImageFrames(in: self.captureFolder) else {
+                completion(.failure(.noFramesCaptured))
+                return
+            }
+            completion(.success(self.captureFolder))
+        }
     }
 
     func session(_ session: ARSession, cameraDidChangeTrackingState camera: ARCamera) {
@@ -111,31 +121,57 @@ final class LandscapeCaptureController: NSObject, ObservableObject, ARSessionDel
 
     func session(_ session: ARSession, didUpdate frame: ARFrame) {
         guard case .normal = frame.camera.trackingState else { return }
-        let t = frame.timestamp
-        guard t - lastCaptureTime >= minInterval else { return }
+        let time = frame.timestamp
+        let column = frame.camera.transform.columns.3
+        let position = SIMD3<Float>(column.x, column.y, column.z)
 
-        let pos = frame.camera.transform.columns.3
-        let position = SIMD3<Float>(pos.x, pos.y, pos.z)
-        if let last = lastCapturePosition, simd_distance(last, position) < minTranslation { return }
-
-        lastCaptureTime = t
+        stateLock.lock()
+        guard acceptsFrames,
+              time - lastCaptureTime >= minInterval,
+              lastCapturePosition.map({ simd_distance($0, position) >= minTranslation }) ?? true else {
+            stateLock.unlock()
+            return
+        }
+        lastCaptureTime = time
         lastCapturePosition = position
-        saveFrame(frame.capturedImage)
+        let index = nextFrameIndex
+        nextFrameIndex += 1
+        writerGroup.enter()
+        stateLock.unlock()
+
+        saveFrame(frame.capturedImage, index: index)
     }
 
-    private func saveFrame(_ pixelBuffer: CVPixelBuffer) {
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        guard let cg = ciContext.createCGImage(ciImage, from: ciImage.extent) else { return }
-        let index = frameCount
+    private func saveFrame(_ pixelBuffer: CVPixelBuffer, index: Int) {
         let url = captureFolder.appendingPathComponent(String(format: "frame_%04d.jpg", index))
-        DispatchQueue.global(qos: .utility).async {
+        let group = writerGroup
+        writerQueue.async { [weak self] in
+            defer { group.leave() }
+            guard let self else { return }
+            let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+            guard let image = self.ciContext.createCGImage(ciImage, from: ciImage.extent) else { return }
             #if canImport(UIKit)
-            if let data = UIImage(cgImage: cg).jpegData(compressionQuality: 0.92) {
-                try? data.write(to: url)
+            if let data = UIImage(cgImage: image).jpegData(compressionQuality: 0.92) {
+                do {
+                    try data.write(to: url, options: .atomic)
+                    DispatchQueue.main.async { self.frameCount += 1 }
+                } catch {
+                    self.logger.error("Could not write landscape frame: \(error.localizedDescription)")
+                }
             }
             #endif
         }
-        DispatchQueue.main.async { self.frameCount += 1 }
+    }
+}
+
+enum LandscapeCaptureError: LocalizedError {
+    case noFramesCaptured
+
+    var errorDescription: String? {
+        switch self {
+        case .noFramesCaptured:
+            return "Landscape Capture did not save any usable camera frames. Retake the scan after AR tracking becomes active."
+        }
     }
 }
 
