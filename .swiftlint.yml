@@ -5,6 +5,7 @@
 excluded:
   - .build
   - .dd
+  - build
   - DerivedData
   - "**/.build"
   - Tests/**/*Generated*

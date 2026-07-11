@@ -3,6 +3,9 @@
 // Two themes (light / dark). Injected through the SwiftUI environment as `\.theme`.
 
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // MARK: - Color hex helper
 
@@ -21,6 +24,30 @@ extension Color {
     /// Black with alpha — for ink-tinted lines/fills (e.g. rgba(20,20,24,a)).
     static func ink(_ r: Double, _ g: Double, _ b: Double, _ a: Double) -> Color {
         Color(.sRGB, red: r / 255, green: g / 255, blue: b / 255, opacity: a)
+    }
+}
+
+// MARK: - Shadow tokens (two-layer CSS box-shadow → stacked SwiftUI shadows)
+
+/// A design-system shadow recipe made of one or more stacked layers.
+/// CSS `box-shadow` maps to SwiftUI as: radius ≈ blur ÷ 2, `y` direct, `color` = the rgba.
+struct StShadow {
+    struct Layer {
+        var color: Color
+        var radius: CGFloat
+        var y: CGFloat
+        var x: CGFloat = 0
+    }
+    var layers: [Layer]
+}
+
+extension View {
+    /// Apply a multi-layer `StShadow` by stacking `.shadow` modifiers (reduce over layers).
+    /// An empty `layers` array is a no-op.
+    func stShadow(_ s: StShadow) -> some View {
+        s.layers.reduce(AnyView(self)) { view, layer in
+            AnyView(view.shadow(color: layer.color, radius: layer.radius, x: layer.x, y: layer.y))
+        }
     }
 }
 
@@ -84,13 +111,60 @@ struct Theme {
     static let sf = "SF Pro Display"
     static let mono = "SF Mono"
 
-    // MARK: stage gradient for 3D content
-    var stage: LinearGradient {
+    // MARK: stage gradient for 3D content (radial, soft top key light)
+    var stage: RadialGradient {
         mode == .dark
-            ? LinearGradient(colors: [Color(hex: "#2A2A31"), Color(hex: "#17171B"), Color(hex: "#101013")],
-                             startPoint: .top, endPoint: .bottom)
-            : LinearGradient(colors: [Color(hex: "#FCFCFB"), Color(hex: "#EFEEE9"), Color(hex: "#E2E0DA")],
-                             startPoint: .top, endPoint: .bottom)
+            ? RadialGradient(stops: [.init(color: Color(hex: "#2A2A31"), location: 0),
+                                     .init(color: Color(hex: "#17171B"), location: 0.55),
+                                     .init(color: Color(hex: "#101013"), location: 1)],
+                             center: UnitPoint(x: 0.5, y: 0.06), startRadius: 0, endRadius: 760)
+            : RadialGradient(stops: [.init(color: Color(hex: "#FCFCFB"), location: 0),
+                                     .init(color: Color(hex: "#EFEEE9"), location: 0.52),
+                                     .init(color: Color(hex: "#E2E0DA"), location: 1)],
+                             center: UnitPoint(x: 0.5, y: 0.08), startRadius: 0, endRadius: 760)
+    }
+
+    /// Soft white rim along the top edge of a stage / glass surface.
+    var stageRim: Color {
+        mode == .dark ? Color.white.opacity(0.10) : Color.white.opacity(0.6)
+    }
+
+    // MARK: shadow tokens (mode-derived, like `stage`/`shellBackground`)
+
+    /// Floating Liquid Glass panel shadow.
+    var glassShadow: StShadow {
+        mode == .dark
+            ? StShadow(layers: [.init(color: .black.opacity(0.4), radius: 1, y: 1),
+                                .init(color: .black.opacity(0.5), radius: 20, y: 16)])
+            : StShadow(layers: [.init(color: .ink(20, 20, 30, 0.06), radius: 1, y: 1),
+                                .init(color: .ink(20, 20, 30, 0.10), radius: 16, y: 12)])
+    }
+
+    /// Resting card shadow.
+    var cardShadow: StShadow {
+        mode == .dark
+            ? StShadow(layers: [.init(color: .black.opacity(0.3), radius: 1, y: 1),
+                                .init(color: .black.opacity(0.42), radius: 17, y: 12)])
+            : StShadow(layers: [.init(color: .ink(20, 20, 30, 0.04), radius: 1, y: 1),
+                                .init(color: .ink(20, 20, 30, 0.06), radius: 15, y: 10)])
+    }
+
+    /// Elevated card shadow.
+    var cardShadowLg: StShadow {
+        mode == .dark
+            ? StShadow(layers: [.init(color: .black.opacity(0.4), radius: 4, y: 2),
+                                .init(color: .black.opacity(0.55), radius: 35, y: 28)])
+            : StShadow(layers: [.init(color: .ink(20, 20, 30, 0.05), radius: 3, y: 2),
+                                .init(color: .ink(20, 20, 30, 0.10), radius: 30, y: 24)])
+    }
+
+    /// Primary (solid ink) button shadow.
+    var primaryShadow: StShadow {
+        mode == .dark
+            ? StShadow(layers: [.init(color: .black.opacity(0.4), radius: 1, y: 1),
+                                .init(color: .black.opacity(0.4), radius: 10, y: 8)])
+            : StShadow(layers: [.init(color: .black.opacity(0.18), radius: 1, y: 1),
+                                .init(color: .black.opacity(0.16), radius: 8, y: 6)])
     }
 
     /// Backdrop behind the device frame (Shell background).
@@ -112,9 +186,9 @@ struct Theme {
         card: Color(hex: "#FFFFFF"),
         card2: Color(hex: "#FBFAF8"),
         ink: Color(hex: "#1B1B1D"),
-        text2: .ink(27, 27, 29, 0.60),
-        text3: .ink(27, 27, 29, 0.40),
-        text4: .ink(27, 27, 29, 0.26),
+        text2: .ink(27, 27, 29, 0.72),
+        text3: .ink(27, 27, 29, 0.62),
+        text4: .ink(27, 27, 29, 0.45),
         onAccent: Color(hex: "#FFFFFF"),
         line: .ink(20, 20, 24, 0.08),
         lineStrong: .ink(20, 20, 24, 0.14),
@@ -124,11 +198,11 @@ struct Theme {
         accentText: Color(hex: "#1F58DC"),
         accentSoft: Color(.sRGB, red: 45/255, green: 104/255, blue: 240/255, opacity: 0.10),
         accentLine: Color(.sRGB, red: 45/255, green: 104/255, blue: 240/255, opacity: 0.30),
-        good: Color(hex: "#1E8E5A"),
+        good: Color(hex: "#167044"),
         goodSoft: Color(.sRGB, red: 30/255, green: 142/255, blue: 90/255, opacity: 0.12),
-        warn: Color(hex: "#B6791D"),
+        warn: Color(hex: "#8A5A00"),
         warnSoft: Color(.sRGB, red: 182/255, green: 121/255, blue: 29/255, opacity: 0.14),
-        bad: Color(hex: "#C53B30"),
+        bad: Color(hex: "#A92E24"),
         badSoft: Color(.sRGB, red: 197/255, green: 59/255, blue: 48/255, opacity: 0.12),
         glassFill: Color(.sRGB, red: 1, green: 1, blue: 1, opacity: 0.72),
         glassBorder: .ink(20, 20, 24, 0.07),
@@ -147,9 +221,9 @@ struct Theme {
         card: Color(hex: "#1F1F25"),
         card2: Color(hex: "#1A1A1F"),
         ink: Color(hex: "#F3F2F5"),
-        text2: Color(.sRGB, red: 243/255, green: 242/255, blue: 245/255, opacity: 0.62),
-        text3: Color(.sRGB, red: 243/255, green: 242/255, blue: 245/255, opacity: 0.40),
-        text4: Color(.sRGB, red: 243/255, green: 242/255, blue: 245/255, opacity: 0.24),
+        text2: Color(.sRGB, red: 243/255, green: 242/255, blue: 245/255, opacity: 0.72),
+        text3: Color(.sRGB, red: 243/255, green: 242/255, blue: 245/255, opacity: 0.52),
+        text4: Color(.sRGB, red: 243/255, green: 242/255, blue: 245/255, opacity: 0.38),
         onAccent: Color(hex: "#0A1124"),
         line: Color(.sRGB, red: 1, green: 1, blue: 1, opacity: 0.08),
         lineStrong: Color(.sRGB, red: 1, green: 1, blue: 1, opacity: 0.15),
@@ -204,10 +278,37 @@ extension EnvironmentValues {
 extension Font {
     /// SF Pro Display/Text at a given size + weight (system font is SF on Apple platforms).
     static func sf(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-        .system(size: size, weight: weight)
+        .system(size: scaledPointSize(size, maximumScale: 2), weight: weight)
     }
+
     /// SF Mono for telemetry / overline labels.
     static func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-        .system(size: size, weight: weight, design: .monospaced)
+        .system(size: scaledPointSize(size, maximumScale: 1.5), weight: weight, design: .monospaced)
     }
+
+    private static func scaledPointSize(_ size: CGFloat, maximumScale: CGFloat) -> CGFloat {
+        #if canImport(UIKit)
+        let metrics = UIFontMetrics(forTextStyle: textStyle(for: size))
+        return min(metrics.scaledValue(for: size), size * maximumScale)
+        #else
+        return size
+        #endif
+    }
+
+    #if canImport(UIKit)
+    private static func textStyle(for size: CGFloat) -> UIFont.TextStyle {
+        switch size {
+        case 34...: return .largeTitle
+        case 28..<34: return .title1
+        case 22..<28: return .title2
+        case 20..<22: return .title3
+        case 17..<20: return .headline
+        case 16..<17: return .body
+        case 15..<16: return .subheadline
+        case 13..<15: return .footnote
+        case 11..<13: return .caption1
+        default: return .caption2
+        }
+    }
+    #endif
 }

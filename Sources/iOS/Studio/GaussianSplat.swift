@@ -23,7 +23,13 @@ struct SplatViewerScreen: View {
     @Environment(\.theme) private var theme
     @StateObject private var controller = SplatController()
     @State private var importing = false
+    let assetURL: URL?
     var onClose: (() -> Void)?
+
+    init(assetURL: URL? = nil, onClose: (() -> Void)? = nil) {
+        self.assetURL = assetURL
+        self.onClose = onClose
+    }
 
     var body: some View {
         ZStack {
@@ -86,6 +92,11 @@ struct SplatViewerScreen: View {
                 if ok { /* keep access for the render session */ }
             }
         }
+        .onAppear {
+            guard controller.url == nil, let assetURL else { return }
+            controller.url = assetURL
+            controller.status = "Loading \(assetURL.lastPathComponent)…"
+        }
     }
 
     private var emptyState: some View {
@@ -94,33 +105,14 @@ struct SplatViewerScreen: View {
                 .fill(.white.opacity(0.06))
                 .frame(width: 72, height: 72)
                 .overlay(StIcon(name: "sparkle", size: 30, color: Color(hex: "#9FC0FF")))
-            Text("On-device Gaussian Splatting").font(.sf(20, .bold)).foregroundStyle(.white)
-            Text("Open a .ply radiance field captured by 3DSeen, Luma, Polycam, or KIRI — and render it instantly, fully offline. No cloud round-trip.")
+            Text("No Splat Preview Available").font(.sf(20, .bold)).foregroundStyle(.white)
+            Text("This scan does not have a geometry-derived .ply preview yet. You can open a compatible PLY file to inspect it offline.")
                 .font(.sf(14)).foregroundStyle(.white.opacity(0.65)).multilineTextAlignment(.center)
                 .frame(maxWidth: 320)
-            HStack(spacing: 10) {
-                Button { importing = true } label: {
-                    Text("Open .ply").font(.sf(15, .semibold)).foregroundStyle(.black)
-                        .padding(.horizontal, 22).frame(height: 46).background(Capsule().fill(.white))
-                }.buttonStyle(.plain)
-                Button { generateSample() } label: {
-                    Text("Generate sample").font(.sf(15, .semibold)).foregroundStyle(.white)
-                        .padding(.horizontal, 22).frame(height: 46)
-                        .background(Capsule().fill(.white.opacity(0.14)))
-                        .overlay(Capsule().strokeBorder(.white.opacity(0.25), lineWidth: 0.5))
-                }.buttonStyle(.plain)
-            }
-        }
-    }
-
-    /// Generate a radiance field on-device and load it into the renderer.
-    private func generateSample() {
-        do {
-            let url = try GaussianSplatGenerator.writeDemoPLY()
-            controller.status = "Generating field…"
-            controller.url = url
-        } catch {
-            controller.status = "Generation failed"
+            Button { importing = true } label: {
+                Text("Open .ply").font(.sf(15, .semibold)).foregroundStyle(.black)
+                    .padding(.horizontal, 22).frame(height: 46).background(Capsule().fill(.white))
+            }.buttonStyle(.plain)
         }
     }
 }
@@ -182,7 +174,7 @@ struct GaussianSplatMetalView: UIViewRepresentable {
             guard let url = controller.url, url != loadedURL, let renderer else { return }
             loadedURL = url
             do {
-                try renderer.reset()
+                renderer.reset()
                 try renderer.readPLY(from: url)
                 DispatchQueue.main.async {
                     self.controller.splatCount = renderer.splatCount

@@ -11,14 +11,34 @@ struct Stage<Content: View>: View {
     var radius: CGFloat = 16
     @ViewBuilder var content: Content
 
+    private var stops: [Gradient.Stop] {
+        theme.mode == .dark
+            ? [.init(color: Color(hex: "#2A2A31"), location: 0),
+               .init(color: Color(hex: "#17171B"), location: 0.55),
+               .init(color: Color(hex: "#101013"), location: 1)]
+            : [.init(color: Color(hex: "#FCFCFB"), location: 0),
+               .init(color: Color(hex: "#EFEEE9"), location: 0.52),
+               .init(color: Color(hex: "#E2E0DA"), location: 1)]
+    }
+    private var center: UnitPoint {
+        theme.mode == .dark ? UnitPoint(x: 0.5, y: 0.06) : UnitPoint(x: 0.5, y: 0.08)
+    }
+
     var body: some View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(theme.stage))
+            .background {
+                // Geometry-aware radial so the soft top key light scales to the surface.
+                GeometryReader { geo in
+                    RadialGradient(stops: stops, center: center,
+                                   startRadius: 0,
+                                   endRadius: max(geo.size.width, geo.size.height) * 1.1)
+                }
+            }
             .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .strokeBorder(theme.mode == .dark ? Color.white.opacity(0.10) : Color.white.opacity(0.6), lineWidth: 0.5)
+                    .strokeBorder(theme.stageRim, lineWidth: 0.5)
             )
     }
 }
@@ -383,7 +403,7 @@ struct ScanThumb: View {
                 VStack {
                     Spacer()
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(scan.name).font(.sf(13, .semibold)).tracking(-0.3).foregroundStyle(theme.ink)
+                        Text(scan.name).font(.sf(13, .semibold)).tracking(0).foregroundStyle(theme.ink)
                         Text("\(scan.mode) · \(scan.tier) · \(scan.mb) MB")
                             .font(.mono(9.5)).foregroundStyle(theme.text3)
                     }

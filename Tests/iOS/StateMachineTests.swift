@@ -32,6 +32,25 @@ final class StateMachineTests: XCTestCase {
         XCTAssertEqual(sm.state, .idle)
     }
 
+    func testRemembersCaptureAndComputedURLs() {
+        let sm = ProcessingStateMachine()
+        let captureURL = URL(fileURLWithPath: "/tmp/capture-package")
+        let assetURL = URL(fileURLWithPath: "/tmp/model.usdz")
+
+        sm.send(.startCapture(.object))
+        sm.send(.finishCapture(scanDataURL: captureURL))
+        XCTAssertEqual(sm.lastScanDataURL, captureURL)
+
+        sm.send(.userSelectsComputeMode(.local))
+        sm.send(.startLocalCompute)
+        sm.send(.computeCompleted(assetURL))
+        XCTAssertEqual(sm.lastComputedAssetURL, assetURL)
+
+        sm.send(.reset)
+        XCTAssertNil(sm.lastScanDataURL)
+        XCTAssertNil(sm.lastComputedAssetURL)
+    }
+
     func testOffloadPath() {
         let sm = ProcessingStateMachine()
         sm.send(.startCapture(.space))
@@ -42,10 +61,35 @@ final class StateMachineTests: XCTestCase {
         guard case .computingOffloaded = sm.state else { return XCTFail("expected offloaded") }
     }
 
-    func testInvalidTransitionIsIgnored() {
+    func testAutoPilotResolutionTransitionsToTheSelectedCaptureMode() {
+        let sm = ProcessingStateMachine()
+
+        sm.send(.startCapture(.autoPilot))
+        sm.send(.autoPilotResolved(.landscape))
+
+        XCTAssertEqual(sm.state, .capturing(mode: .landscape))
+        XCTAssertEqual(sm.activeCaptureMode, .landscape)
+    }
+
+    func testInvalidTransitionDoesNotMutatePipelineMetadata() {
         let sm = ProcessingStateMachine()
         sm.send(.finishCapture(scanDataURL: dummyURL)) // invalid from .idle
         XCTAssertEqual(sm.state, .idle)
+        XCTAssertNil(sm.lastScanDataURL)
+        XCTAssertNil(sm.lastComputedAssetURL)
+        XCTAssertNil(sm.activeCaptureMode)
+
+        sm.send(.startCapture(.object))
+        sm.send(.finishCapture(scanDataURL: dummyURL))
+        sm.send(.userSelectsComputeMode(.local))
+        sm.send(.startLocalCompute)
+        let output = URL(fileURLWithPath: "/tmp/computed.usdz")
+        sm.send(.computeCompleted(output))
+
+        sm.send(.finishCapture(scanDataURL: URL(fileURLWithPath: "/tmp/stale")))
+        XCTAssertEqual(sm.lastScanDataURL, dummyURL)
+        XCTAssertEqual(sm.lastComputedAssetURL, output)
+        XCTAssertEqual(sm.activeCaptureMode, .object)
     }
 
     func testThermalThrottleFromLocalCompute() {

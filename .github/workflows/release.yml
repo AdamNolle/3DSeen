@@ -9,20 +9,27 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  quality:
+    name: Verify tagged commit
+    uses: ./.github/workflows/ci.yml
+
   build-artifacts:
     name: Build unsigned artifacts
+    needs: quality
+    permissions:
+      contents: write
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Select Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
         with:
-          xcode-version: latest-stable
-      - name: Install XcodeGen
-        run: brew install xcodegen
+          xcode-version: '16.4'
+      - name: Install pinned build tools
+        run: tools/ci/install-tools.sh
       - name: Generate project
         run: xcodegen generate
       - name: Ensure Metal Toolchain (no-op on stable Xcode)
@@ -49,20 +56,24 @@ jobs:
 
       - name: Package artifacts
         run: |
+          IOS_APP=$(find build/ios/Build/Products -name '3DSeen-iOS.app' -print -quit)
+          MAC_APP=$(find build/mac/Build/Products -name '3DSeen-macOS.app' -print -quit)
+          test -n "$IOS_APP" && test -d "$IOS_APP"
+          test -n "$MAC_APP" && test -d "$MAC_APP"
           mkdir -p dist
           ditto -c -k --sequesterRsrc --keepParent \
-            "$(find build/ios/Build/Products -name '3DSeen-iOS.app' | head -1)" dist/3DSeen-iOS-${{ github.ref_name }}.app.zip
+            "$IOS_APP" dist/3DSeen-iOS-${{ github.ref_name }}.app.zip
           ditto -c -k --sequesterRsrc --keepParent \
-            "$(find build/mac/Build/Products -name '3DSeen-macOS.app' | head -1)" dist/3DSeen-macOS-${{ github.ref_name }}.app.zip
+            "$MAC_APP" dist/3DSeen-macOS-${{ github.ref_name }}.app.zip
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: 3DSeen-${{ github.ref_name }}
           path: dist/*.zip
 
       - name: Attach to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: dist/*.zip
           generate_release_notes: true
