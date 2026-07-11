@@ -1,10 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
-TOOLS_DIR="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/3dseen-tools/bin"
+TOOLS_ROOT="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/3dseen-tools"
+TOOLS_DIR="$TOOLS_ROOT/bin"
 DOWNLOAD_DIR="$(mktemp -d)"
 trap 'rm -rf "$DOWNLOAD_DIR"' EXIT
-mkdir -p "$TOOLS_DIR"
+mkdir -p "$TOOLS_DIR" "$TOOLS_ROOT/share/xcodegen"
 
 fetch_and_verify() {
   local url="$1" expected_sha="$2" output="$3"
@@ -18,6 +19,7 @@ fetch_and_verify \
   "$DOWNLOAD_DIR/xcodegen.zip"
 unzip -q "$DOWNLOAD_DIR/xcodegen.zip" -d "$DOWNLOAD_DIR/xcodegen"
 install -m 0755 "$DOWNLOAD_DIR/xcodegen/xcodegen/bin/xcodegen" "$TOOLS_DIR/xcodegen"
+cp -R "$DOWNLOAD_DIR/xcodegen/xcodegen/share/xcodegen/." "$TOOLS_ROOT/share/xcodegen/"
 
 fetch_and_verify \
   "https://github.com/realm/SwiftLint/releases/download/0.65.0/SwiftLintBinary.artifactbundle.zip" \
