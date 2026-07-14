@@ -1,3 +1,4 @@
+import Darwin
 import XCTest
 @testable import ThreeDSeenMac
 
@@ -67,7 +68,7 @@ final class BlenderModelConverterTests: XCTestCase {
         XCTAssertFalse(BlenderModelConverter.isValidOutput(at: fbx, for: .fbx))
     }
 
-    func testFailedConversionPreservesExistingExport() throws {
+    func testFailedConversionPreservesExistingExport() async throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("blender-failure-\(UUID())", isDirectory: true)
         try fm.createDirectory(at: root, withIntermediateDirectories: true)
@@ -82,7 +83,12 @@ final class BlenderModelConverterTests: XCTestCase {
         try existing.write(to: output)
         let converter = BlenderModelConverter(runtime: .init(blenderURL: blender))
 
-        XCTAssertThrowsError(try converter.convert(sourceURL: source, to: .glb, outputURL: output))
+        do {
+            _ = try await converter.convert(sourceURL: source, to: .glb, outputURL: output)
+            XCTFail("Expected Blender failure")
+        } catch is BlenderModelConverter.ConverterError {
+            // Expected.
+        }
         XCTAssertEqual(try Data(contentsOf: output), existing)
     }
 
@@ -93,7 +99,61 @@ final class BlenderModelConverterTests: XCTestCase {
         data.append(UInt8((value >> 24) & 0xFF))
     }
 
-    func testInstalledBlenderConvertsARealUSDZToGLBAndFBX() throws {
+    func testCancellationTerminatesBlenderProcessGroupAndPreservesExport() async throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory
+            .appendingPathComponent("blender-cancel-\(UUID())", isDirectory: true)
+        try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: root) }
+        let parentPID = root.appendingPathComponent("parent.pid")
+        let childPID = root.appendingPathComponent("child.pid")
+        let blender = root.appendingPathComponent("blender")
+        try Data("""
+        #!/bin/sh
+        echo $$ > "\(parentPID.path)"
+        sleep 30 &
+        echo $! > "\(childPID.path)"
+        wait
+        """.utf8).write(to: blender)
+        try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: blender.path)
+        let source = root.appendingPathComponent("source.usda")
+        try Data("#usda 1.0".utf8).write(to: source)
+        let output = root.appendingPathComponent("existing.glb")
+        let existing = Data("existing-export".utf8)
+        try existing.write(to: output)
+        let converter = BlenderModelConverter(runtime: .init(blenderURL: blender))
+
+        let task = Task {
+            try await converter.convert(sourceURL: source, to: .glb, outputURL: output)
+        }
+        for _ in 0..<500 where !fileManager.fileExists(atPath: childPID.path) {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        guard fileManager.fileExists(atPath: parentPID.path),
+              fileManager.fileExists(atPath: childPID.path) else {
+            task.cancel()
+            _ = try? await task.value
+            return XCTFail("The disposable Blender process did not launch within 10 seconds.")
+        }
+        let parent = try XCTUnwrap(Int32(String(contentsOf: parentPID).trimmingCharacters(in: .whitespacesAndNewlines)))
+        let child = try XCTUnwrap(Int32(String(contentsOf: childPID).trimmingCharacters(in: .whitespacesAndNewlines)))
+        task.cancel()
+        do {
+            _ = try await task.value
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+            // Expected.
+        }
+
+        for _ in 0..<100 where kill(parent, 0) == 0 || kill(child, 0) == 0 {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertNotEqual(kill(parent, 0), 0)
+        XCTAssertNotEqual(kill(child, 0), 0)
+        XCTAssertEqual(try Data(contentsOf: output), existing)
+    }
+
+    func testInstalledBlenderConvertsARealUSDZToGLBAndFBX() async throws {
         let converter = BlenderModelConverter()
         guard converter.isAvailable else { throw XCTSkip("Blender is not installed on this Mac.") }
 
@@ -118,7 +178,7 @@ final class BlenderModelConverterTests: XCTestCase {
 
         for format in [ExportFormat.glb, .fbx] {
             let output = root.appendingPathComponent("model").appendingPathExtension(format.fileExtension)
-            let converted = try converter.convert(sourceURL: source, to: format, outputURL: output)
+            let converted = try await converter.convert(sourceURL: source, to: format, outputURL: output)
             XCTAssertEqual(converted, output)
             XCTAssertTrue(BlenderModelConverter.isValidOutput(at: output, for: format))
         }

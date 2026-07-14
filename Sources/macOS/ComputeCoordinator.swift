@@ -15,7 +15,7 @@ public struct MacComputedScan: Identifiable, Equatable {
 
     public var id: UUID { manifest.scanID }
     public var name: String {
-        "\(manifest.captureMode.rawValue)-\(manifest.scanID.uuidString.prefix(8))"
+        manifest.displayName ?? "\(manifest.captureMode.rawValue)-\(manifest.scanID.uuidString.prefix(8))"
     }
     public var sizeMB: Int { max(0, Int((Double(byteCount) / 1_000_000).rounded(.up))) }
     public var isRenderable: Bool { FileManager.default.fileExists(atPath: modelURL.path) }
@@ -65,7 +65,14 @@ public final class ComputeCoordinator: ObservableObject {
     private struct PendingHandoff {
         let archive: URL
         let replyPeer: MCPeerID
+        let peerInstallationID: HandoffInstallationID
         let metadata: ScanHandoffMetadata
+    }
+
+    private struct PendingOffer {
+        let peerID: HandoffInstallationID
+        let scanID: UUID
+        let offer: HandoffJobOffer
     }
 
     private struct CompletionInput {
@@ -77,6 +84,8 @@ public final class ComputeCoordinator: ObservableObject {
         let frameCount: Int
         let captureQualityReport: CaptureQualityReport?
         let replyPeer: MCPeerID?
+        let replyPeerID: HandoffInstallationID?
+        let jobID: UUID?
     }
 
     public enum Stage: Int, CaseIterable {
@@ -118,60 +127,91 @@ public final class ComputeCoordinator: ObservableObject {
     @Published public var peerName: String = "—"
     @Published public var selectedSplatOutput: SplatOutput = .geometryPreview
     @Published public private(set) var splatTrainerStage: NerfstudioSplatTrainer.Stage = .idle
+    @Published public private(set) var pendingPairingRequests: [HandoffPairingRequest] = []
+    @Published public private(set) var authenticatedPeerIDs: Set<HandoffInstallationID> = []
+    @Published public private(set) var trustedPeerIDs: Set<HandoffInstallationID> = []
+    @Published public private(set) var activeRemoteJobID: UUID?
+    @Published public private(set) var queuedRemoteJobCount = 0
 
-    public let network = NetworkHandoffManager()
+    public let network: NetworkHandoffManager
+    public let pairing: HandoffPairingCoordinator
     public let runner = PhotogrammetryRunner()
     public let splatTrainer: NerfstudioSplatTrainer
     private var cancellables = Set<AnyCancellable>()
     private let logger = Logger(subsystem: "com.adamnolle.3DSeen", category: "Compute")
     private let assetStore: ScanAssetStore?
+    private let remoteJobJournal: MacHandoffJobJournal
     private var pendingHandoffs: [PendingHandoff] = []
+    private var pendingOffers: [UUID: PendingOffer] = [:]
+    private var activeRemoteJob: (jobID: UUID, scanID: UUID, peerID: HandoffInstallationID)?
+    private var cancelledRemoteJobIDs: Set<UUID> = []
     private var isDrainingHandoffs = false
     private var isExecutingProcess = false
 
-    public init(splatTrainer: NerfstudioSplatTrainer? = nil) {
-        assetStore = try? ScanAssetStore()
+    public init(
+        splatTrainer: NerfstudioSplatTrainer? = nil,
+        network: NetworkHandoffManager? = nil,
+        credentialStore: (any PairingCredentialStore)? = nil,
+        assetStore: ScanAssetStore? = try? ScanAssetStore(),
+        remoteJobJournalURL: URL? = nil
+    ) {
+        let selectedNetwork = network ?? NetworkHandoffManager()
+        self.network = selectedNetwork
+        self.pairing = HandoffPairingCoordinator(
+            transport: selectedNetwork,
+            credentialStore: credentialStore
+        )
+        self.assetStore = assetStore
+        let journalURL = remoteJobJournalURL
+            ?? assetStore?.rootDirectory.deletingLastPathComponent()
+                .appendingPathComponent("Handoff/mac-jobs.json")
+            ?? FileManager.default.temporaryDirectory.appendingPathComponent("3dseen-mac-jobs.json")
+        self.remoteJobJournal = MacHandoffJobJournal(fileURL: journalURL)
         self.splatTrainer = splatTrainer ?? NerfstudioSplatTrainer()
-        network.onReceiveScan = { [weak self] url, peer, metadata in
-            Task { await self?.enqueueHandoff(archive: url, peer: peer, metadata: metadata) }
+        selectedNetwork.onReceiveScan = { [weak self] url, peer, metadata in
+            Task { await self?.receiveHandoff(archive: url, peer: peer, metadata: metadata) }
         }
-        network.$connectedPeers
+        selectedNetwork.$connectedPeers
             .receive(on: RunLoop.main)
             .sink { [weak self] peers in self?.peerName = peers.first?.displayName ?? "—" }
+            .store(in: &cancellables)
+        selectedNetwork.controlEventsPublisher
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in self?.handleControlEvent($0) }
+            .store(in: &cancellables)
+        pairing.$pendingRequests
+            .sink { [weak self] in self?.pendingPairingRequests = $0 }
+            .store(in: &cancellables)
+        pairing.$authenticatedPeerIDs
+            .sink { [weak self] in self?.authenticatedPeerIDs = $0 }
+            .store(in: &cancellables)
+        pairing.$trustedPeerIDs
+            .sink { [weak self] in self?.trustedPeerIDs = $0 }
+            .store(in: &cancellables)
+        pairing.$lastError
+            .compactMap { $0 }
+            .sink { [weak self] in self?.addLog("Authentication: \($0)") }
             .store(in: &cancellables)
         // Map raw photogrammetry progress onto pipeline stages.
         runner.$progress
             .receive(on: RunLoop.main)
-            .sink { [weak self] p in self?.mapProgress(p) }
+            .sink { [weak self] progress in
+                self?.mapProgress(progress)
+                self?.sendActiveProgress(progress)
+            }
             .store(in: &cancellables)
         self.splatTrainer.$stage
             .receive(on: RunLoop.main)
             .sink { [weak self] stage in self?.splatTrainerStage = stage }
             .store(in: &cancellables)
-        reloadLibrary()
-    }
-
-    public var selectedScan: MacComputedScan? {
-        guard let selectedScanID else { return nil }
-        return libraryScans.first { $0.id == selectedScanID }
-    }
-
-    public var librarySummary: MacLibrarySummary { MacLibrarySummary(scans: libraryScans) }
-    public var trainedSplatAvailable: Bool { splatTrainer.isAvailable }
-
-    @discardableResult
-    public func refreshSplatRuntime() -> Bool {
-        let available = splatTrainer.refreshRuntime()
-        addLog(available ? "Trained-splat runtime is ready" : "Trained-splat runtime is unavailable")
-        return available
-    }
-
-    public func selectScan(_ id: UUID?) {
-        selectedScanID = id
-        if let scan = selectedScan {
-            outputURL = scan.modelURL
-            outputManifest = scan.manifest
+        do {
+            try remoteJobJournal.recoverInterruptedWork(
+                completedJobIDs: completedRemoteJobIDs(in: assetStore)
+            )
+        } catch {
+            addLog("Remote job history could not be recovered: \(error.localizedDescription)")
         }
+        reloadLibrary()
     }
 
     /// Reloads result manifests saved by this Mac app. Invalid or partially written folders are
@@ -216,49 +256,164 @@ public final class ComputeCoordinator: ObservableObject {
         logger.info("\(message)")
     }
 
-    private func sendResultPackage(output: URL, manifest: ScanAssetManifest?, to peer: MCPeerID) throws {
-        guard let manifest else { return }
-        let zipURL = try ScanResultPackage().write(output: output, manifest: manifest)
-        addLog("Sending result package → \(peer.displayName)")
-        network.sendResource(fileURL: zipURL, named: zipURL.lastPathComponent, to: peer) { [weak self] error in
-            try? FileManager.default.removeItem(at: zipURL)
-            if let error {
-                self?.addLog("Result return failed: \(error.localizedDescription)")
-            } else {
-                self?.addLog("Returned result package → \(peer.displayName)")
+    private func handleControlEvent(_ event: HandoffControlEvent) {
+        guard pairing.isAuthenticated(event.peerID) else { return }
+        switch event.message.payload {
+        case .jobOffer(let offer):
+            guard let jobID = event.message.jobID, let scanID = event.message.scanID else {
+                send(.failed(HandoffFailure(code: .corruptArchive, detail: "Job identity is missing.")), event: event)
+                return
             }
+            pendingOffers[jobID] = PendingOffer(peerID: event.peerID, scanID: scanID, offer: offer)
+            recordRemoteJob(jobID: jobID, scanID: scanID, peerID: event.peerID, state: .accepted, progress: 0)
+            updateQueueProjection()
+            send(.jobAccepted, event: event)
+            addLog("Accepted typed job offer \(jobID.uuidString.prefix(8))")
+        case .cancel:
+            guard let jobID = event.message.jobID else { return }
+            cancelRemoteJob(jobID, event: event)
+        case .statusRequest:
+            let status: HandoffJobStatus
+            let durableRecord = event.message.jobID.flatMap { remoteJobJournal.records[$0] }
+            if activeRemoteJob?.jobID == event.message.jobID {
+                status = HandoffJobStatus(state: .processing, progress: progress)
+            } else if pendingOffers[event.message.jobID ?? UUID()] != nil {
+                status = HandoffJobStatus(state: .accepted, progress: 0)
+            } else if let durableRecord,
+                      durableRecord.peerID == event.peerID,
+                      durableRecord.scanID == event.message.scanID {
+                status = HandoffJobStatus(state: durableRecord.state, progress: durableRecord.progress)
+            } else {
+                status = HandoffJobStatus(state: .failed, progress: 0)
+            }
+            send(.statusResponse(status), event: event)
+            if let durableRecord, durableRecord.state == .completed {
+                resendCompletedResult(durableRecord)
+            }
+        default:
+            break
         }
     }
 
-    private func enqueueHandoff(archive: URL, peer: MCPeerID, metadata: ScanHandoffMetadata) async {
-        pendingHandoffs.append(.init(archive: archive, replyPeer: peer, metadata: metadata))
+    private func receiveHandoff(archive: URL, peer: MCPeerID, metadata: ScanHandoffMetadata) async {
+        guard let peerID = network.installationID(for: peer), pairing.isAuthenticated(peerID) else {
+            network.removeReceivedResource(archive)
+            addLog("Rejected unauthenticated scan resource from \(peer.displayName)")
+            return
+        }
+        if let jobID = metadata.jobID {
+            guard let offer = pendingOffers[jobID],
+                  offer.peerID == peerID,
+                  offer.scanID == metadata.scanID,
+                  (try? HandoffResourceDescriptor.inspect(archive)) == offer.offer.resource else {
+                network.removeReceivedResource(archive)
+                if let scanID = metadata.scanID {
+                    recordRemoteJob(jobID: jobID, scanID: scanID, peerID: peerID, state: .failed, progress: 0)
+                }
+                send(
+                    .failed(HandoffFailure(code: .corruptArchive, detail: "The offered resource digest did not match.")),
+                    jobID: jobID,
+                    scanID: metadata.scanID,
+                    to: peerID
+                )
+                addLog("Rejected uncorrelated or corrupt job resource")
+                return
+            }
+            pendingOffers.removeValue(forKey: jobID)
+            updateQueueProjection()
+        }
+        await enqueueHandoff(archive: archive, peer: peer, peerID: peerID, metadata: metadata)
+    }
+
+    private func enqueueHandoff(
+        archive: URL,
+        peer: MCPeerID,
+        peerID: HandoffInstallationID,
+        metadata: ScanHandoffMetadata
+    ) async {
+        pendingHandoffs.append(.init(
+            archive: archive,
+            replyPeer: peer,
+            peerInstallationID: peerID,
+            metadata: metadata
+        ))
+        updateQueueProjection()
         addLog("Queued hand-off from \(peer.displayName) (\(pendingHandoffs.count) waiting)")
         guard !isDrainingHandoffs else { return }
         isDrainingHandoffs = true
         defer { isDrainingHandoffs = false }
         while !pendingHandoffs.isEmpty {
             let handoff = pendingHandoffs.removeFirst()
+            updateQueueProjection()
             await process(
                 archive: handoff.archive,
                 replyPeer: handoff.replyPeer,
                 captureMode: handoff.metadata.captureMode,
                 detailTier: handoff.metadata.detailTier,
-                sourceScanID: handoff.metadata.scanID
+                sourceScanID: handoff.metadata.scanID,
+                replyPeerID: handoff.peerInstallationID,
+                jobID: handoff.metadata.jobID
             )
         }
     }
 
     /// Retain an incoming capture, pass image archives to PhotogrammetrySession, or preserve an
     /// already-computed RoomPlan USDZ without pretending it needs image reconstruction.
-    public func process(archive: URL, replyPeer: MCPeerID? = nil, captureMode: CaptureMode? = nil,
-                        detailTier: String? = nil, sourceScanID: UUID? = nil) async {
+    public func process(
+        archive: URL,
+        replyPeer: MCPeerID? = nil,
+        captureMode: CaptureMode? = nil,
+        detailTier: String? = nil,
+        sourceScanID: UUID? = nil,
+        replyPeerID: HandoffInstallationID? = nil,
+        jobID: UUID? = nil
+    ) async {
         defer { network.removeReceivedResource(archive) }
         guard !isExecutingProcess else {
             addLog("Rejected overlapping compute request; network hand-offs remain serialized")
             return
         }
         isExecutingProcess = true
-        defer { isExecutingProcess = false }
+        let remoteJob = jobID.flatMap { jobID in
+            sourceScanID.flatMap { scanID in
+                replyPeerID.map { (jobID: jobID, scanID: scanID, peerID: $0) }
+            }
+        }
+        activeRemoteJob = remoteJob
+        if let remoteJob {
+            recordRemoteJob(
+                jobID: remoteJob.jobID,
+                scanID: remoteJob.scanID,
+                peerID: remoteJob.peerID,
+                state: .processing,
+                progress: 0
+            )
+        }
+        updateQueueProjection()
+        var completed = false
+        defer {
+            isExecutingProcess = false
+            if let remoteJob, !completed, cancelledRemoteJobIDs.remove(remoteJob.jobID) == nil {
+                recordRemoteJob(
+                    jobID: remoteJob.jobID,
+                    scanID: remoteJob.scanID,
+                    peerID: remoteJob.peerID,
+                    state: .failed,
+                    progress: progress
+                )
+                send(
+                    .failed(HandoffFailure(
+                        code: .reconstructionFailed,
+                        detail: "Mac reconstruction did not complete."
+                    )),
+                    jobID: remoteJob.jobID,
+                    scanID: remoteJob.scanID,
+                    to: remoteJob.peerID
+                )
+            }
+            if activeRemoteJob?.jobID == remoteJob?.jobID { activeRemoteJob = nil }
+            updateQueueProjection()
+        }
         stage = .ingest; progress = 0; outputURL = nil; outputManifest = nil
         addLog("Received \(archive.lastPathComponent)")
 
@@ -299,7 +454,9 @@ public final class ComputeCoordinator: ObservableObject {
                 }
                 try complete(.init(output: out, scanID: scanID, rawArchiveURL: rawArchiveURL,
                                    captureMode: mode, detailTier: "RoomPlan", frameCount: 0,
-                                   captureQualityReport: nil, replyPeer: replyPeer))
+                                   captureQualityReport: nil, replyPeer: replyPeer,
+                                   replyPeerID: replyPeerID, jobID: jobID))
+                completed = true
             } catch {
                 addLog("Could not retain RoomPlan model: \(error.localizedDescription)")
                 stage = .waiting
@@ -336,9 +493,11 @@ public final class ComputeCoordinator: ObservableObject {
             try await runner.startProcessing(inputFolder: images, outputURL: out, detail: Self.photogrammetryDetail(for: requestedTier))
             let input = CompletionInput(output: out, scanID: scanID, rawArchiveURL: rawArchiveURL,
                                         captureMode: mode, detailTier: requestedTier, frameCount: receivedFrames,
-                                        captureQualityReport: captureQualityReport, replyPeer: replyPeer)
+                                        captureQualityReport: captureQualityReport, replyPeer: replyPeer,
+                                        replyPeerID: replyPeerID, jobID: jobID)
             let trainedPreview = await trainSplatIfRequested(images: images, scanDirectory: stagingDirectory, scanID: scanID)
             try complete(input, previewOverride: trainedPreview?.url, previewKind: trainedPreview?.kind)
+            completed = true
         } catch {
             addLog("Photogrammetry error: \(error.localizedDescription)")
             stage = .waiting
@@ -403,7 +562,8 @@ public final class ComputeCoordinator: ObservableObject {
             frameCount: input.frameCount,
             coveragePercent: 0,
             weakSpotCount: 0,
-            captureQualityReport: input.captureQualityReport
+            captureQualityReport: input.captureQualityReport,
+            handoffJobID: input.jobID
         )
         try assetStore.writeManifest(manifest, to: stagingDirectory)
         try Self.commitScanDirectory(stagingDirectory, to: finalDirectory)
@@ -414,10 +574,25 @@ public final class ComputeCoordinator: ObservableObject {
         outputManifest = manifest
         reloadLibrary()
         selectScan(input.scanID)
+        if let jobID = input.jobID, let peerID = input.replyPeerID {
+            recordRemoteJob(
+                jobID: jobID,
+                scanID: input.scanID,
+                peerID: peerID,
+                state: .completed,
+                progress: 1
+            )
+        }
         addLog("Render complete → \(finalOutput.lastPathComponent)")
         if let replyPeer = input.replyPeer {
             do {
-                try sendResultPackage(output: finalOutput, manifest: manifest, to: replyPeer)
+                try sendResultPackage(
+                    output: finalOutput,
+                    manifest: manifest,
+                    to: replyPeer,
+                    peerID: input.replyPeerID,
+                    jobID: input.jobID
+                )
             } catch {
                 addLog("Could not package result for return: \(error.localizedDescription)")
             }
@@ -458,5 +633,238 @@ public final class ComputeCoordinator: ObservableObject {
 
     /// Active flag for the dashboard.
     public var isProcessing: Bool { stage != .waiting && stage != .done }
+}
 
+extension ComputeCoordinator {
+    private func cancelRemoteJob(_ jobID: UUID, event: HandoffControlEvent) {
+        pendingOffers.removeValue(forKey: jobID)
+        let removed = pendingHandoffs.filter { $0.metadata.jobID == jobID }
+        pendingHandoffs.removeAll { $0.metadata.jobID == jobID }
+        for handoff in removed { network.removeReceivedResource(handoff.archive) }
+        cancelledRemoteJobIDs.insert(jobID)
+        if activeRemoteJob?.jobID == jobID {
+            runner.cancelSession()
+            splatTrainer.cancel()
+        }
+        if let scanID = event.message.scanID {
+            recordRemoteJob(jobID: jobID, scanID: scanID, peerID: event.peerID, state: .cancelled, progress: 0)
+        }
+        send(.cancelled, event: event)
+        updateQueueProjection()
+        addLog("Cancelled remote job \(jobID.uuidString.prefix(8))")
+    }
+
+    public func cancelActiveRemoteJob() {
+        guard let job = activeRemoteJob else { return }
+        cancelledRemoteJobIDs.insert(job.jobID)
+        runner.cancelSession()
+        splatTrainer.cancel()
+        recordRemoteJob(
+            jobID: job.jobID,
+            scanID: job.scanID,
+            peerID: job.peerID,
+            state: .cancelled,
+            progress: progress
+        )
+        send(.cancelled, jobID: job.jobID, scanID: job.scanID, to: job.peerID)
+        addLog("Cancelled active remote job \(job.jobID.uuidString.prefix(8))")
+    }
+
+    public func cancelQueuedRemoteJobs() {
+        for (jobID, offer) in pendingOffers {
+            recordRemoteJob(jobID: jobID, scanID: offer.scanID, peerID: offer.peerID, state: .cancelled, progress: 0)
+            send(.cancelled, jobID: jobID, scanID: offer.scanID, to: offer.peerID)
+        }
+        for handoff in pendingHandoffs {
+            if let jobID = handoff.metadata.jobID, let scanID = handoff.metadata.scanID {
+                recordRemoteJob(
+                    jobID: jobID,
+                    scanID: scanID,
+                    peerID: handoff.peerInstallationID,
+                    state: .cancelled,
+                    progress: 0
+                )
+                send(.cancelled, jobID: jobID, scanID: scanID, to: handoff.peerInstallationID)
+            }
+            network.removeReceivedResource(handoff.archive)
+        }
+        pendingOffers.removeAll()
+        pendingHandoffs.removeAll()
+        updateQueueProjection()
+        addLog("Cancelled queued remote jobs")
+    }
+
+    private func updateQueueProjection() {
+        queuedRemoteJobCount = pendingOffers.count + pendingHandoffs.count
+        activeRemoteJobID = activeRemoteJob?.jobID
+    }
+
+    private func sendActiveProgress(_ progress: Double) {
+        guard let job = activeRemoteJob else { return }
+        send(.progress(progress), jobID: job.jobID, scanID: job.scanID, to: job.peerID)
+    }
+
+    private func send(_ payload: HandoffMessagePayload, event: HandoffControlEvent) {
+        send(payload, jobID: event.message.jobID, scanID: event.message.scanID, to: event.peerID)
+    }
+
+    private func send(
+        _ payload: HandoffMessagePayload,
+        jobID: UUID?,
+        scanID: UUID?,
+        to peerID: HandoffInstallationID
+    ) {
+        _ = network.send(
+            HandoffMessageEnvelope(
+                jobID: jobID,
+                scanID: scanID,
+                senderInstallationID: network.localInstallationID,
+                payload: payload
+            ),
+            to: peerID
+        )
+    }
+
+    private func sendResultPackage(
+        output: URL,
+        manifest: ScanAssetManifest?,
+        to peer: MCPeerID,
+        peerID: HandoffInstallationID?,
+        jobID: UUID?
+    ) throws {
+        guard let manifest else { return }
+        let zipURL = try ScanResultPackage().write(output: output, manifest: manifest)
+        if let peerID, let jobID {
+            let descriptor = try HandoffResourceDescriptor.inspect(zipURL)
+            send(.resultReady(descriptor), jobID: jobID, scanID: manifest.scanID, to: peerID)
+        }
+        let resourceName = NetworkHandoffManager.handoffResourceName(
+            for: zipURL,
+            metadata: ScanHandoffMetadata(
+                jobID: jobID,
+                scanID: manifest.scanID,
+                captureMode: manifest.captureMode,
+                detailTier: manifest.detailTier
+            )
+        )
+        addLog("Sending result package → \(peer.displayName)")
+        network.sendResource(fileURL: zipURL, named: resourceName, to: peer) { [weak self] error in
+            try? FileManager.default.removeItem(at: zipURL)
+            if let error {
+                self?.addLog("Result return failed: \(error.localizedDescription)")
+            } else {
+                self?.addLog("Returned result package → \(peer.displayName)")
+            }
+        }
+    }
+
+    private func recordRemoteJob(
+        jobID: UUID,
+        scanID: UUID,
+        peerID: HandoffInstallationID,
+        state: HandoffJobState,
+        progress: Double
+    ) {
+        do {
+            try remoteJobJournal.upsert(MacRemoteJobRecord(
+                jobID: jobID,
+                scanID: scanID,
+                peerID: peerID,
+                state: state,
+                progress: min(max(progress, 0), 1),
+                updatedAt: Date()
+            ))
+        } catch {
+            addLog("Remote job history could not be saved: \(error.localizedDescription)")
+        }
+    }
+
+    private func resendCompletedResult(_ record: MacRemoteJobRecord) {
+        guard let assetStore,
+              let peer = network.peerID(for: record.peerID),
+              let manifest = try? assetStore.loadManifest(for: record.scanID) else { return }
+        let output = [manifest.usdzFileURL, manifest.sourceModelURL, manifest.previewPLYURL]
+            .compactMap { $0 }
+            .first { FileManager.default.fileExists(atPath: $0.path) }
+        guard let output else { return }
+        do {
+            try sendResultPackage(
+                output: output,
+                manifest: manifest,
+                to: peer,
+                peerID: record.peerID,
+                jobID: record.jobID
+            )
+            addLog("Resent durable result for job \(record.jobID.uuidString.prefix(8))")
+        } catch {
+            addLog("Durable result resend failed: \(error.localizedDescription)")
+        }
+    }
+
+    public var selectedScan: MacComputedScan? {
+        guard let selectedScanID else { return nil }
+        return libraryScans.first { $0.id == selectedScanID }
+    }
+
+    public var librarySummary: MacLibrarySummary { MacLibrarySummary(scans: libraryScans) }
+    public var trainedSplatAvailable: Bool { splatTrainer.isAvailable }
+
+    public func confirmPairing(_ request: HandoffPairingRequest) {
+        pairing.confirm(request)
+    }
+
+    public func rejectPairing(_ request: HandoffPairingRequest) {
+        pairing.reject(request)
+    }
+
+    public func forgetPeer(_ peerID: HandoffInstallationID) {
+        pairing.forget(peerID)
+    }
+
+    @discardableResult
+    public func refreshSplatRuntime() -> Bool {
+        let available = splatTrainer.refreshRuntime()
+        addLog(available ? "Trained-splat runtime is ready" : "Trained-splat runtime is unavailable")
+        return available
+    }
+
+    public func selectScan(_ id: UUID?) {
+        selectedScanID = id
+        if let scan = selectedScan {
+            outputURL = scan.modelURL
+            outputManifest = scan.manifest
+        }
+    }
+
+    public func addMeasurement(_ measurement: ScanMeasurement, to scanID: UUID) throws {
+        guard let assetStore else { throw CocoaError(.fileNoSuchFile) }
+        var manifest = try assetStore.loadManifest(for: scanID)
+        var measurements = manifest.measurements ?? []
+        measurements.append(measurement)
+        manifest.measurements = measurements
+        try assetStore.writeManifest(manifest)
+        reloadLibrary()
+        selectScan(scanID)
+    }
+
+    public func removeMeasurement(_ measurementID: UUID, from scanID: UUID) throws {
+        guard let assetStore else { throw CocoaError(.fileNoSuchFile) }
+        var manifest = try assetStore.loadManifest(for: scanID)
+        manifest.measurements = (manifest.measurements ?? []).filter { $0.id != measurementID }
+        try assetStore.writeManifest(manifest)
+        reloadLibrary()
+        selectScan(scanID)
+    }
+
+    @discardableResult
+    public func exportMeasurements(for scanID: UUID, to directory: URL) throws -> URL {
+        guard let scan = libraryScans.first(where: { $0.id == scanID }) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        return try MeasurementExporter().exportCSV(
+            scan.manifest.measurements ?? [],
+            named: scan.name,
+            to: directory
+        )
+    }
 }

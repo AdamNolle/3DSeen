@@ -54,6 +54,44 @@ final class StudioComponentsTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testMacMeasurementsPersistDeleteAndExportCSV() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mac-measurements-\(UUID())", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try ScanAssetStore(rootDirectory: root.appendingPathComponent("scans"))
+        let scanID = UUID()
+        let directory = try store.directory(for: scanID)
+        let modelURL = directory.appendingPathComponent("model.usdz")
+        try Data("model".utf8).write(to: modelURL)
+        try store.writeManifest(ScanAssetManifest(
+            scanID: scanID,
+            captureMode: .object,
+            detailTier: "Full",
+            sourceModelURL: modelURL,
+            usdzFileURL: modelURL,
+            displayName: "Measured Object"
+        ))
+        let coordinator = ComputeCoordinator(
+            credentialStore: InMemoryPairingCredentialStore(),
+            assetStore: store
+        )
+        coordinator.reloadLibrary()
+        let measurement = ScanMeasurement(
+            start: ScanMeasurementPoint(x: 0, y: 0, z: 0),
+            end: ScanMeasurementPoint(x: 0.5, y: 0, z: 0),
+            label: "Width"
+        )
+
+        try coordinator.addMeasurement(measurement, to: scanID)
+        XCTAssertEqual(try store.loadManifest(for: scanID).measurements, [measurement])
+        let csv = try coordinator.exportMeasurements(for: scanID, to: root.appendingPathComponent("exports"))
+        XCTAssertTrue(try String(contentsOf: csv).contains("Width,0.500000"))
+
+        try coordinator.removeMeasurement(measurement.id, from: scanID)
+        XCTAssertEqual(try store.loadManifest(for: scanID).measurements, [])
+    }
+
     func testSplitPaneLeftWidthHonorsRatioAndGap() {
         // (1000 - 20) * 0.58 = 568.4
         XCTAssertEqual(StSplitPane<EmptyView, EmptyView>.leftWidth(total: 1000, gap: 20, ratio: 0.58),

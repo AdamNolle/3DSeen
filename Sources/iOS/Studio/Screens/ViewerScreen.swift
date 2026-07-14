@@ -4,6 +4,7 @@
 // full-bleed stage. Data is sourced from the selected persisted scan; an unavailable model is
 // stated plainly instead of rendering a design sample as if it were capture output.
 
+import QuickLook
 import SwiftUI
 import SwiftData
 import RealityKit
@@ -16,6 +17,46 @@ struct MaterialSwatch: Identifiable {
     let id: String
     let label: String
     let g: (Color, Color)
+}
+
+enum USDZPresentationPolicy {
+    static func eligibleURL(_ url: URL?) -> URL? {
+        guard let url,
+              url.pathExtension.lowercased() == "usdz",
+              FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return url
+    }
+}
+
+struct USDZQuickLookView: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeCoordinator() -> Coordinator { Coordinator(url: url) }
+
+    func makeUIViewController(context: Context) -> QLPreviewController {
+        let controller = QLPreviewController()
+        controller.dataSource = context.coordinator
+        return controller
+    }
+
+    func updateUIViewController(_ controller: QLPreviewController, context: Context) {
+        context.coordinator.url = url
+        controller.reloadData()
+    }
+
+    final class Coordinator: NSObject, QLPreviewControllerDataSource {
+        var url: URL
+
+        init(url: URL) {
+            self.url = url
+        }
+
+        func numberOfPreviewItems(in controller: QLPreviewController) -> Int { 1 }
+
+        func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
+            url as NSURL
+        }
+    }
 }
 
 let STUDIO_MATERIALS: [MaterialSwatch] = [
@@ -52,6 +93,7 @@ private struct PhoneViewer: View {
     @State private var mat = "pbr"
     @State private var tool = "orbit"
     @State private var showSplat = false
+    @State private var showQuickLook = false
     @State private var pendingMeasurementPoint: ScanMeasurementPoint?
 
     private var activeScan: ScanSession? {
@@ -61,6 +103,7 @@ private struct PhoneViewer: View {
         return savedScans.first
     }
 
+    private var quickLookURL: URL? { USDZPresentationPolicy.eligibleURL(activeScan?.usdzFileURL) }
     private var displayName: String { activeScan?.name ?? "No Scan Selected" }
     private var triangleText: String { activeScan?.triangles ?? "—" }
     private var tierText: String { activeScan?.tierRaw ?? "—" }
@@ -98,6 +141,9 @@ private struct PhoneViewer: View {
         // geometry-derived preview attached to the selected scan.
         .fullScreenCover(isPresented: $showSplat) {
             SplatViewerScreen(assetURL: activeScan?.previewPLYURL, onClose: { showSplat = false })
+        }
+        .sheet(isPresented: $showQuickLook) {
+            if let quickLookURL { USDZQuickLookView(url: quickLookURL) }
         }
     }
 
@@ -210,17 +256,17 @@ private struct PhoneViewer: View {
         }
     }
 
-    // Splat `flex 1`, Export `flex 1.5` (≈ 40 / 60 split).
     private var bottomActions: some View {
-        GeometryReader { geo in
-            let gap: CGFloat = 8
-            let arW = max(0, (geo.size.width - gap) * (1.0 / 2.5))
-            HStack(spacing: gap) {
+        GeometryReader { _ in
+            HStack(spacing: 8) {
                 StButton(title: "Splat", kind: .glass, icon: "scan", full: true) { showSplat = true }
-                    .frame(width: arW)
                     .disabled(activeScan?.previewPLYURL == nil)
+                StButton(title: "Quick Look / AR", kind: .glass, icon: "scan", full: true) {
+                    showQuickLook = true
+                }
+                .disabled(quickLookURL == nil)
+                .accessibilityHint("Opens Apple's USDZ preview with AR when this device supports it.")
                 StButton(title: "Export", kind: .accent, icon: "export", full: true) { model.go(.export) }
-                    .frame(maxWidth: .infinity)
             }
         }
         .frame(height: dynamicTypeSize.isAccessibilitySize ? 56 : 44)
@@ -237,6 +283,8 @@ private struct PadViewer: View {
     @Query(sort: \ScanSession.creationDate, order: .reverse) private var savedScans: [ScanSession]
     @State private var mat = "pbr"
     @State private var tool = "orbit"
+    @State private var showSplat = false
+    @State private var showQuickLook = false
     @State private var pendingMeasurementPoint: ScanMeasurementPoint?
 
     private var activeScan: ScanSession? {
@@ -246,6 +294,7 @@ private struct PadViewer: View {
         return savedScans.first
     }
 
+    private var quickLookURL: URL? { USDZPresentationPolicy.eligibleURL(activeScan?.usdzFileURL) }
     private var displayName: String { activeScan?.name ?? "No Scan Selected" }
     private var triangleText: String { activeScan?.triangles ?? "—" }
     private var tierText: String { activeScan?.tierRaw.uppercased() ?? "—" }
@@ -276,6 +325,12 @@ private struct PadViewer: View {
             topBar
             leftRail
             inspector
+        }
+        .fullScreenCover(isPresented: $showSplat) {
+            SplatViewerScreen(assetURL: activeScan?.previewPLYURL, onClose: { showSplat = false })
+        }
+        .sheet(isPresented: $showQuickLook) {
+            if let quickLookURL { USDZQuickLookView(url: quickLookURL) }
         }
     }
 
@@ -339,6 +394,13 @@ private struct PadViewer: View {
                     .padding(.vertical, 7).padding(.horizontal, 12)
             }
             Spacer()
+            StButton(title: "Splat", kind: .glass, size: .sm, icon: "scan") { showSplat = true }
+                .disabled(activeScan?.previewPLYURL == nil)
+            StButton(title: "Quick Look / AR", kind: .glass, size: .sm, icon: "scan") {
+                showQuickLook = true
+            }
+            .disabled(quickLookURL == nil)
+            .accessibilityHint("Opens Apple's USDZ preview with AR when this device supports it.")
             StButton(title: "Export", kind: .accent, size: .sm, icon: "export") { model.go(.export) }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

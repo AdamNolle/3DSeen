@@ -31,23 +31,39 @@ targets:
     info:
       path: Sources/iOS/Info.plist
       properties:
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         UILaunchScreen: {}
         NSCameraUsageDescription: "3DSeen requires camera access for photogrammetry and spatial capture."
         NSLocalNetworkUsageDescription: "3DSeen requires local network access to offload rendering to your Mac."
         NSBonjourServices:
           - "_3dseen._tcp"
           - "_3dseen._udp"
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        "UISupportedInterfaceOrientations~ipad":
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIRequiresFullScreen: false
     settings:
       base:
         DEVELOPMENT_TEAM: "" # Set in Xcode
         ENABLE_PREVIEWS: YES
         SWIFT_VERSION: 5.9
+        MARKETING_VERSION: 1.0.0
+        CURRENT_PROJECT_VERSION: 1
+        TARGETED_DEVICE_FAMILY: "1,2"
         PRODUCT_MODULE_NAME: ThreeDSeen
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
     scheme:
       testTargets:
         - 3DSeen-iOSTests
+        - 3DSeen-iOSUITests
       gatherCoverageData: true
 
   3DSeen-macOS:
@@ -61,6 +77,8 @@ targets:
     info:
       path: Sources/macOS/Info.plist
       properties:
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSLocalNetworkUsageDescription: "3DSeen requires local network access to receive renders from your iPhone."
         NSBonjourServices:
           - "_3dseen._tcp"
@@ -70,6 +88,9 @@ targets:
         DEVELOPMENT_TEAM: "" # Set in Xcode
         ENABLE_PREVIEWS: YES
         SWIFT_VERSION: 5.9
+        MARKETING_VERSION: 1.0.0
+        CURRENT_PROJECT_VERSION: 1
+        ENABLE_HARDENED_RUNTIME: YES
         PRODUCT_MODULE_NAME: ThreeDSeenMac
         CODE_SIGN_ENTITLEMENTS: Sources/macOS/3DSeen-macOS.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -92,6 +113,19 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_VERSION: 5.9
+
+  3DSeen-iOSUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - Tests/iOSUI
+    dependencies:
+      - target: 3DSeen-iOS
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: 5.9
+        TEST_TARGET_NAME: 3DSeen-iOS
 
   3DSeen-macOSTests:
     type: bundle.unit-test

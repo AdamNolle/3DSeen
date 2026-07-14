@@ -1,5 +1,7 @@
 # 3DSeen Studio — Execution Plan (design → faithful native app)
 
+> **Historical plan:** This document captures the original design-realization sequence and is not the current production contract. Use [`PRODUCTION-CONTRACT.md`](PRODUCTION-CONTRACT.md) for supported behavior and [`VERIFICATION-STATUS.md`](VERIFICATION-STATUS.md) for current evidence.
+
 Goal: implement the Claude Design "3DSeen Studio" faithfully across **iPhone, iPad, Mac**, feature-complete, performant, bug-free. Source of truth: `docs/design-spec/*.md` (+ `docs/design-ref/*.jsx` raw). Current state: `docs/current-impl-map.md`. Per-target gaps: `docs/audit/*.md`.
 
 ## Device → platform mapping (decided)

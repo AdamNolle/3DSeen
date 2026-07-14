@@ -252,6 +252,67 @@ final class ModelExporterTests: XCTestCase {
         XCTAssertFalse(ExportFormat.fbx.isModelIONative)
     }
 
+    @MainActor
+    func testIsolatedExportRequestAndProvenanceSaveAreDurable() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("isolated-export-\(UUID())", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try ScanAssetStore(rootDirectory: root.appendingPathComponent("scans"))
+        let scan = ScanSession(captureMode: .object, name: "Durable Scan")
+        let scanDirectory = try store.directory(for: scan.id)
+        let source = scanDirectory.appendingPathComponent("model.usdz")
+        try Data("usdz fixture".utf8).write(to: source)
+        scan.markComputed(modelURL: source, usdzURL: source)
+        try store.writeManifest(try store.manifest(for: scan))
+        let request = ModelExportRequest(
+            scanID: scan.id,
+            sourceModelURL: source,
+            fileBaseName: scan.exportFileBaseName,
+            measurements: scan.measurements
+        )
+        let output = try ModelExporter().export(
+            request: request,
+            to: .usdz,
+            outputDirectory: root.appendingPathComponent("exports")
+        )
+        XCTAssertNil(scan.lastExportedURL, "Background-safe request must not mutate SwiftData state")
+        var didSave = false
+
+        try ScanExportProvenanceRecorder.record(output, on: scan, assetStore: store) {
+            didSave = true
+        }
+
+        XCTAssertTrue(didSave)
+        XCTAssertEqual(scan.lastExportedURL, output)
+        let manifest = try store.loadManifest(for: scan.id)
+        XCTAssertEqual(manifest.lastExportedFileName, output.lastPathComponent)
+        XCTAssertNotNil(manifest.lastExportedAt)
+    }
+
+    @MainActor
+    func testExportProvenanceRollsBackWhenContextSaveFails() throws {
+        enum SaveFailure: Error { case rejected }
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("export-rollback-\(UUID())", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try ScanAssetStore(rootDirectory: root.appendingPathComponent("scans"))
+        let scan = ScanSession(captureMode: .object)
+        _ = try store.directory(for: scan.id)
+        try store.writeManifest(try store.manifest(for: scan))
+        let output = root.appendingPathComponent("model.usdz")
+        try Data("output".utf8).write(to: output)
+
+        XCTAssertThrowsError(
+            try ScanExportProvenanceRecorder.record(output, on: scan, assetStore: store) {
+                throw SaveFailure.rejected
+            }
+        )
+        XCTAssertNil(scan.lastExportedURL)
+        XCTAssertTrue(scan.lastExportedFileName.isEmpty)
+        XCTAssertNil(scan.lastExportedAt)
+        XCTAssertNil(try store.loadManifest(for: scan.id).lastExportedAt)
+    }
+
     func testExportSampleWritesRealFiles() throws {
         let exporter = ModelExporter()
         for format in [ExportFormat.usd, .obj, .stl, .ply] {
@@ -289,6 +350,48 @@ final class ModelExporterTests: XCTestCase {
 }
 
 extension ModelExporterTests {
+    func testLibraryActionsReflectPersistedLifecycleState() throws {
+        let draft = ScanSession(captureMode: .object, captureStatus: .draft)
+        let retained = ScanSession(
+            captureMode: .object,
+            captureStatus: .packaged,
+            computeStatus: .notStarted
+        )
+        let offloaded = ScanSession(
+            captureMode: .landscape,
+            captureStatus: .packaged,
+            computeStatus: .offloaded
+        )
+        let failed = ScanSession(
+            captureMode: .object,
+            captureStatus: .packaged,
+            computeStatus: .failed
+        )
+        let missingCompletedModel = ScanSession(
+            captureMode: .space,
+            captureStatus: .captured,
+            computeStatus: .completed
+        )
+        let modelURL = FileManager.default.temporaryDirectory.appendingPathComponent("library-model-\(UUID()).usdz")
+        defer { try? FileManager.default.removeItem(at: modelURL) }
+        try Data("model".utf8).write(to: modelURL)
+        let completed = ScanSession(
+            captureMode: .space,
+            usdzFileURL: modelURL,
+            captureStatus: .captured,
+            computeStatus: .completed
+        )
+
+        XCTAssertEqual(ScanItem(draft).primaryAction, .resumeCapture)
+        XCTAssertEqual(ScanItem(retained).primaryAction, .resumeReview)
+        XCTAssertEqual(ScanItem(offloaded).primaryAction, .resumeCompute)
+        XCTAssertEqual(ScanItem(failed).primaryAction, .retryCompute)
+        XCTAssertEqual(ScanItem(missingCompletedModel).primaryAction, .retryCompute)
+        XCTAssertFalse(ScanItem(missingCompletedModel).canExport)
+        XCTAssertEqual(ScanItem(completed).primaryAction, .view)
+        XCTAssertTrue(ScanItem(completed).canExport)
+    }
+
     func testLibrarySummaryUsesPersistedScanFacts() {
         let sessions = [
             ScanSession(captureMode: .object, sizeMB: 120, computeStatus: .completed),
@@ -419,7 +522,18 @@ extension ModelExporterTests {
         let exporter = ModelExporter()
         try exporter.export(asset: exporter.sampleAsset(), to: .stl, outputURL: modelURL)
         let previewURL = work.appendingPathComponent("geometry-preview.ply")
-        try Data("ply fixture\n".utf8).write(to: previewURL)
+        let geometryPLY = """
+        ply
+        format ascii 1.0
+        element vertex 2
+        property float x
+        property float y
+        property float z
+        end_header
+        0 0 0
+        1 0 0
+        """
+        try Data(geometryPLY.utf8).write(to: previewURL)
 
         let scan = ScanSession(
             captureMode: .object,
@@ -445,7 +559,7 @@ extension ModelExporterTests {
         guard let unpackedPreview = contents.previewPLYURL else {
             return XCTFail("Expected package preview PLY")
         }
-        XCTAssertEqual(try String(contentsOf: unpackedPreview), "ply fixture\n")
+        XCTAssertEqual(try String(contentsOf: unpackedPreview), geometryPLY)
     }
 
     func testResultPackageRejectsCorruptModelPayload() throws {
@@ -476,7 +590,10 @@ extension ModelExporterTests {
         let previewURL = work.appendingPathComponent("source-trained.ply")
         let exporter = ModelExporter()
         try exporter.export(asset: exporter.sampleAsset(), to: .stl, outputURL: modelURL)
-        try Data("trained".utf8).write(to: previewURL)
+        let splats = GaussianSplatGenerator.splats(fromPoints: [
+            (position: SIMD3<Float>(0, 0, 0), color: SIMD3<Float>(0.2, 0.4, 0.6)),
+        ])
+        try SplatPLYWriter.write(splats, to: previewURL)
         let manifest = ScanAssetManifest(
             scanID: UUID(),
             captureMode: .object,
@@ -492,5 +609,33 @@ extension ModelExporterTests {
 
         XCTAssertEqual(contents.manifest.previewPLYKind, .trainedSplat)
         XCTAssertEqual(contents.previewPLYURL?.lastPathComponent, "trained-splat.ply")
+        XCTAssertTrue(PLYValidator.isValid(try XCTUnwrap(contents.previewPLYURL), kind: .trainedSplat))
+    }
+
+    func testResultPackageImportRejectsMalformedPLY() throws {
+        let fileManager = FileManager.default
+        let work = fileManager.temporaryDirectory
+            .appendingPathComponent("invalid-ply-package-\(UUID())", isDirectory: true)
+        let package = work.appendingPathComponent("package", isDirectory: true)
+        try fileManager.createDirectory(at: package, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: work) }
+        let exporter = ModelExporter()
+        let modelURL = package.appendingPathComponent("model.stl")
+        try exporter.export(asset: exporter.sampleAsset(), to: .stl, outputURL: modelURL)
+        try Data("ply but not really".utf8).write(to: package.appendingPathComponent("geometry-preview.ply"))
+        let manifest = ScanAssetManifest(
+            scanID: UUID(),
+            captureMode: .object,
+            detailTier: "Medium",
+            sourceModelURL: modelURL,
+            previewPLYURL: package.appendingPathComponent("geometry-preview.ply")
+        )
+        try JSONEncoder().encode(manifest).write(to: package.appendingPathComponent("manifest.json"))
+        let zip = work.appendingPathComponent("malicious.3dseen-result.zip")
+        try fileManager.zipItem(at: package, to: zip, shouldKeepParent: false)
+
+        XCTAssertThrowsError(
+            try ScanResultPackage().unpack(zip, to: work.appendingPathComponent("unpacked", isDirectory: true))
+        )
     }
 }

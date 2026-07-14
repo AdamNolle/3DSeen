@@ -6,29 +6,29 @@ struct MacSettingsPane: View {
     @Binding var section: MacSection
     @ObservedObject var settings: SettingsStore
     @ObservedObject var compute: ComputeCoordinator
-    @State private var active: PreferenceSection = .capture
+    @State private var active: PreferenceSection = .display
     @StateObject private var runtimeInstaller = NerfstudioRuntimeInstaller()
     @State private var setupMessage = ""
     @State private var installTask: Task<Void, Never>?
     private let blenderConverter = BlenderModelConverter()
 
     private enum PreferenceSection: CaseIterable, Identifiable {
-        case capture
         case display
+        case handoff
         case tools
 
         var id: Self { self }
         var title: String {
             switch self {
-            case .capture: return "Capture Defaults"
             case .display: return "Appearance & Units"
+            case .handoff: return "Trusted Devices"
             case .tools: return "External Tools"
             }
         }
         var icon: String {
             switch self {
-            case .capture: return "camera"
             case .display: return "light"
+            case .handoff: return "phone"
             case .tools: return "settings"
             }
         }
@@ -104,11 +104,7 @@ struct MacSettingsPane: View {
                     .font(.sf(30, .bold))
                     .foregroundStyle(theme.ink)
                     .padding(.top, 6)
-                Text(active == .capture
-                     ? "Defaults for future capture requests and photogrammetry handoffs."
-                     : active == .display
-                        ? "Changes take effect immediately in the desktop studio."
-                        : "Optional local tools used for conversion and trained splats.")
+                Text(activeDescription)
                     .font(.sf(14))
                     .foregroundStyle(theme.text2)
                     .padding(.top, 8)
@@ -124,16 +120,6 @@ struct MacSettingsPane: View {
     @ViewBuilder private var preferenceCard: some View {
         SettingsCard {
             switch active {
-            case .capture:
-                MacSettingRow(icon: "cube", label: "Default mode") {
-                    StSegmented(options: [("object", "Object"), ("space", "Space"), ("landscape", "Landscape")],
-                                value: defaultModeBinding, size: .sm)
-                }
-                StRule()
-                MacSettingRow(icon: "layers", label: "Default Mac detail tier") {
-                    StSegmented(options: [("preview", "Preview"), ("reduced", "Reduced"), ("medium", "Medium"), ("full", "Full"), ("raw", "Raw")],
-                                value: qualityBinding, size: .sm)
-                }
             case .display:
                 MacSettingRow(icon: "light", label: "Appearance") {
                     StSegmented(options: [("system", "System"), ("light", "Light"), ("dark", "Dark")],
@@ -144,8 +130,39 @@ struct MacSettingsPane: View {
                     StSegmented(options: [("centimeters", "cm"), ("inches", "in")],
                                 value: unitsBinding, size: .sm)
                 }
+            case .handoff:
+                trustedDevices
             case .tools:
                 runtimeTools
+            }
+        }
+    }
+
+    private var activeDescription: String {
+        switch active {
+        case .display: "Changes take effect immediately in the desktop studio."
+        case .handoff: "Revoke devices that should no longer reconnect without code confirmation."
+        case .tools: "Optional local tools used for conversion and trained splats."
+        }
+    }
+
+    @ViewBuilder private var trustedDevices: some View {
+        if compute.trustedPeerIDs.isEmpty {
+            Text("No trusted devices. Confirming a matching six-digit code adds one here.")
+                .font(.sf(13.5))
+                .foregroundStyle(theme.text2)
+                .padding(.vertical, 12)
+        } else {
+            ForEach(Array(compute.trustedPeerIDs), id: \.self) { peerID in
+                MacSettingRow(icon: "phone", label: peerID.rawValue.uuidString) {
+                    Button("Forget", role: .destructive) { compute.forgetPeer(peerID) }
+                        .accessibilityLabel("Forget trusted device \(peerID.rawValue.uuidString)")
+                }
+                if peerID != compute.trustedPeerIDs.max(by: {
+                    $0.rawValue.uuidString < $1.rawValue.uuidString
+                }) {
+                    StRule()
+                }
             }
         }
     }
@@ -220,15 +237,6 @@ struct MacSettingsPane: View {
                 set: { settings.units = SettingsStore.Units(rawValue: $0) ?? .centimeters })
     }
 
-    private var defaultModeBinding: Binding<String> {
-        Binding(get: { settings.defaultMode.rawValue },
-                set: { settings.defaultMode = SettingsStore.DefaultMode(rawValue: $0) ?? .object })
-    }
-
-    private var qualityBinding: Binding<String> {
-        Binding(get: { settings.qualityTier.rawValue },
-                set: { settings.qualityTier = SettingsStore.QualityTier(rawValue: $0) ?? .full })
-    }
 }
 
 private struct MacRuntimeToolRow: View {

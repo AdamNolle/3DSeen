@@ -51,6 +51,17 @@
                ReferencedContainer = "container:3DSeen.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "A1285B8C102B7FD23D6CB758"
+               BuildableName = "3DSeen-iOSUITests.xctest"
+               BlueprintName = "3DSeen-iOSUITests"
+               ReferencedContainer = "container:3DSeen.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>

@@ -2,6 +2,22 @@
 
 import SwiftUI
 
+enum ScanLibraryAction: String, Equatable {
+    case resumeCapture
+    case resumeReview
+    case resumeCompute
+    case retryCompute
+    case view
+
+    var title: String {
+        switch self {
+        case .resumeCapture, .resumeReview, .resumeCompute: return "Resume"
+        case .retryCompute: return "Retry"
+        case .view: return "View"
+        }
+    }
+}
+
 struct ScanItem: Identifiable {
     let id: String
     let name: String
@@ -11,6 +27,8 @@ struct ScanItem: Identifiable {
     let tier: String        // Preview / Reduced / Medium / Full / Raw
     let tone: String        // bone / rust / graphite / walnut / slate / ice
     let tris: String
+    let primaryAction: ScanLibraryAction
+    let canExport: Bool
 }
 
 struct Dropout: Identifiable {

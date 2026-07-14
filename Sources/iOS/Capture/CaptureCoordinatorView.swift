@@ -8,7 +8,13 @@ import RoomPlan
 struct CaptureCoordinatorView: View {
     @EnvironmentObject var stateMachine: ProcessingStateMachine
     let captureMode: CaptureMode
+    var onCancel: (() -> Void)?
     @State private var resolvedAutoPilotMode: CaptureMode?
+
+    init(captureMode: CaptureMode, onCancel: (() -> Void)? = nil) {
+        self.captureMode = captureMode
+        self.onCancel = onCancel
+    }
 
     var body: some View {
         ZStack {
@@ -62,7 +68,11 @@ struct CaptureCoordinatorView: View {
         VStack {
             HStack {
                 Button {
-                    stateMachine.send(.reset)
+                    if let onCancel {
+                        onCancel()
+                    } else {
+                        stateMachine.send(.reset)
+                    }
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 20, weight: .bold))

@@ -5,6 +5,9 @@
 excluded:
   - .build
   - .dd
+  - .dd-ipad
+  - .dd-release-15
+  - ".dd-*"
   - build
   - DerivedData
   - "**/.build"

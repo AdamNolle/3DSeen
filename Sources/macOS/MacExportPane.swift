@@ -10,6 +10,7 @@ struct MacExportPane: View {
     @State private var format: ExportFormat = .usdz
     @State private var status = ""
     @State private var isExporting = false
+    @State private var exportTask: Task<Void, Never>?
     private let blenderConverter = BlenderModelConverter()
 
     private var scan: MacComputedScan? { compute.selectedScan }
@@ -33,6 +34,7 @@ struct MacExportPane: View {
             }
         }
         .onChange(of: scan?.id) { _, _ in status = "" }
+        .onDisappear { cancelExport() }
     }
 
     private var preview: some View {
@@ -71,9 +73,17 @@ struct MacExportPane: View {
                 if !status.isEmpty {
                     Text(status).font(.sf(12.5)).foregroundStyle(theme.text2).padding(.top, 16)
                 }
-                StButton(title: isExporting ? "Writing export…" : "Export \(format.rawValue)", kind: .accent, size: .lg, icon: "export", full: true) { export() }
-                    .padding(.top, 22)
-                    .disabled(scan == nil || isExporting)
+                StButton(
+                    title: isExporting ? "Cancel export" : "Export \(format.rawValue)",
+                    kind: isExporting ? .secondary : .accent,
+                    size: .lg,
+                    icon: isExporting ? "close" : "export",
+                    full: true
+                ) {
+                    if isExporting { cancelExport() } else { export() }
+                }
+                .padding(.top, 22)
+                .disabled(scan == nil)
             }
             .padding(22)
         }
@@ -130,11 +140,16 @@ struct MacExportPane: View {
         let scanName = scan.name
         let manifest = scan.manifest
         let converter = blenderConverter
-        DispatchQueue.global(qos: .userInitiated).async {
+        exportTask = Task {
+            defer {
+                isExporting = false
+                exportTask = nil
+            }
             do {
                 try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
                 let output: URL
                 if selectedFormat.isModelIONative {
+                    try Task.checkCancellation()
                     let session = ScanSession(
                         id: scanID,
                         captureMode: manifest.captureMode,
@@ -148,24 +163,34 @@ struct MacExportPane: View {
                         coveragePercent: manifest.coveragePercent,
                         weakSpotCount: manifest.weakSpotCount
                     )
-                    output = try ModelExporter().export(session: session, to: selectedFormat, outputDirectory: destination)
+                    output = try ModelExporter().export(
+                        session: session,
+                        to: selectedFormat,
+                        outputDirectory: destination
+                    )
+                    try Task.checkCancellation()
                 } else {
                     let outputURL = destination
                         .appendingPathComponent(scanName.replacingOccurrences(of: "/", with: "-"))
                         .appendingPathExtension(selectedFormat.fileExtension)
-                    output = try converter.convert(sourceURL: source, to: selectedFormat, outputURL: outputURL)
+                    output = try await converter.convert(
+                        sourceURL: source,
+                        to: selectedFormat,
+                        outputURL: outputURL
+                    )
                 }
-                DispatchQueue.main.async {
-                    status = "Wrote \(output.lastPathComponent)"
-                    isExporting = false
-                    NSWorkspace.shared.activateFileViewerSelecting([output])
-                }
+                status = "Wrote \(output.lastPathComponent)"
+                NSWorkspace.shared.activateFileViewerSelecting([output])
+            } catch is CancellationError {
+                status = "Export cancelled."
             } catch {
-                DispatchQueue.main.async {
-                    status = error.localizedDescription
-                    isExporting = false
-                }
+                status = error.localizedDescription
             }
         }
+    }
+
+    private func cancelExport() {
+        exportTask?.cancel()
+        exportTask = nil
     }
 }

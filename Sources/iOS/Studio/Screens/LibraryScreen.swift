@@ -10,15 +10,116 @@ import SwiftData
 struct LibraryScreen: View {
     @Environment(\.horizontalSizeClass) private var hSize
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var model: StudioModel
     @Query(sort: \ScanSession.creationDate, order: .reverse) private var saved: [ScanSession]
     @State private var filter = "All"
     @State private var query = ""
+    @State private var renameScanID: UUID?
+    @State private var proposedName = ""
+    @State private var deleteScanID: UUID?
+    @State private var libraryError: String?
 
     var body: some View {
-        if hSize == .regular && !dynamicTypeSize.isAccessibilitySize {
-            PadLibrary(saved: saved, filter: $filter, query: $query)
-        } else {
-            PhoneLibrary(saved: saved, filter: $filter, query: $query)
+        Group {
+            if hSize == .regular && !dynamicTypeSize.isAccessibilitySize {
+                PadLibrary(
+                    saved: saved,
+                    filter: $filter,
+                    query: $query,
+                    onRename: beginRename,
+                    onDelete: beginDelete
+                )
+            } else {
+                PhoneLibrary(
+                    saved: saved,
+                    filter: $filter,
+                    query: $query,
+                    onRename: beginRename,
+                    onDelete: beginDelete
+                )
+            }
+        }
+        .alert("Rename scan", isPresented: renamePresented) {
+            TextField("Scan name", text: $proposedName)
+            Button("Cancel", role: .cancel) { renameScanID = nil }
+            Button("Save") { commitRename() }
+        } message: {
+            Text("Use a descriptive name that will also become the default export filename.")
+        }
+        .alert("Delete this scan?", isPresented: deletePresented) {
+            Button("Cancel", role: .cancel) { deleteScanID = nil }
+            Button("Delete", role: .destructive) { commitDelete() }
+        } message: {
+            Text("The retained capture, computed model, previews, and app-owned exports will be permanently removed.")
+        }
+        .alert("Library update failed", isPresented: libraryErrorPresented) {
+            Button("OK", role: .cancel) { libraryError = nil }
+        } message: {
+            Text(libraryError ?? "The scan could not be updated.")
+        }
+    }
+
+    private var renamePresented: Binding<Bool> {
+        Binding(get: { renameScanID != nil }, set: { if !$0 { renameScanID = nil } })
+    }
+
+    private var deletePresented: Binding<Bool> {
+        Binding(get: { deleteScanID != nil }, set: { if !$0 { deleteScanID = nil } })
+    }
+
+    private var libraryErrorPresented: Binding<Bool> {
+        Binding(get: { libraryError != nil }, set: { if !$0 { libraryError = nil } })
+    }
+
+    private func beginRename(_ item: ScanItem) {
+        guard let id = UUID(uuidString: item.id) else { return }
+        renameScanID = id
+        proposedName = item.name
+    }
+
+    private func beginDelete(_ item: ScanItem) {
+        deleteScanID = UUID(uuidString: item.id)
+    }
+
+    private func commitRename() {
+        guard let id = renameScanID, let scan = saved.first(where: { $0.id == id }) else { return }
+        renameScanID = nil
+        do {
+            let lifecycle = try ScanLifecycleManager()
+            let previousName = try lifecycle.rename(scan, to: proposedName)
+            do {
+                try modelContext.save()
+            } catch {
+                _ = try? lifecycle.rename(scan, to: previousName)
+                throw error
+            }
+        } catch {
+            libraryError = "The scan name was not saved. \(error.localizedDescription)"
+        }
+    }
+
+    private func commitDelete() {
+        guard let id = deleteScanID, let scan = saved.first(where: { $0.id == id }) else { return }
+        deleteScanID = nil
+        do {
+            let transaction = try ScanLifecycleManager().stageDeletion(scanID: id)
+            modelContext.delete(scan)
+            do {
+                try modelContext.save()
+                if model.activeScanID == id { model.activeScanID = nil }
+            } catch {
+                modelContext.rollback()
+                try? transaction.rollback()
+                throw error
+            }
+            do {
+                try transaction.commit()
+            } catch {
+                libraryError = "The scan was removed, but staged storage cleanup must be retried. \(error.localizedDescription)"
+            }
+        } catch {
+            libraryError = "The scan was not deleted. \(error.localizedDescription)"
         }
     }
 }
@@ -70,6 +171,8 @@ private struct PhoneLibrary: View {
     let saved: [ScanSession]
     @Binding var filter: String
     @Binding var query: String
+    let onRename: (ScanItem) -> Void
+    let onDelete: (ScanItem) -> Void
 
     private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
     private var featured: ScanItem? { LibraryData.featured(saved) }
@@ -100,7 +203,7 @@ private struct PhoneLibrary: View {
                         .padding(.top, 16)
 
                     if let featured {
-                        FeaturedCard(scan: featured).padding(.top, 16)
+                        FeaturedCard(scan: featured, onRename: onRename, onDelete: onDelete).padding(.top, 16)
                     } else {
                         EmptyLibraryState().padding(.top, 16)
                     }
@@ -109,7 +212,7 @@ private struct PhoneLibrary: View {
 
                     LazyVGrid(columns: columns, spacing: 12) {
                         ForEach(items, id: \.id) { s in
-                            ScanThumbButton(scan: s)
+                            ScanThumbButton(scan: s, onRename: onRename, onDelete: onDelete)
                         }
                     }
                 }
@@ -159,6 +262,8 @@ private struct PadLibrary: View {
     let saved: [ScanSession]
     @Binding var filter: String
     @Binding var query: String
+    let onRename: (ScanItem) -> Void
+    let onDelete: (ScanItem) -> Void
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 14), count: 5)
     private var featured: ScanItem? { LibraryData.featured(saved) }
@@ -177,14 +282,14 @@ private struct PadLibrary: View {
                     VStack(alignment: .leading, spacing: 0) {
                         searchRow
                         if let featured {
-                            FeaturedCard(scan: featured, big: true).padding(.top, 18)
+                            FeaturedCard(scan: featured, big: true, onRename: onRename, onDelete: onDelete).padding(.top, 18)
                         } else {
                             EmptyLibraryState(big: true).padding(.top, 18)
                         }
                         recentHeader
                         LazyVGrid(columns: columns, spacing: 14) {
                             ForEach(items, id: \.id) { s in
-                                ScanThumbButton(scan: s)
+                                ScanThumbButton(scan: s, onRename: onRename, onDelete: onDelete)
                             }
                         }
                     }
@@ -356,23 +461,73 @@ private struct LibrarySearchField: View {
     }
 }
 
+// MARK: - Status-aware scan navigation
+
+private enum LibraryNavigation {
+    static func select(_ scan: ScanItem, in model: StudioModel) {
+        guard let id = UUID(uuidString: scan.id) else { return }
+        model.activeScanID = id
+        model.selectedCaptureModeID = switch scan.mode {
+        case CaptureMode.space.rawValue: "space"
+        case CaptureMode.landscape.rawValue: "landscape"
+        case CaptureMode.autoPilot.rawValue: "auto"
+        default: "object"
+        }
+        model.selectedDetailTier = scan.tier.lowercased()
+    }
+
+    static func performPrimaryAction(for scan: ScanItem, in model: StudioModel) {
+        select(scan, in: model)
+        switch scan.primaryAction {
+        case .resumeCapture:
+            model.go(.capture)
+        case .resumeReview:
+            model.go(.review)
+        case .resumeCompute, .retryCompute:
+            model.go(.compute)
+        case .view:
+            model.go(.viewer)
+        }
+    }
+
+    static func export(_ scan: ScanItem, in model: StudioModel) {
+        guard scan.canExport else { return }
+        select(scan, in: model)
+        model.go(.export)
+    }
+}
+
+private extension ScanLibraryAction {
+    var icon: String {
+        switch self {
+        case .resumeCapture: return "camera"
+        case .resumeReview: return "coverage"
+        case .resumeCompute, .retryCompute: return "chip"
+        case .view: return "cube"
+        }
+    }
+}
+
 // MARK: - Tappable scan thumbnail
 
 private struct ScanThumbButton: View {
     @EnvironmentObject private var model: StudioModel
     let scan: ScanItem
+    let onRename: (ScanItem) -> Void
+    let onDelete: (ScanItem) -> Void
 
     var body: some View {
         Button {
-            if let id = UUID(uuidString: scan.id) {
-                model.activeScanID = id
-            }
-            model.go(.viewer)
+            LibraryNavigation.performPrimaryAction(for: scan, in: model)
         } label: {
             ScanThumb(scan: scan)
         }
         .buttonStyle(StPressStyle())
-        .accessibilityLabel("Open \(scan.name)")
+        .accessibilityLabel("\(scan.primaryAction.title) \(scan.name)")
+        .contextMenu {
+            Button("Rename", systemImage: "pencil") { onRename(scan) }
+            Button("Delete", systemImage: "trash", role: .destructive) { onDelete(scan) }
+        }
     }
 }
 
@@ -419,16 +574,16 @@ private struct FeaturedCard: View {
     @EnvironmentObject private var model: StudioModel
     let scan: ScanItem
     var big: Bool = false
-
-    private func selectScan() {
-        if let id = UUID(uuidString: scan.id) {
-            model.activeScanID = id
-        }
-    }
+    let onRename: (ScanItem) -> Void
+    let onDelete: (ScanItem) -> Void
 
     var body: some View {
         StCard(radius: big ? 24 : 22, pad: big ? 16 : 14, elevated: big) {
             if big { bigBody } else { compactBody }
+        }
+        .contextMenu {
+            Button("Rename", systemImage: "pencil") { onRename(scan) }
+            Button("Delete", systemImage: "trash", role: .destructive) { onDelete(scan) }
         }
     }
 
@@ -436,15 +591,25 @@ private struct FeaturedCard: View {
         HStack(spacing: 14) {
             ScanThumb(scan: scan, label: false).frame(width: 92)
             VStack(alignment: .leading, spacing: 0) {
-                StLabel(text: "Just finished", color: theme.accentText)
+                HStack {
+                    StLabel(text: scan.primaryAction == .view ? "Model ready" : "Saved scan", color: theme.accentText)
+                    Spacer(minLength: 4)
+                    scanMenu
+                }
                 Text(scan.name)
                     .font(.sf(19, .bold)).tracking(0)
                     .foregroundStyle(theme.ink).padding(.top, 6)
                 Text("\(scan.tier.uppercased()) · \(scan.tris) tris · \(scan.mb) MB")
                     .font(.mono(11)).foregroundStyle(theme.text3).padding(.top, 4)
                 HStack(spacing: 8) {
-                    StButton(title: "Open in 3D", kind: .accent, size: .sm, icon: "cube") { selectScan(); model.go(.viewer) }
-                    StButton(title: "Export", kind: .secondary, size: .sm, icon: "export") { selectScan(); model.go(.export) }
+                    StButton(title: scan.primaryAction.title, kind: .accent, size: .sm, icon: scan.primaryAction.icon) {
+                        LibraryNavigation.performPrimaryAction(for: scan, in: model)
+                    }
+                    if scan.canExport {
+                        StButton(title: "Export", kind: .secondary, size: .sm, icon: "export") {
+                            LibraryNavigation.export(scan, in: model)
+                        }
+                    }
                 }
                 .padding(.top, 10)
             }
@@ -456,7 +621,11 @@ private struct FeaturedCard: View {
         HStack(alignment: .top, spacing: 18) {
             stage
             VStack(alignment: .leading, spacing: 0) {
-                StLabel(text: "Featured", color: theme.accentText)
+                HStack {
+                    StLabel(text: "Featured", color: theme.accentText)
+                    Spacer(minLength: 4)
+                    scanMenu
+                }
                 Text(scan.name)
                     .font(.sf(27, .bold)).tracking(0)
                     .foregroundStyle(theme.ink).padding(.top, 8)
@@ -469,8 +638,14 @@ private struct FeaturedCard: View {
                 }
                 .padding(.top, 18)
                 HStack(spacing: 10) {
-                    StButton(title: "Open in 3D", kind: .accent, icon: "cube") { selectScan(); model.go(.viewer) }
-                    StButton(title: "Export", kind: .secondary, icon: "export") { selectScan(); model.go(.export) }
+                    StButton(title: scan.primaryAction.title, kind: .accent, icon: scan.primaryAction.icon) {
+                        LibraryNavigation.performPrimaryAction(for: scan, in: model)
+                    }
+                    if scan.canExport {
+                        StButton(title: "Export", kind: .secondary, icon: "export") {
+                            LibraryNavigation.export(scan, in: model)
+                        }
+                    }
                 }
                 .padding(.top, 18)
             }
@@ -478,11 +653,22 @@ private struct FeaturedCard: View {
         }
     }
 
+    private var scanMenu: some View {
+        Menu {
+            Button("Rename", systemImage: "pencil") { onRename(scan) }
+            Button("Delete", systemImage: "trash", role: .destructive) { onDelete(scan) }
+        } label: {
+            StIcon(name: "more", size: 16, color: theme.text2)
+                .frame(width: 30, height: 30)
+        }
+        .accessibilityLabel("Scan actions for \(scan.name)")
+    }
+
     private var stage: some View {
         Stage(radius: 18) {
             VStack(spacing: 10) {
                 StIcon(name: "cube", size: 38, color: theme.accentText)
-                Text("Open in 3D to inspect")
+                Text(scan.canExport ? "Open in 3D to inspect" : "\(scan.primaryAction.title) this scan")
                     .font(.sf(13, .semibold))
                     .foregroundStyle(theme.text2)
                 Text(scan.name)
@@ -493,7 +679,7 @@ private struct FeaturedCard: View {
             .padding(20)
         }
         .frame(width: 300, height: 248)
-        .accessibilityLabel("Model preview is available in the viewer")
+        .accessibilityLabel(scan.canExport ? "Model preview is available in the viewer" : "Scan requires more work")
     }
 }
 

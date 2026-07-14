@@ -109,8 +109,13 @@ public final class ProcessingStateMachine: ObservableObject {
         case (.capturing, .finishCapture):
             return .packagingScan
 
-        // From Packaging to Ready for Compute
-        case (.packagingScan, .userSelectsComputeMode(let mode)):
+        // Persisted scans can re-enter compute after relaunch, cancellation, or a recoverable
+        // failure; compute readiness must not depend on an in-memory capture transition.
+        case (.packagingScan, .userSelectsComputeMode(let mode)),
+             (.idle, .userSelectsComputeMode(let mode)),
+             (.completed, .userSelectsComputeMode(let mode)),
+             (.error, .userSelectsComputeMode(let mode)),
+             (.thermalThrottled, .userSelectsComputeMode(let mode)):
             return .readyForCompute(mode: mode)
 
         // From Ready to Computing

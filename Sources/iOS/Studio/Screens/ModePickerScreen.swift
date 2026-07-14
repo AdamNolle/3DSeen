@@ -3,7 +3,6 @@
 // horizontal size class, per docs/design-spec/mode.md (Phone + Pad).
 
 import SwiftUI
-import SwiftData
 import AVFoundation
 import ARKit
 import RoomPlan
@@ -101,13 +100,9 @@ enum CaptureAvailability {
 
 struct ModePickerScreen: View {
     @Environment(\.theme) private var theme
-    @Environment(\.modelContext) private var modelContext
     @Environment(\.horizontalSizeClass) private var hSize
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var model: StudioModel
-    @EnvironmentObject private var stateMachine: ProcessingStateMachine
-    @State private var live = false
-    @State private var didPersist = false
 
     private var sel: Binding<String> {
         Binding(get: { model.selectedCaptureModeID }, set: { model.selectedCaptureModeID = $0 })
@@ -120,14 +115,6 @@ struct ModePickerScreen: View {
         selected.captureMode
     }
 
-    private var liveTone: String {
-        switch liveMode {
-        case .space: return "graphite"
-        case .landscape: return "slate"
-        default: return "bone"
-        }
-    }
-
     private var captureAvailability: CaptureAvailability.Status {
         CaptureAvailability.status(for: liveMode)
     }
@@ -138,13 +125,10 @@ struct ModePickerScreen: View {
                 PadModePicker(sel: sel,
                               onBack: { model.go(.library) },
                               onClose: { model.go(.library) },
-                              onContinue: { startCapture() })
+                              onContinue: { model.go(.briefing) })
             } else {
                 phoneBody
             }
-        }
-        .fullScreenCover(isPresented: $live, onDismiss: { stateMachine.send(.reset) }) {
-            captureCover
         }
     }
 
@@ -157,10 +141,9 @@ struct ModePickerScreen: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             BottomCTA {
-                StButton(title: sel.wrappedValue == "auto" ? "Start Auto-Pilot" : "Continue · \(selected.name)",
+                StButton(title: sel.wrappedValue == "auto" ? "Continue · Auto-Pilot" : "Continue · \(selected.name)",
                          kind: .accent, size: .lg, icon: selected.icon, full: true,
-                         action: { startCapture() })
-                    .disabled(!captureAvailability.isAvailable)
+                         action: { model.go(.briefing) })
             }
         }
     }
@@ -214,124 +197,6 @@ struct ModePickerScreen: View {
         }
     }
 
-    // MARK: Live-capture wiring
-
-    private func startCapture() {
-        didPersist = false
-        let availability = captureAvailability
-        guard availability.isAvailable else {
-            stateMachine.send(.errorOccurred(availability.message ?? "Capture is not available on this device."))
-            return
-        }
-        Task {
-            guard await requestCameraAccessIfNeeded() else {
-                stateMachine.send(.errorOccurred("Camera access is required to start a scan. Allow 3DSeen to use the camera in Settings."))
-                return
-            }
-            let updatedAvailability = CaptureAvailability.status(for: liveMode)
-            guard updatedAvailability.isAvailable else {
-                stateMachine.send(.errorOccurred(updatedAvailability.message ?? "Capture is not available on this device."))
-                return
-            }
-            stateMachine.send(.startCapture(liveMode))
-            live = true
-        }
-    }
-
-    private func requestCameraAccessIfNeeded() async -> Bool {
-        guard AVCaptureDevice.authorizationStatus(for: .video) == .notDetermined else {
-            return AVCaptureDevice.authorizationStatus(for: .video) == .authorized
-        }
-        return await AVCaptureDevice.requestAccess(for: .video)
-    }
-
-    @ViewBuilder private var captureCover: some View {
-        CaptureCoordinatorView(captureMode: liveMode)
-            .environmentObject(stateMachine)
-            .onReceive(stateMachine.$state) { st in
-                if case .capturing = st { return }
-                // Capture finished → persist a real ScanSession (once).
-                if case .packagingScan = st, !didPersist {
-                    didPersist = true
-                    Task {
-                        if await persistScan() {
-                            model.go(.review)
-                        }
-                        live = false
-                    }
-                    return
-                }
-                live = false
-            }
-    }
-
-    @discardableResult
-    private func persistScan() async -> Bool {
-        let scanDataURL = stateMachine.lastScanDataURL
-        let frameCount = scanDataURL.map { CaptureArchiveInspector.imageFrameCount(in: $0) } ?? 0
-        let capturedMode = stateMachine.activeCaptureMode ?? liveMode
-        let session = ScanSession(
-            captureMode: capturedMode,
-            name: "\(capturedMode.rawValue) Scan",
-            sizeMB: 0,
-            tier: model.selectedDetailTier.capitalized,
-            tone: liveTone,
-            triangles: "Awaiting compute",
-            captureStatus: .captured,
-            computeStatus: .notStarted,
-            frameCount: frameCount,
-            coveragePercent: 0,
-            weakSpotCount: 0
-        )
-
-        do {
-            guard let scanDataURL else {
-                throw CocoaError(.fileNoSuchFile)
-            }
-            let store = try ScanAssetStore()
-            let persistedURL = try store.importCapture(from: scanDataURL, for: session.id)
-            session.sizeMB = Self.sizeMB(for: persistedURL)
-            if capturedMode != .space {
-                session.captureQualityReport = await Task.detached(priority: .userInitiated) {
-                    CaptureQualityAnalyzer.analyze(archive: persistedURL)
-                }.value
-            }
-
-            if capturedMode == .space, persistedURL.pathExtension.lowercased() == "usdz" {
-                session.markComputed(modelURL: persistedURL, usdzURL: persistedURL)
-                session.triangles = ModelGeometryInspector.inspect(modelURL: persistedURL)?.formattedTriangleCount ?? "Unavailable"
-                session.captureStatusRaw = ScanCaptureStatus.captured.rawValue
-            } else {
-                session.markPackaged(rawArchiveURL: persistedURL)
-            }
-
-            try store.writeManifest(try store.manifest(for: session))
-            modelContext.insert(session)
-            model.activeScanID = session.id
-            try modelContext.save()
-            return true
-        } catch {
-            stateMachine.send(.errorOccurred("Unable to save the captured scan: \(error.localizedDescription)"))
-            return false
-        }
-    }
-
-    private static func sizeMB(for url: URL?) -> Int {
-        guard let url else { return 0 }
-        let fm = FileManager.default
-        if let attrs = try? fm.attributesOfItem(atPath: url.path),
-           let size = attrs[.size] as? NSNumber {
-            return max(1, Int((size.doubleValue / 1_000_000).rounded()))
-        }
-        guard let enumerator = fm.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey]) else {
-            return 0
-        }
-        var bytes = 0
-        for case let fileURL as URL in enumerator {
-            bytes += ((try? fileURL.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
-        }
-        return bytes == 0 ? 0 : max(1, Int((Double(bytes) / 1_000_000).rounded()))
-    }
 }
 
 // MARK: - iPad layout (regular)
@@ -465,7 +330,6 @@ private struct PadModePicker: View {
             Spacer()
             StButton(title: "Continue with \(selected.name)", kind: .accent, size: .lg,
                      icon: selected.icon, action: onContinue)
-                .disabled(!captureAvailability.isAvailable)
         }
     }
 }

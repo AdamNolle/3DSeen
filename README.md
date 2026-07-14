@@ -6,11 +6,13 @@
 
 **3DSeen** is a multi-modal 3D scanning app for iPhone, iPad, and macOS with photogrammetry, LiDAR, local compute handoff, and a data-dense Apple-elegant "Studio" interface.
 
+> **Production source of truth:** [`docs/PRODUCTION-CONTRACT.md`](docs/PRODUCTION-CONTRACT.md) defines supported behavior and release gates. [`docs/VERIFICATION-STATUS.md`](docs/VERIFICATION-STATUS.md) records current evidence. Material under `docs/design-*`, `docs/review`, `docs/audit`, and `docs/EXECUTION-PLAN.md` is historical design/review input and does not override the production contract.
+
 ## Why it's different
 - **Local splat rendering and training** — MetalSplatter renders local PLY assets on iOS; the Mac compute pane can optionally invoke a locally installed COLMAP + Nerfstudio runtime to train and export a Gaussian-splat PLY. Geometry-derived previews are labeled as previews, not trained radiance fields.
 - **No export paywall** — local USDZ pass-through plus USD · OBJ · STL · PLY export via ModelIO; macOS adds GLB and FBX through an installed Blender runtime.
 - **Truthful capture guidance** — live capture HUDs report only engine state, AR tracking, and saved-frame counts. Richer coverage, lighting, thermal, and scene-analysis diagnostics are intentionally deferred until they can be backed by device measurements and clear confidence states.
-- **Mac offload** — hand the raw scan to an Apple-silicon Mac over the local network for photogrammetry, with an optional bounded local splat-training pass.
+- **Authenticated Mac offload** — explicit discovery and bilateral six-digit pairing establish Keychain-backed trust; typed, journaled jobs support progress, cancellation, timeout, retry, local fallback, relaunch reconciliation, durable completed-result resend, and correlated result validation.
 
 ## Architecture
 A Hub-and-Spoke capture architecture with a dual-option compute pipeline, driven by a thread-safe MVVM-C state machine (`ProcessingStateMachine`).
@@ -22,16 +24,16 @@ A Hub-and-Spoke capture architecture with a dual-option compute pipeline, driven
 - **Auto-Pilot** — Vision scene classification recommends the optimal mode from the live feed.
 
 ### Compute
-- **On-device** — RealityKit `PhotogrammetrySession`, with `ProcessInfo.thermalState` monitoring + auto-pause.
-- **Mac offload** — `MultipeerConnectivity` streams the scan to the macOS app, which unzips and runs RealityKit photogrammetry. When selected and configured, it then runs local COLMAP + Nerfstudio MPS splat training.
+- **On-device** — RealityKit `PhotogrammetrySession`; serious thermal state or backgrounding cancels safely and requeues the retained scan instead of implying unsupported background continuation.
+- **Mac offload** — authenticated `MultipeerConnectivity` transfers SHA-256-correlated resources to serialized macOS compute. When selected and configured, the Mac can run local COLMAP + Nerfstudio MPS splat training and return validated geometry/trained PLY assets.
 
 ### UI — "Studio" design system
-A native SwiftUI design system (`Sources/Shared/DesignSystem/`) — warm-paper light + refined dark theme, single cobalt accent, adaptive Liquid Glass — across 10 screens: Library · Mode · Briefing · Capture · Detail · Review · Compute · Viewer · Export · Settings.
+A native SwiftUI design system (`Sources/Shared/DesignSystem/`) — warm-paper light + refined dark theme, single cobalt accent, adaptive Liquid Glass — across 10 screens: Library · Mode · Briefing · Detail · Capture · Review · Compute · Viewer · Export · Settings.
 
 ## Requirements
 - **iOS / iPadOS** 17.0+ (LiDAR recommended for Space/Object).
 - **macOS** 14.0+ (Apple silicon recommended).
-- **Xcode** 26.0+ (the Metal Toolchain component may need to be installed separately — see below).
+- **Xcode** 26.3+ (CI pins 26.3; the Metal Toolchain component may need to be installed separately).
 
 > **Mac local-training note:** the Mac build is intended for direct distribution, not the Mac App
 > Store sandbox. Its optional local splat trainer launches user-installed COLMAP and Nerfstudio
@@ -60,18 +62,22 @@ swiftlint lint --strict
 # Unit tests (choose an available iPhone UDID from `xcrun simctl list devices available`)
 xcodebuild test -scheme 3DSeen-iOS   -destination 'platform=iOS Simulator,id=<DEVICE-UDID>'
 xcodebuild test -scheme 3DSeen-macOS -destination 'platform=macOS'
+
+# Complete fresh-shell verification, including Release bundles and iPad accessibility
+# Optional overrides: FINAL_OUTPUT_ROOT, IOS_DEVICE_ID, IPAD_DEVICE_ID
+tools/ci/verify-all.sh
 ```
 
 - **Linting:** `.swiftlint.yml` (strict in CI).
-- **Tests:** XCTest suites in `Tests/iOS` and `Tests/macOS` covering the state machine, exporter, Auto-Pilot classification, PBR estimation, splat matrices, and the compute pipeline.
-- **CI/CD:** `.github/workflows/ci.yml` runs SwiftLint plus both test targets on pushes and pull requests targeting `main`; `release.yml` reruns that gate before building unsigned `v*` artifacts.
+- **Tests:** XCTest/XCUITest suites cover state, capture routing, transactional persistence, authenticated handoff fault paths, exporter/PLY integrity, measurements, settings retention, adaptive accessibility, Blender process cancellation, and compute.
+- **CI/CD:** `.github/workflows/ci.yml` runs SwiftLint plus both test targets on pushes and pull requests targeting `main`; `release.yml` reruns that gate before building unsigned `v*` artifacts and conditionally executes secret-backed signed distribution. See [`docs/RELEASING.md`](docs/RELEASING.md) for the credential-free dry run, signing variables, TestFlight, and notarization gates.
 
 ## Project layout
 ```
 Sources/
   Shared/            # cross-platform: engine + design system + render
     DesignSystem/    # Theme, LiquidGlass, Primitives
-    Studio/          # SampleData, StudioRender (HeroModel, coverage, charts)
+    Studio/          # live presentation models and model-derived render helpers
     Compute/ Export/ Materials/ + state machine, networking, queue
   iOS/               # app entry, capture engines, Studio screens, Gaussian splat viewer
   macOS/             # Studio compute dashboard + library, ComputeCoordinator

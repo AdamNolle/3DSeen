@@ -75,7 +75,7 @@ private struct PhoneQuality: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             BottomCTA {
-                StButton(title: "Capture at \(tier.name)", kind: .accent, size: .lg, icon: "bolt", full: true) { model.go(.mode) }
+                StButton(title: "Capture at \(tier.name)", kind: .accent, size: .lg, icon: "bolt", full: true) { model.go(.capture) }
             }
         }
     }
@@ -198,7 +198,7 @@ private struct PadQuality: View {
             Spacer(minLength: 16)
             StStepTabs(current: 2)
             Spacer(minLength: 16)
-            StButton(title: "Capture at \(tier.name)", kind: .accent, size: .sm, icon: "bolt") { model.go(.mode) }
+            StButton(title: "Capture at \(tier.name)", kind: .accent, size: .sm, icon: "bolt") { model.go(.capture) }
         }
     }
 

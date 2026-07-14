@@ -82,6 +82,12 @@ public struct ScanResultPackage {
         if let previewPLYURL = manifest.previewPLYURL,
            previewPLYURL != output,
            fm.fileExists(atPath: previewPLYURL.path) {
+            let payloadKind: PLYPayloadKind = manifest.previewPLYKind == .trainedSplat
+                ? .trainedSplat
+                : .geometry
+            guard PLYValidator.isValid(previewPLYURL, kind: payloadKind) else {
+                throw ExportError.sourceUnreadable(previewPLYURL)
+            }
             let previewName = manifest.previewPLYKind == .trainedSplat ? "trained-splat.ply" : "geometry-preview.ply"
             let previewURL = packageDir.appendingPathComponent(previewName)
             try fm.copyItem(at: previewPLYURL, to: previewURL)
@@ -115,6 +121,14 @@ public struct ScanResultPackage {
         }
         let manifest = try JSONDecoder().decode(ScanAssetManifest.self, from: Data(contentsOf: manifestURL))
         let previewPLYURL = files.first { $0.pathExtension.lowercased() == "ply" }
+        if let previewPLYURL {
+            let payloadKind: PLYPayloadKind = manifest.previewPLYKind == .trainedSplat
+                ? .trainedSplat
+                : .geometry
+            guard PLYValidator.isValid(previewPLYURL, kind: payloadKind) else {
+                throw ExportError.sourceUnreadable(previewPLYURL)
+            }
+        }
         return Contents(manifest: manifest, modelURL: modelURL, previewPLYURL: previewPLYURL)
     }
 }
@@ -155,10 +169,77 @@ public struct MeasurementExporter {
     }
 }
 
+public struct ModelExportRequest: Sendable {
+    public let scanID: UUID
+    public let sourceModelURL: URL
+    public let fileBaseName: String
+    public let measurements: [ScanMeasurement]
+
+    public init(scanID: UUID, sourceModelURL: URL, fileBaseName: String, measurements: [ScanMeasurement]) {
+        self.scanID = scanID
+        self.sourceModelURL = sourceModelURL
+        self.fileBaseName = fileBaseName
+        self.measurements = measurements
+    }
+}
+
+public enum ScanExportLocation {
+    public static func rootDirectory(fileManager: FileManager = .default) -> URL {
+        let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? fileManager.temporaryDirectory
+        return base.appendingPathComponent("3DSeen/Exports", isDirectory: true)
+    }
+
+    public static func directory(for scanID: UUID, fileManager: FileManager = .default) -> URL {
+        rootDirectory(fileManager: fileManager).appendingPathComponent(scanID.uuidString, isDirectory: true)
+    }
+}
+
+@MainActor
+public enum ScanExportProvenanceRecorder {
+    public static func record(
+        _ outputURL: URL,
+        on scan: ScanSession,
+        assetStore: ScanAssetStore,
+        save: () throws -> Void
+    ) throws {
+        let previousURL = scan.lastExportedURL
+        let previousName = scan.lastExportedFileName
+        let previousDate = scan.lastExportedAt
+        scan.lastExportedURL = outputURL
+        scan.lastExportedFileName = outputURL.lastPathComponent
+        scan.lastExportedAt = Date()
+        do {
+            try assetStore.writeManifest(try assetStore.manifest(for: scan))
+            try save()
+        } catch {
+            scan.lastExportedURL = previousURL
+            scan.lastExportedFileName = previousName
+            scan.lastExportedAt = previousDate
+            try? assetStore.writeManifest(try assetStore.manifest(for: scan))
+            throw error
+        }
+    }
+}
+
 public final class ModelExporter {
     private let logger = Logger(subsystem: "com.adamnolle.3DSeen.Shared", category: "Export")
 
     public init() {}
+
+    @discardableResult
+    public func export(
+        request: ModelExportRequest,
+        to format: ExportFormat,
+        outputDirectory: URL? = nil
+    ) throws -> URL {
+        let directory = outputDirectory ?? ScanExportLocation.directory(for: request.scanID)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let outputURL = directory
+            .appendingPathComponent(request.fileBaseName)
+            .appendingPathExtension(format.fileExtension)
+        return try export(sourceModel: request.sourceModelURL, to: format, outputURL: outputURL)
+    }
 
     /// Export the best available model attached to a scan session and remember the exported file URL.
     @discardableResult
@@ -167,16 +248,16 @@ public final class ModelExporter {
             throw ExportError.noSourceAsset(session.id)
         }
 
-        let directory = outputDirectory ?? FileManager.default.temporaryDirectory
-            .appendingPathComponent("3DSeenExports", isDirectory: true)
-            .appendingPathComponent(session.id.uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-
-        let outputURL = directory
-            .appendingPathComponent(session.exportFileBaseName)
-            .appendingPathExtension(format.fileExtension)
-        let exported = try export(sourceModel: source, to: format, outputURL: outputURL)
+        let request = ModelExportRequest(
+            scanID: session.id,
+            sourceModelURL: source,
+            fileBaseName: session.exportFileBaseName,
+            measurements: session.measurements
+        )
+        let exported = try export(request: request, to: format, outputDirectory: outputDirectory)
         session.lastExportedURL = exported
+        session.lastExportedFileName = exported.lastPathComponent
+        session.lastExportedAt = Date()
         return exported
     }
 
@@ -260,7 +341,9 @@ public final class ModelExporter {
         try commit(primary, to: outputURL)
     }
 
-    /// Builds a demo `MDLAsset` (a smooth sphere) so the export pipeline produces a real file
+    #if DEBUG
+    /// DEBUG-only deterministic geometry fixture used by exporter and package tests.
+    /// Release products never expose or substitute this asset for a captured model.
     /// even before a scan exists. Replace the source with PhotogrammetrySession output in production.
     public func sampleAsset() -> MDLAsset {
         let allocator = MDLMeshBufferDataAllocator()
@@ -283,4 +366,5 @@ public final class ModelExporter {
             .appendingPathExtension(format.fileExtension)
         return try export(asset: sampleAsset(), to: format, outputURL: out)
     }
+    #endif
 }

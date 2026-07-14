@@ -136,7 +136,7 @@ private struct PhoneReview: View {
     }
 
     @ViewBuilder private var actionButtons: some View {
-        StButton(title: "Retake", kind: .secondary, icon: "refresh", full: true) { model.go(.mode) }
+        StButton(title: "Retake", kind: .secondary, icon: "refresh", full: true) { model.go(.capture) }
         StButton(title: facts.primaryTitle, kind: .accent, icon: facts.primaryIcon, full: true) { proceed() }
             .disabled(!facts.canProceed)
     }
@@ -214,7 +214,7 @@ private struct PadReview: View {
                 }
             }
             Spacer()
-            StButton(title: "Retake", kind: .secondary, size: .sm, icon: "refresh") { model.go(.mode) }
+            StButton(title: "Retake", kind: .secondary, size: .sm, icon: "refresh") { model.go(.capture) }
             StButton(title: facts.primaryTitle, kind: .accent, size: .sm, icon: facts.primaryIcon) { proceed() }
                 .disabled(!facts.canProceed)
         }
