@@ -51,6 +51,15 @@ final class StateMachineTests: XCTestCase {
         XCTAssertNil(sm.lastComputedAssetURL)
     }
 
+    func testPersistedScanCanEnterComputeFromIdleAfterRelaunch() {
+        let sm = ProcessingStateMachine()
+
+        sm.send(.userSelectsComputeMode(.local))
+        XCTAssertEqual(sm.state, .readyForCompute(mode: .local))
+        sm.send(.startLocalCompute)
+        XCTAssertEqual(sm.state, .computingLocally(progress: 0))
+    }
+
     func testOffloadPath() {
         let sm = ProcessingStateMachine()
         sm.send(.startCapture(.space))
@@ -90,6 +99,14 @@ final class StateMachineTests: XCTestCase {
         XCTAssertEqual(sm.lastScanDataURL, dummyURL)
         XCTAssertEqual(sm.lastComputedAssetURL, output)
         XCTAssertEqual(sm.activeCaptureMode, .object)
+    }
+
+    func testThermalSafetyPolicyIsConservativeAndUserControllable() {
+        XCTAssertFalse(LocalComputeSafetyPolicy.shouldInterrupt(thermalState: .nominal, protectionEnabled: true))
+        XCTAssertFalse(LocalComputeSafetyPolicy.shouldInterrupt(thermalState: .fair, protectionEnabled: true))
+        XCTAssertTrue(LocalComputeSafetyPolicy.shouldInterrupt(thermalState: .serious, protectionEnabled: true))
+        XCTAssertTrue(LocalComputeSafetyPolicy.shouldInterrupt(thermalState: .critical, protectionEnabled: true))
+        XCTAssertFalse(LocalComputeSafetyPolicy.shouldInterrupt(thermalState: .critical, protectionEnabled: false))
     }
 
     func testThermalThrottleFromLocalCompute() {

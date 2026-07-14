@@ -79,8 +79,8 @@ public enum GaussianSplatGenerator {
         return try SplatPLYWriter.write(splats, to: outputURL)
     }
 
-    /// A demo radiance field: a Fibonacci-sphere of coloured Gaussians. Lets the on-device viewer
-    /// render real splats before a capture exists, and exercises the full generate→render path.
+    #if DEBUG
+    /// DEBUG-only deterministic radiance-field fixture for renderer round-trip tests.
     public static func demoCloud(count: Int = 6000, radius: Float = 1.0) -> [Splat] {
         var out: [Splat] = []
         out.reserveCapacity(count)
@@ -108,6 +108,7 @@ public enum GaussianSplatGenerator {
         try SplatPLYWriter.write(demoCloud(), to: url)
         return url
     }
+    #endif
 }
 
 public enum SplatGenerationError: LocalizedError {

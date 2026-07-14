@@ -15,17 +15,23 @@
 		043DE1418392692AAA10B8CC /* AIPBRMaterialEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2AC060B0BE18A703CEF83F1 /* AIPBRMaterialEstimator.swift */; };
 		04C808A00EBAEAF77E28BE75 /* 3DSeenApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F211D1F95F1137E6ED3888EC /* 3DSeenApp.swift */; };
 		0B98DA421C4EC7CFC7DA9F9A /* AutoPilotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 281F78B7D402BE66E74A9771 /* AutoPilotTests.swift */; };
+		0C17028F1E8678A45B43B9C7 /* HandoffProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7920D74A99B1596A19E73AC /* HandoffProtocolTests.swift */; };
+		0C4D428D7C231182E99C6521 /* MacHandoffJobJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4731D2A7790417E6D63A9A5 /* MacHandoffJobJournal.swift */; };
 		0EC4ACA3A3EB77203CEFBFB8 /* MacViewerPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8525FA57375C0BE2E9B0AA2F /* MacViewerPane.swift */; };
 		112217F082CDBA2987000879 /* GaussianSplatGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1DB7CB6DEFFA0885362563F /* GaussianSplatGenerator.swift */; };
 		115B1546366E464ABE2A4F77 /* CaptureCoordinatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 408269989B88069C5E20274C /* CaptureCoordinatorView.swift */; };
+		137225363E194759F2566F11 /* HandoffPairingCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5497D160451FC0508F4E6754 /* HandoffPairingCoordinatorTests.swift */; };
 		1434946C9BE38B69039DA59E /* StudioRender.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B53953E0069367BFBAF55D /* StudioRender.swift */; };
 		1A1D8E12023693854EDA9D67 /* ScanSessionMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED2170C8F12A88B7BEE2C7E5 /* ScanSessionMapping.swift */; };
+		1B8BAB4E8B4D64F5B877C099 /* ScanLifecycleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37B0CBC2BEF43FF4A30B485D /* ScanLifecycleManager.swift */; };
 		1E1F878E6C6326284EEBB948 /* ScanSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA53940BBA8FCD5C9ED3794 /* ScanSession.swift */; };
 		20F1F6A8646BF40AD2EBD899 /* SampleData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D06C68200886D7865B4EC27 /* SampleData.swift */; };
 		218AC79ED2C3E9E0B6F99A8C /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60DC68A1A91B1590CD93B795 /* SettingsScreen.swift */; };
+		224C86140570F33A6352D94A /* PLYValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8296EF932D5513800A12FEB /* PLYValidator.swift */; };
 		2294A576C20FF5C9AA9B8488 /* StudioComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D535C6B22419107CA1BE97C /* StudioComponents.swift */; };
 		23E3AD837941CD24AB72069B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3FD1D9DF0008E6C70E565D89 /* Assets.xcassets */; };
 		28E252D6230C9F3F27FD4451 /* ViewerScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AD323776CD4D94C47792345 /* ViewerScreen.swift */; };
+		2E00DF49ACB24E7730FD7A71 /* WizardFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E7DB58CB14F3185D5564E53 /* WizardFlowUITests.swift */; };
 		2F2DCE8C2176A44226EB08EE /* ComputeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8ABEFAF4C800310DE2199BD /* ComputeScreen.swift */; };
 		32E1BAE7B79519B13D39AFBD /* Primitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = 191E7FBB3A8060C3A0D4F62D /* Primitives.swift */; };
 		383F4B63670447CFCD1B1E6C /* MaterialOverrideLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = A62228C3C6D40D57E5609FAF /* MaterialOverrideLibrary.swift */; };
@@ -33,6 +39,7 @@
 		3AEE80DA890B13896C22D33B /* ProcessingStateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69735CC14F7457670ECBD7C6 /* ProcessingStateMachine.swift */; };
 		3B1475DB7A4A31A8A491AC70 /* LiveCaptureHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = F85DDBDD6E873DC5AAF7C124 /* LiveCaptureHUD.swift */; };
 		3F8832F31EF44497117BAE69 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = B8A7E315EAB4A35CDE7FAF4A /* ZIPFoundation */; };
+		4467A3C868558569446D39A1 /* CaptureScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07651B3FCF956B10B87C371 /* CaptureScreen.swift */; };
 		497EAD07AE55DB09ABE70E8D /* LocalQueueManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D346EB2BD18E2A661B3BF1F /* LocalQueueManager.swift */; };
 		4996E9BB3BA317180388D3D0 /* AutoPilotVisionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A2A28C46F8496F999E0A552 /* AutoPilotVisionManager.swift */; };
 		4CDD4ACDBAC038E47AB73678 /* QualityScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8778A7A62DAFBA745CDB4F67 /* QualityScreen.swift */; };
@@ -44,21 +51,30 @@
 		5844F8C23A2E3B4237B58374 /* NerfstudioSplatTrainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A9AC885A17E5D03B3EB54B5 /* NerfstudioSplatTrainer.swift */; };
 		59CC507288BCD9845C86EF8F /* NetworkHandoffManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF6140FFD36ADB270491891B /* NetworkHandoffManager.swift */; };
 		5F2822505ADF4377F0FCD1D6 /* MetalSplatter in Frameworks */ = {isa = PBXBuildFile; productRef = 7E26BBE8E8DA99F248F75E73 /* MetalSplatter */; };
+		600EB8544C23613C14495901 /* PLYValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8296EF932D5513800A12FEB /* PLYValidator.swift */; };
 		610A788645A2098F1428BB87 /* StudioRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDAB72BEA60D5A70D3B7AC67 /* StudioRouter.swift */; };
+		68A17BE6A3B28525BC8E0DEC /* ScanLifecycleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37B0CBC2BEF43FF4A30B485D /* ScanLifecycleManager.swift */; };
 		6AAFE9E26B2C68818F4D7B4B /* SampleData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D06C68200886D7865B4EC27 /* SampleData.swift */; };
 		6C9BC460341656D7D9989649 /* MacLibraryPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BEDEB7EFB54C45767689D41 /* MacLibraryPane.swift */; };
+		6E21E4326F2462B0AAD4307B /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 10DEAF503F471822B4E715BC /* PrivacyInfo.xcprivacy */; };
+		6EA21C0797D0DFAFB81FB8D8 /* ScanLifecycleManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B290292242D89550970068F4 /* ScanLifecycleManagerTests.swift */; };
 		6FF8B02A2FB10DE4C91F0A19 /* StudioComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D535C6B22419107CA1BE97C /* StudioComponents.swift */; };
+		7035A8234FDEF1B545EBCE57 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 10DEAF503F471822B4E715BC /* PrivacyInfo.xcprivacy */; };
 		70DA98E80BA39694368960E9 /* ModelGeometryInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94267FF59D408E2A692E43BB /* ModelGeometryInspector.swift */; };
 		73EBDAC4C609843473DF511A /* NerfstudioRuntimeInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4744A87B322A5AC2A6E1CAD5 /* NerfstudioRuntimeInstallerTests.swift */; };
 		76C81BB56F8C1C83D35B9EA3 /* SplatIO in Frameworks */ = {isa = PBXBuildFile; productRef = 2B8FF1E5E37CC08F81E66CF6 /* SplatIO */; };
 		771520BE586627B4103B57DF /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8C95CA27A7E1E731D0B34517 /* Assets.xcassets */; };
 		7755BF522C59EB3393F6E31E /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 855FF907514F5220109067B2 /* Theme.swift */; };
+		777FCF8F2A3B4628558342BC /* HandoffProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60DF3F918AC67A5FC851F598 /* HandoffProtocol.swift */; };
 		78F70CE5F278A7A9F5DC1775 /* LiquidGlass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D5C85EEC167D880894CBAD1 /* LiquidGlass.swift */; };
 		79B340355294E09310B6B3F4 /* GaussianSplatGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1DB7CB6DEFFA0885362563F /* GaussianSplatGenerator.swift */; };
 		7B5F4899EDD7F2DD18D1774A /* ModelExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E047A386A69A590077D0400E /* ModelExporter.swift */; };
+		7CB2C697E9AC794ED97338B7 /* HandoffTrust.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ABA6E8C22956A44B83CEA87 /* HandoffTrust.swift */; };
 		7E11C5520F3814ACCD8B2C35 /* NerfstudioRuntimeInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84DE17EB79919A1B79091980 /* NerfstudioRuntimeInstaller.swift */; };
 		7E6668AD45271417CECA7246 /* StudioComponentsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C9BF597BE4D5F2AB0C0AF04 /* StudioComponentsTests.swift */; };
 		80DD2A4163661AFA8669976B /* SplatIO in Frameworks */ = {isa = PBXBuildFile; productRef = A28226202A9FD918A4BFDEF6 /* SplatIO */; };
+		82DD65DADBAEF8C5F5C49CC2 /* HandoffTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E9069508A6BB2A6AF3157E7 /* HandoffTransport.swift */; };
+		8509104342481E9EFAD8E3BD /* HandoffTrustTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 197D3A95570EDF2EBDC4AE03 /* HandoffTrustTests.swift */; };
 		89017EE14CAC361BE71CB61E /* GaussianSplat.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5390766A930F48BB649338F /* GaussianSplat.swift */; };
 		8A52477CCC65BB076A63E066 /* AIPBRMaterialEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2AC060B0BE18A703CEF83F1 /* AIPBRMaterialEstimator.swift */; };
 		8C3C74A66415284C06DED6EF /* MacExportPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EA5E31F28CC4DB785424809 /* MacExportPane.swift */; };
@@ -71,6 +87,7 @@
 		99193E0272843C4E65F36BCE /* StateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5D2EB4650ACC4A0FB016D7 /* StateMachineTests.swift */; };
 		9E55AEFAD19B5B699CDB4281 /* ModePickerScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7285F79EED4C6F44B29292AB /* ModePickerScreen.swift */; };
 		9F16E711497D970F8334CDE4 /* ScanSessionMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED2170C8F12A88B7BEE2C7E5 /* ScanSessionMapping.swift */; };
+		9F2FB300A619F0A2E8236793 /* HandoffTrust.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ABA6E8C22956A44B83CEA87 /* HandoffTrust.swift */; };
 		9FB6E2DF17A8E287F328DEC7 /* MacSettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2EFDC324502E8EE8CDCE1FD /* MacSettingsPane.swift */; };
 		A04ED326F276D501FEEE32FC /* ComputeStageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24838148F514681A534BA513 /* ComputeStageTests.swift */; };
 		A31D2D59339DF68E73EBDCEE /* 3DSeenApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D15C2670C33C1808B927D57A /* 3DSeenApp.swift */; };
@@ -86,14 +103,20 @@
 		B796705BCBA29BDB14A9363D /* LandscapeCaptureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = D699E59014BAC0A8CD7BF80F /* LandscapeCaptureEngine.swift */; };
 		B801D9F976BB29CD59A42B23 /* ModelGeometryInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94267FF59D408E2A692E43BB /* ModelGeometryInspector.swift */; };
 		B9F6034ED39489AE835575C6 /* Primitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = 191E7FBB3A8060C3A0D4F62D /* Primitives.swift */; };
+		C23D2E164A9213EFFB51719F /* HandoffPairingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96BE68CCC1669D6127D359C5 /* HandoffPairingCoordinator.swift */; };
 		C2F79A0603A7DE28E966095A /* StudioChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBC667D7ECC9E10091C643D0 /* StudioChrome.swift */; };
 		C378704DEF112B1161D98AC7 /* ScanSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA53940BBA8FCD5C9ED3794 /* ScanSession.swift */; };
+		C7EE7BF07BBF072BCF3950FD /* HandoffTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E9069508A6BB2A6AF3157E7 /* HandoffTransport.swift */; };
 		C9AD59FF6F58547E4021D6B9 /* ObjectCaptureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE453E975B978103D45FAD /* ObjectCaptureEngine.swift */; };
+		D0CBA0375333C13FC38AFBFF /* ComputeOption.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70A9B012C4A9D6C001FE697B /* ComputeOption.swift */; };
+		D352A51421B97389F39FD80A /* HandoffProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60DF3F918AC67A5FC851F598 /* HandoffProtocol.swift */; };
 		D4E47FBFB8E7D4BBDF6CC384 /* SplatRoundTripTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40C30F34558AA0A12627CAB5 /* SplatRoundTripTests.swift */; };
 		E1D81375B20049AEEEC86FF2 /* ComputeDetailCapabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64953E3F4E46190D0E5C36FE /* ComputeDetailCapabilityTests.swift */; };
 		E5D1820F52E8DC53581193E6 /* CaptureTelemetryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2D63C1AF9F8FD5E2C6AFC43 /* CaptureTelemetryTests.swift */; };
 		EABE927EC6A92DE33514BC0E /* RoomCaptureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DAD8A7ADE795A2D03C0A5C7 /* RoomCaptureEngine.swift */; };
+		EAD320028C8170FC7A2B9907 /* HandoffPairingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96BE68CCC1669D6127D359C5 /* HandoffPairingCoordinator.swift */; };
 		EB2C0D73EEDCA21A965BA071 /* LocalQueueManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D346EB2BD18E2A661B3BF1F /* LocalQueueManager.swift */; };
+		EE22AADD355AE96D66605E0F /* HandoffCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9756B2993AD4E297961CB3B2 /* HandoffCoordinator.swift */; };
 		F6230FCC1FFE9C5BF31111DB /* SplatGeneratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7F1EBB08D5A1806B90E8DB7 /* SplatGeneratorTests.swift */; };
 		F7676F45F78678BDB30183AD /* ThemeAndRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68EF972E44A504A2F5E88083 /* ThemeAndRenderTests.swift */; };
 		FBAC5E9911D678E6EAF604D1 /* ModelExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DBB988AF570CA6FA57C4DC8 /* ModelExporterTests.swift */; };
@@ -111,6 +134,13 @@
 			remoteGlobalIDString = C8B195E2C4D9380B04FC7074;
 			remoteInfo = "3DSeen-macOS";
 		};
+		7172E8DD48458E79143707E0 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2D4C504670C3FC2DB92EEC6E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A4887E1AD8B7BA1740FD76AD;
+			remoteInfo = "3DSeen-iOS";
+		};
 		E37803EA46531BA05922FF95 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 2D4C504670C3FC2DB92EEC6E /* Project object */;
@@ -122,11 +152,16 @@
 
 /* Begin PBXFileReference section */
 		028ACBD730FE459DD24F6B08 /* BlenderModelConverterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlenderModelConverterTests.swift; sourceTree = "<group>"; };
+		0ABA6E8C22956A44B83CEA87 /* HandoffTrust.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffTrust.swift; sourceTree = "<group>"; };
 		0BEDEB7EFB54C45767689D41 /* MacLibraryPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacLibraryPane.swift; sourceTree = "<group>"; };
+		0E7DB58CB14F3185D5564E53 /* WizardFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WizardFlowUITests.swift; sourceTree = "<group>"; };
+		0E9069508A6BB2A6AF3157E7 /* HandoffTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffTransport.swift; sourceTree = "<group>"; };
+		10DEAF503F471822B4E715BC /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		14FA47AE7BE7007CA657F167 /* ReviewScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewScreen.swift; sourceTree = "<group>"; };
 		17A99EDAB0502DBA8088D72E /* 3DSeen-iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "3DSeen-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		1867E16CD3C9B0B46E98823F /* PBRMaterialTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PBRMaterialTests.swift; sourceTree = "<group>"; };
 		191E7FBB3A8060C3A0D4F62D /* Primitives.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Primitives.swift; sourceTree = "<group>"; };
+		197D3A95570EDF2EBDC4AE03 /* HandoffTrustTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffTrustTests.swift; sourceTree = "<group>"; };
 		20AF247B7CE0D9B6DF319A58 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		2247D2A1179515E2A33AC847 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		24838148F514681A534BA513 /* ComputeStageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputeStageTests.swift; sourceTree = "<group>"; };
@@ -135,6 +170,7 @@
 		2D06C68200886D7865B4EC27 /* SampleData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleData.swift; sourceTree = "<group>"; };
 		2D535C6B22419107CA1BE97C /* StudioComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioComponents.swift; sourceTree = "<group>"; };
 		2ED5C71A1B4B5EFDF6665381 /* 3DSeen-macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "3DSeen-macOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		37B0CBC2BEF43FF4A30B485D /* ScanLifecycleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanLifecycleManager.swift; sourceTree = "<group>"; };
 		3DA53940BBA8FCD5C9ED3794 /* ScanSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanSession.swift; sourceTree = "<group>"; };
 		3FD1D9DF0008E6C70E565D89 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		408269989B88069C5E20274C /* CaptureCoordinatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureCoordinatorView.swift; sourceTree = "<group>"; };
@@ -142,15 +178,18 @@
 		4744A87B322A5AC2A6E1CAD5 /* NerfstudioRuntimeInstallerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NerfstudioRuntimeInstallerTests.swift; sourceTree = "<group>"; };
 		4D346EB2BD18E2A661B3BF1F /* LocalQueueManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalQueueManager.swift; sourceTree = "<group>"; };
 		4EA5E31F28CC4DB785424809 /* MacExportPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacExportPane.swift; sourceTree = "<group>"; };
+		5497D160451FC0508F4E6754 /* HandoffPairingCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffPairingCoordinatorTests.swift; sourceTree = "<group>"; };
 		5A9AC885A17E5D03B3EB54B5 /* NerfstudioSplatTrainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NerfstudioSplatTrainer.swift; sourceTree = "<group>"; };
 		5FF65174650149D9D9FAAADD /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
 		60DC68A1A91B1590CD93B795 /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
+		60DF3F918AC67A5FC851F598 /* HandoffProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffProtocol.swift; sourceTree = "<group>"; };
 		64953E3F4E46190D0E5C36FE /* ComputeDetailCapabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputeDetailCapabilityTests.swift; sourceTree = "<group>"; };
 		68EF972E44A504A2F5E88083 /* ThemeAndRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeAndRenderTests.swift; sourceTree = "<group>"; };
 		69735CC14F7457670ECBD7C6 /* ProcessingStateMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessingStateMachine.swift; sourceTree = "<group>"; };
 		6AD323776CD4D94C47792345 /* ViewerScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewerScreen.swift; sourceTree = "<group>"; };
 		6D83DD0DC72326B02DADE40A /* ComputeCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputeCoordinator.swift; sourceTree = "<group>"; };
 		6DBB988AF570CA6FA57C4DC8 /* ModelExporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelExporterTests.swift; sourceTree = "<group>"; };
+		70A9B012C4A9D6C001FE697B /* ComputeOption.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputeOption.swift; sourceTree = "<group>"; };
 		7285F79EED4C6F44B29292AB /* ModePickerScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModePickerScreen.swift; sourceTree = "<group>"; };
 		7BEF257A4B59A9E6793F948E /* BriefingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingScreen.swift; sourceTree = "<group>"; };
 		81D8872B17C1E43C16BF0E89 /* LiveCaptureStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveCaptureStatus.swift; sourceTree = "<group>"; };
@@ -162,15 +201,22 @@
 		8C95CA27A7E1E731D0B34517 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		8D5C85EEC167D880894CBAD1 /* LiquidGlass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlass.swift; sourceTree = "<group>"; };
 		94267FF59D408E2A692E43BB /* ModelGeometryInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelGeometryInspector.swift; sourceTree = "<group>"; };
+		96BE68CCC1669D6127D359C5 /* HandoffPairingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffPairingCoordinator.swift; sourceTree = "<group>"; };
+		9756B2993AD4E297961CB3B2 /* HandoffCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffCoordinator.swift; sourceTree = "<group>"; };
 		9A2A28C46F8496F999E0A552 /* AutoPilotVisionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoPilotVisionManager.swift; sourceTree = "<group>"; };
 		9C9BF597BE4D5F2AB0C0AF04 /* StudioComponentsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioComponentsTests.swift; sourceTree = "<group>"; };
 		9DAD8A7ADE795A2D03C0A5C7 /* RoomCaptureEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCaptureEngine.swift; sourceTree = "<group>"; };
 		A5404329902D56B5837A2088 /* LibraryScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryScreen.swift; sourceTree = "<group>"; };
 		A62228C3C6D40D57E5609FAF /* MaterialOverrideLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaterialOverrideLibrary.swift; sourceTree = "<group>"; };
+		A7920D74A99B1596A19E73AC /* HandoffProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffProtocolTests.swift; sourceTree = "<group>"; };
+		A8296EF932D5513800A12FEB /* PLYValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PLYValidator.swift; sourceTree = "<group>"; };
+		B10EE64B5BAD71B2E728E7B9 /* 3DSeen-iOSUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "3DSeen-iOSUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		B290292242D89550970068F4 /* ScanLifecycleManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanLifecycleManagerTests.swift; sourceTree = "<group>"; };
 		B31CB2BDB4AAA6266CA396D7 /* PhotogrammetryRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotogrammetryRunner.swift; sourceTree = "<group>"; };
 		BBC667D7ECC9E10091C643D0 /* StudioChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioChrome.swift; sourceTree = "<group>"; };
 		C081084541E03AFFA18E2B22 /* SettingsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStoreTests.swift; sourceTree = "<group>"; };
 		C0DE453E975B978103D45FAD /* ObjectCaptureEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectCaptureEngine.swift; sourceTree = "<group>"; };
+		C4731D2A7790417E6D63A9A5 /* MacHandoffJobJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacHandoffJobJournal.swift; sourceTree = "<group>"; };
 		CB80CB2523BFE5E9C74BBFBB /* BlenderModelConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlenderModelConverter.swift; sourceTree = "<group>"; };
 		CFCC585299A17E4BD48468C3 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		D15C2670C33C1808B927D57A /* 3DSeenApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = 3DSeenApp.swift; sourceTree = "<group>"; };
@@ -178,6 +224,7 @@
 		D699E59014BAC0A8CD7BF80F /* LandscapeCaptureEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LandscapeCaptureEngine.swift; sourceTree = "<group>"; };
 		DF6140FFD36ADB270491891B /* NetworkHandoffManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkHandoffManager.swift; sourceTree = "<group>"; };
 		E047A386A69A590077D0400E /* ModelExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelExporter.swift; sourceTree = "<group>"; };
+		E07651B3FCF956B10B87C371 /* CaptureScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureScreen.swift; sourceTree = "<group>"; };
 		E146E7937333AE7D7FFFDA36 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		E2D63C1AF9F8FD5E2C6AFC43 /* CaptureTelemetryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureTelemetryTests.swift; sourceTree = "<group>"; };
 		E5390766A930F48BB649338F /* GaussianSplat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GaussianSplat.swift; sourceTree = "<group>"; };
@@ -233,6 +280,7 @@
 			children = (
 				D15C2670C33C1808B927D57A /* 3DSeenApp.swift */,
 				3FD1D9DF0008E6C70E565D89 /* Assets.xcassets */,
+				9756B2993AD4E297961CB3B2 /* HandoffCoordinator.swift */,
 				2247D2A1179515E2A33AC847 /* Info.plist */,
 				3D8B70A79B4750B567770036 /* Capture */,
 				98628D8611E4738D47123D78 /* Studio */,
@@ -286,6 +334,7 @@
 				20AF247B7CE0D9B6DF319A58 /* Info.plist */,
 				25E78ECC6BE0728FB2D514A2 /* MacComputePane.swift */,
 				4EA5E31F28CC4DB785424809 /* MacExportPane.swift */,
+				C4731D2A7790417E6D63A9A5 /* MacHandoffJobJournal.swift */,
 				0BEDEB7EFB54C45767689D41 /* MacLibraryPane.swift */,
 				D2EFDC324502E8EE8CDCE1FD /* MacSettingsPane.swift */,
 				8525FA57375C0BE2E9B0AA2F /* MacViewerPane.swift */,
@@ -309,6 +358,7 @@
 			children = (
 				17A99EDAB0502DBA8088D72E /* 3DSeen-iOS.app */,
 				8A6A45AA9079BBCBE58A77A3 /* 3DSeen-iOSTests.xctest */,
+				B10EE64B5BAD71B2E728E7B9 /* 3DSeen-iOSUITests.xctest */,
 				2ED5C71A1B4B5EFDF6665381 /* 3DSeen-macOS.app */,
 				F859450B348E448505DB12BA /* 3DSeen-macOSTests.xctest */,
 			);
@@ -331,6 +381,7 @@
 			children = (
 				1D6D52D2D287382AB01E212F /* iOS */,
 				A2E492D40609B4A0F6FAE727 /* iOS */,
+				A876E605724FC7DB7FB4685C /* iOSUI */,
 				46AEED3F955B86E9A8BEBDF6 /* macOS */,
 				2CB3FB99A80D76BB354915AC /* macOS */,
 				A4B9BBA90BA6CB09C3ED9264 /* Shared */,
@@ -349,6 +400,7 @@
 		98628D8611E4738D47123D78 /* Studio */ = {
 			isa = PBXGroup;
 			children = (
+				70A9B012C4A9D6C001FE697B /* ComputeOption.swift */,
 				E5390766A930F48BB649338F /* GaussianSplat.swift */,
 				5FF65174650149D9D9FAAADD /* Haptics.swift */,
 				BBC667D7ECC9E10091C643D0 /* StudioChrome.swift */,
@@ -375,8 +427,12 @@
 				281F78B7D402BE66E74A9771 /* AutoPilotTests.swift */,
 				E2D63C1AF9F8FD5E2C6AFC43 /* CaptureTelemetryTests.swift */,
 				64953E3F4E46190D0E5C36FE /* ComputeDetailCapabilityTests.swift */,
+				5497D160451FC0508F4E6754 /* HandoffPairingCoordinatorTests.swift */,
+				A7920D74A99B1596A19E73AC /* HandoffProtocolTests.swift */,
+				197D3A95570EDF2EBDC4AE03 /* HandoffTrustTests.swift */,
 				6DBB988AF570CA6FA57C4DC8 /* ModelExporterTests.swift */,
 				1867E16CD3C9B0B46E98823F /* PBRMaterialTests.swift */,
+				B290292242D89550970068F4 /* ScanLifecycleManagerTests.swift */,
 				F7F1EBB08D5A1806B90E8DB7 /* SplatGeneratorTests.swift */,
 				40C30F34558AA0A12627CAB5 /* SplatRoundTripTests.swift */,
 				FC5D2EB4650ACC4A0FB016D7 /* StateMachineTests.swift */,
@@ -391,11 +447,18 @@
 			children = (
 				9A2A28C46F8496F999E0A552 /* AutoPilotVisionManager.swift */,
 				E98F370212A0EB3C878F8F5D /* CaptureQualityAnalyzer.swift */,
+				96BE68CCC1669D6127D359C5 /* HandoffPairingCoordinator.swift */,
+				60DF3F918AC67A5FC851F598 /* HandoffProtocol.swift */,
+				0E9069508A6BB2A6AF3157E7 /* HandoffTransport.swift */,
+				0ABA6E8C22956A44B83CEA87 /* HandoffTrust.swift */,
 				81D8872B17C1E43C16BF0E89 /* LiveCaptureStatus.swift */,
 				4D346EB2BD18E2A661B3BF1F /* LocalQueueManager.swift */,
 				94267FF59D408E2A692E43BB /* ModelGeometryInspector.swift */,
 				DF6140FFD36ADB270491891B /* NetworkHandoffManager.swift */,
+				A8296EF932D5513800A12FEB /* PLYValidator.swift */,
+				10DEAF503F471822B4E715BC /* PrivacyInfo.xcprivacy */,
 				69735CC14F7457670ECBD7C6 /* ProcessingStateMachine.swift */,
+				37B0CBC2BEF43FF4A30B485D /* ScanLifecycleManager.swift */,
 				E146E7937333AE7D7FFFDA36 /* SettingsStore.swift */,
 				2E861A7D7DC905AA9A114D94 /* Compute */,
 				9EC695A77B6EE9DD68D73C1F /* DesignSystem */,
@@ -408,10 +471,20 @@
 			path = Sources/Shared;
 			sourceTree = "<group>";
 		};
+		A876E605724FC7DB7FB4685C /* iOSUI */ = {
+			isa = PBXGroup;
+			children = (
+				0E7DB58CB14F3185D5564E53 /* WizardFlowUITests.swift */,
+			);
+			name = iOSUI;
+			path = Tests/iOSUI;
+			sourceTree = "<group>";
+		};
 		AC6B93B20CF5B66DB2BADFC9 /* Screens */ = {
 			isa = PBXGroup;
 			children = (
 				7BEF257A4B59A9E6793F948E /* BriefingScreen.swift */,
+				E07651B3FCF956B10B87C371 /* CaptureScreen.swift */,
 				F8ABEFAF4C800310DE2199BD /* ComputeScreen.swift */,
 				F5CD56748A9DBC6EEF36004D /* ExportScreen.swift */,
 				A5404329902D56B5837A2088 /* LibraryScreen.swift */,
@@ -436,6 +509,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		A1285B8C102B7FD23D6CB758 /* 3DSeen-iOSUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 71A6BAF299A6FB8976285212 /* Build configuration list for PBXNativeTarget "3DSeen-iOSUITests" */;
+			buildPhases = (
+				AB650D1D43A53276F0B2F4E2 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F59A07D6FD44880AE4CA0518 /* PBXTargetDependency */,
+			);
+			name = "3DSeen-iOSUITests";
+			packageProductDependencies = (
+			);
+			productName = "3DSeen-iOSUITests";
+			productReference = B10EE64B5BAD71B2E728E7B9 /* 3DSeen-iOSUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		A4887E1AD8B7BA1740FD76AD /* 3DSeen-iOS */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 06F24075E535F990A2B572CD /* Build configuration list for PBXNativeTarget "3DSeen-iOS" */;
@@ -526,6 +617,9 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					A1285B8C102B7FD23D6CB758 = {
+						TestTargetID = A4887E1AD8B7BA1740FD76AD;
+					};
 					A4887E1AD8B7BA1740FD76AD = {
 						DevelopmentTeam = "";
 					};
@@ -554,6 +648,7 @@
 			targets = (
 				A4887E1AD8B7BA1740FD76AD /* 3DSeen-iOS */,
 				DFD623BA2B972EB470718C19 /* 3DSeen-iOSTests */,
+				A1285B8C102B7FD23D6CB758 /* 3DSeen-iOSUITests */,
 				C8B195E2C4D9380B04FC7074 /* 3DSeen-macOS */,
 				CE33357D7808BAD7581E4BA6 /* 3DSeen-macOSTests */,
 			);
@@ -566,6 +661,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				23E3AD837941CD24AB72069B /* Assets.xcassets in Resources */,
+				6E21E4326F2462B0AAD4307B /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -574,6 +670,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				771520BE586627B4103B57DF /* Assets.xcassets in Resources */,
+				7035A8234FDEF1B545EBCE57 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -599,8 +696,12 @@
 				0B98DA421C4EC7CFC7DA9F9A /* AutoPilotTests.swift in Sources */,
 				E5D1820F52E8DC53581193E6 /* CaptureTelemetryTests.swift in Sources */,
 				E1D81375B20049AEEEC86FF2 /* ComputeDetailCapabilityTests.swift in Sources */,
+				137225363E194759F2566F11 /* HandoffPairingCoordinatorTests.swift in Sources */,
+				0C17028F1E8678A45B43B9C7 /* HandoffProtocolTests.swift in Sources */,
+				8509104342481E9EFAD8E3BD /* HandoffTrustTests.swift in Sources */,
 				FBAC5E9911D678E6EAF604D1 /* ModelExporterTests.swift in Sources */,
 				AA464BDF86FCE76EDD5F882E /* PBRMaterialTests.swift in Sources */,
+				6EA21C0797D0DFAFB81FB8D8 /* ScanLifecycleManagerTests.swift in Sources */,
 				F6230FCC1FFE9C5BF31111DB /* SplatGeneratorTests.swift in Sources */,
 				D4E47FBFB8E7D4BBDF6CC384 /* SplatRoundTripTests.swift in Sources */,
 				99193E0272843C4E65F36BCE /* StateMachineTests.swift in Sources */,
@@ -620,11 +721,16 @@
 				AF5998B414E507B278960DEA /* ComputeCoordinator.swift in Sources */,
 				AE8F535CD9B1D83E75355533 /* ContentView.swift in Sources */,
 				79B340355294E09310B6B3F4 /* GaussianSplatGenerator.swift in Sources */,
+				EAD320028C8170FC7A2B9907 /* HandoffPairingCoordinator.swift in Sources */,
+				D352A51421B97389F39FD80A /* HandoffProtocol.swift in Sources */,
+				82DD65DADBAEF8C5F5C49CC2 /* HandoffTransport.swift in Sources */,
+				7CB2C697E9AC794ED97338B7 /* HandoffTrust.swift in Sources */,
 				78F70CE5F278A7A9F5DC1775 /* LiquidGlass.swift in Sources */,
 				8C8EA5802776FE10A414F471 /* LiveCaptureStatus.swift in Sources */,
 				497EAD07AE55DB09ABE70E8D /* LocalQueueManager.swift in Sources */,
 				527B29996E4D0FBE5FB7D70C /* MacComputePane.swift in Sources */,
 				8C3C74A66415284C06DED6EF /* MacExportPane.swift in Sources */,
+				0C4D428D7C231182E99C6521 /* MacHandoffJobJournal.swift in Sources */,
 				6C9BC460341656D7D9989649 /* MacLibraryPane.swift in Sources */,
 				9FB6E2DF17A8E287F328DEC7 /* MacSettingsPane.swift in Sources */,
 				0EC4ACA3A3EB77203CEFBFB8 /* MacViewerPane.swift in Sources */,
@@ -634,16 +740,26 @@
 				7E11C5520F3814ACCD8B2C35 /* NerfstudioRuntimeInstaller.swift in Sources */,
 				5844F8C23A2E3B4237B58374 /* NerfstudioSplatTrainer.swift in Sources */,
 				59CC507288BCD9845C86EF8F /* NetworkHandoffManager.swift in Sources */,
+				600EB8544C23613C14495901 /* PLYValidator.swift in Sources */,
 				03B4ADE8AA7091CF9083B02F /* PhotogrammetryRunner.swift in Sources */,
 				32E1BAE7B79519B13D39AFBD /* Primitives.swift in Sources */,
 				8FD1DFD6480E1451FA3A84AF /* ProcessingStateMachine.swift in Sources */,
 				20F1F6A8646BF40AD2EBD899 /* SampleData.swift in Sources */,
+				68A17BE6A3B28525BC8E0DEC /* ScanLifecycleManager.swift in Sources */,
 				1E1F878E6C6326284EEBB948 /* ScanSession.swift in Sources */,
 				9F16E711497D970F8334CDE4 /* ScanSessionMapping.swift in Sources */,
 				B6C39E0C36A28846E3B5A9BD /* SettingsStore.swift in Sources */,
 				6FF8B02A2FB10DE4C91F0A19 /* StudioComponents.swift in Sources */,
 				1434946C9BE38B69039DA59E /* StudioRender.swift in Sources */,
 				7755BF522C59EB3393F6E31E /* Theme.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AB650D1D43A53276F0B2F4E2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2E00DF49ACB24E7730FD7A71 /* WizardFlowUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -657,10 +773,17 @@
 				963C111EC42D504BC96AB7DE /* BriefingScreen.swift in Sources */,
 				115B1546366E464ABE2A4F77 /* CaptureCoordinatorView.swift in Sources */,
 				ACB180BF6FB8355B721C6C8A /* CaptureQualityAnalyzer.swift in Sources */,
+				4467A3C868558569446D39A1 /* CaptureScreen.swift in Sources */,
+				D0CBA0375333C13FC38AFBFF /* ComputeOption.swift in Sources */,
 				2F2DCE8C2176A44226EB08EE /* ComputeScreen.swift in Sources */,
 				534EB7A2FF070AE6780F4B84 /* ExportScreen.swift in Sources */,
 				89017EE14CAC361BE71CB61E /* GaussianSplat.swift in Sources */,
 				112217F082CDBA2987000879 /* GaussianSplatGenerator.swift in Sources */,
+				EE22AADD355AE96D66605E0F /* HandoffCoordinator.swift in Sources */,
+				C23D2E164A9213EFFB51719F /* HandoffPairingCoordinator.swift in Sources */,
+				777FCF8F2A3B4628558342BC /* HandoffProtocol.swift in Sources */,
+				C7EE7BF07BBF072BCF3950FD /* HandoffTransport.swift in Sources */,
+				9F2FB300A619F0A2E8236793 /* HandoffTrust.swift in Sources */,
 				B3D3A2377AD8011EF0B4475E /* Haptics.swift in Sources */,
 				B796705BCBA29BDB14A9363D /* LandscapeCaptureEngine.swift in Sources */,
 				0156D4A3083F0AFD2212E54B /* LibraryScreen.swift in Sources */,
@@ -674,6 +797,7 @@
 				70DA98E80BA39694368960E9 /* ModelGeometryInspector.swift in Sources */,
 				8E700DABEC216E751BB48DA2 /* NetworkHandoffManager.swift in Sources */,
 				C9AD59FF6F58547E4021D6B9 /* ObjectCaptureEngine.swift in Sources */,
+				224C86140570F33A6352D94A /* PLYValidator.swift in Sources */,
 				03B679D586AF0E119F8E1CA1 /* PhotogrammetryRunner.swift in Sources */,
 				B9F6034ED39489AE835575C6 /* Primitives.swift in Sources */,
 				3AEE80DA890B13896C22D33B /* ProcessingStateMachine.swift in Sources */,
@@ -681,6 +805,7 @@
 				0101DB6CF38114299790084E /* ReviewScreen.swift in Sources */,
 				EABE927EC6A92DE33514BC0E /* RoomCaptureEngine.swift in Sources */,
 				6AAFE9E26B2C68818F4D7B4B /* SampleData.swift in Sources */,
+				1B8BAB4E8B4D64F5B877C099 /* ScanLifecycleManager.swift in Sources */,
 				C378704DEF112B1161D98AC7 /* ScanSession.swift in Sources */,
 				1A1D8E12023693854EDA9D67 /* ScanSessionMapping.swift in Sources */,
 				218AC79ED2C3E9E0B6F99A8C /* SettingsScreen.swift in Sources */,
@@ -702,6 +827,11 @@
 			target = A4887E1AD8B7BA1740FD76AD /* 3DSeen-iOS */;
 			targetProxy = E37803EA46531BA05922FF95 /* PBXContainerItemProxy */;
 		};
+		F59A07D6FD44880AE4CA0518 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A4887E1AD8B7BA1740FD76AD /* 3DSeen-iOS */;
+			targetProxy = 7172E8DD48458E79143707E0 /* PBXContainerItemProxy */;
+		};
 		F97EC744E685515C368858A0 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = C8B195E2C4D9380B04FC7074 /* 3DSeen-macOS */;
@@ -710,6 +840,24 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		19F2FDBFDB8972E115048BA8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.adamnolle.3DSeen-iOSUITests";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = "3DSeen-iOS";
+			};
+			name = Debug;
+		};
 		28F186F2A2D2DCAABE3E87BA /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -717,13 +865,16 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Sources/macOS/3DSeen-macOS.entitlements";
 				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Sources/macOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.adamnolle.3DSeen-macOS";
 				PRODUCT_MODULE_NAME = ThreeDSeenMac;
 				SDKROOT = macosx;
@@ -793,6 +944,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Sources/iOS/Info.plist;
@@ -800,6 +952,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.adamnolle.3DSeen-iOS";
 				PRODUCT_MODULE_NAME = ThreeDSeen;
 				SDKROOT = iphoneos;
@@ -814,6 +967,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Sources/iOS/Info.plist;
@@ -821,6 +975,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.adamnolle.3DSeen-iOS";
 				PRODUCT_MODULE_NAME = ThreeDSeen;
 				SDKROOT = iphoneos;
@@ -917,13 +1072,16 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Sources/macOS/3DSeen-macOS.entitlements";
 				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Sources/macOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.adamnolle.3DSeen-macOS";
 				PRODUCT_MODULE_NAME = ThreeDSeenMac;
 				SDKROOT = macosx;
@@ -948,6 +1106,24 @@
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/3DSeen-iOS.app/3DSeen-iOS";
 			};
 			name = Debug;
+		};
+		EF042C0338640065A4F91887 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.adamnolle.3DSeen-iOSUITests";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = "3DSeen-iOS";
+			};
+			name = Release;
 		};
 		F35F51C2B0ACFC83AAB09DAC /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -1020,6 +1196,15 @@
 			buildConfigurations = (
 				D0317DA2A7E21410D515AE70 /* Debug */,
 				9B8B81BD36D5CC62547FE183 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		71A6BAF299A6FB8976285212 /* Build configuration list for PBXNativeTarget "3DSeen-iOSUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				19F2FDBFDB8972E115048BA8 /* Debug */,
+				EF042C0338640065A4F91887 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

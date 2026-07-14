@@ -7,6 +7,7 @@ struct MacComputePane: View {
     @Environment(\.theme) private var theme
     @Binding var section: MacSection
     @ObservedObject var compute: ComputeCoordinator
+    @ObservedObject var network: NetworkHandoffManager
 
     private var currentName: String { compute.outputURL?.deletingPathExtension().lastPathComponent ?? "Incoming scan" }
 
@@ -19,6 +20,18 @@ struct MacComputePane: View {
                 Text("Compute · \(currentName)").font(.sf(15, .bold)).foregroundStyle(theme.ink).lineLimit(1)
                 StTextChip(text: statusText)
                 Spacer(minLength: 0)
+                if compute.queuedRemoteJobCount > 0 {
+                    StButton(title: "Cancel queued (\(compute.queuedRemoteJobCount))", kind: .secondary, size: .sm) {
+                        compute.cancelQueuedRemoteJobs()
+                    }
+                    .accessibilityHint("Cancels every accepted handoff that has not started processing.")
+                }
+                if compute.activeRemoteJobID != nil {
+                    StButton(title: "Cancel active", kind: .secondary, size: .sm) {
+                        compute.cancelActiveRemoteJob()
+                    }
+                    .accessibilityHint("Stops reconstruction and notifies the sending device.")
+                }
                 if compute.peerName != "—" {
                     StChip(tone: .neutral) { StIcon(name: "laptop", size: 13, color: theme.text2); Text(compute.peerName) }
                 }
@@ -56,7 +69,8 @@ struct MacComputePane: View {
     private var pipeline: some View {
         VStack(alignment: .leading, spacing: 0) {
             StLabel(text: "Pipeline · RealityKit")
-            splatOutputPicker.padding(.top, 12)
+            peerConnections.padding(.top, 12)
+            splatOutputPicker.padding(.top, 16)
             VStack(alignment: .leading, spacing: 0) {
                 let stages = ComputeCoordinator.Stage.allCases.filter { $0 != .waiting && $0 != .done }
                 ForEach(Array(stages.enumerated()), id: \.element) { index, stage in
@@ -77,6 +91,36 @@ struct MacComputePane: View {
         .padding(22)
         .frame(maxHeight: .infinity)
         .background(theme.card2)
+    }
+
+    private var peerConnections: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            StLabel(text: "Capture devices")
+            if network.discoveredPeers.isEmpty {
+                Text("No compatible iPhone or iPad discovered")
+                    .font(.sf(12)).foregroundStyle(theme.text3)
+            } else {
+                ForEach(network.discoveredPeers) { peer in
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(peer.displayName).font(.sf(13, .semibold)).foregroundStyle(theme.ink)
+                            Text(peer.connectionState.rawValue.capitalized)
+                                .font(.mono(9.5)).foregroundStyle(theme.text3)
+                        }
+                        Spacer(minLength: 6)
+                        if peer.connectionState == .connected || peer.connectionState == .authenticated {
+                            StTextChip(text: "CONNECTED")
+                        } else {
+                            StButton(title: "Connect", kind: .secondary, size: .sm) {
+                                network.invite(peerID: peer.installationID)
+                            }
+                        }
+                    }
+                    .padding(9)
+                    .background(RoundedRectangle(cornerRadius: 9).fill(theme.fieldFill))
+                }
+            }
+        }
     }
 
     private var splatOutputPicker: some View {

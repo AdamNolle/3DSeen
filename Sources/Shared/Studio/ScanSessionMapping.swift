@@ -28,6 +28,7 @@ public struct ScanLibrarySummary: Equatable {
 /// Maps a persisted ScanSession into the display model used by ScanThumb / Library.
 extension ScanItem {
     init(_ session: ScanSession) {
+        let hasModel = session.displayModelURL != nil
         self.init(
             id: session.id.uuidString,
             name: session.name,
@@ -36,7 +37,29 @@ extension ScanItem {
             mb: session.sizeMB,
             tier: session.tierRaw,
             tone: session.toneRaw,
-            tris: session.triangles
+            tris: session.triangles,
+            primaryAction: Self.libraryAction(for: session, hasModel: hasModel),
+            canExport: session.computeStatus == .completed && hasModel
         )
+    }
+
+    private static func libraryAction(for session: ScanSession, hasModel: Bool) -> ScanLibraryAction {
+        if session.computeStatus == .completed, hasModel { return .view }
+
+        switch session.captureStatus {
+        case .draft, .capturing, .needsRetake, .failed:
+            return .resumeCapture
+        case .captured, .packaged:
+            break
+        }
+
+        switch session.computeStatus {
+        case .failed, .completed:
+            return .retryCompute
+        case .queued, .local, .offloaded:
+            return .resumeCompute
+        case .notStarted:
+            return .resumeReview
+        }
     }
 }

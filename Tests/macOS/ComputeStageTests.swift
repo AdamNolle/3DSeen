@@ -6,6 +6,59 @@ import Darwin
 @MainActor
 final class ComputeStageTests: XCTestCase {
 
+    func testMacHandoffJournalRecoversInterruptedWorkAndRetainsCompletedResultIdentity() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mac-handoff-journal-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("jobs.json")
+        let processing = MacRemoteJobRecord(
+            jobID: UUID(),
+            scanID: UUID(),
+            peerID: HandoffInstallationID(),
+            state: .processing,
+            progress: 0.4,
+            updatedAt: Date()
+        )
+        let completed = MacRemoteJobRecord(
+            jobID: UUID(),
+            scanID: UUID(),
+            peerID: HandoffInstallationID(),
+            state: .completed,
+            progress: 1,
+            updatedAt: Date()
+        )
+        let staleRetry = MacRemoteJobRecord(
+            jobID: UUID(),
+            scanID: completed.scanID,
+            peerID: HandoffInstallationID(),
+            state: .processing,
+            progress: 0.5,
+            updatedAt: Date()
+        )
+        let committedBeforeJournal = MacRemoteJobRecord(
+            jobID: UUID(),
+            scanID: UUID(),
+            peerID: HandoffInstallationID(),
+            state: .processing,
+            progress: 0.9,
+            updatedAt: Date()
+        )
+        let journal = MacHandoffJobJournal(fileURL: url)
+        try journal.upsert(processing)
+        try journal.upsert(completed)
+        try journal.upsert(staleRetry)
+        try journal.upsert(committedBeforeJournal)
+
+        let reopened = MacHandoffJobJournal(fileURL: url)
+        try reopened.recoverInterruptedWork(completedJobIDs: [committedBeforeJournal.jobID])
+
+        XCTAssertEqual(reopened.records[processing.jobID]?.state, .failed)
+        XCTAssertEqual(reopened.records[completed.jobID], completed)
+        XCTAssertEqual(reopened.records[staleRetry.jobID]?.state, .failed)
+        XCTAssertEqual(reopened.records[committedBeforeJournal.jobID]?.state, .completed)
+        XCTAssertEqual(reopened.records[committedBeforeJournal.jobID]?.progress, 1)
+    }
+
     func testTrainerRuntimeRequiresAllCommands() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("trainer-runtime-\(UUID().uuidString)", isDirectory: true)

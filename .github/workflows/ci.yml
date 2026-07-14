@@ -16,9 +16,11 @@ jobs:
     name: SwiftLint
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Install pinned build tools
         run: tools/ci/install-tools.sh
+      - name: Validate default bundle version
+        run: tools/release/validate-version.sh
       - name: Lint (strict)
         run: swiftlint lint --strict --reporter github-actions-logging
 
@@ -26,11 +28,9 @@ jobs:
     name: Build & Test (iOS)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - name: Select Xcode
-        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
-        with:
-          xcode-version: '26.3'
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Select pinned Xcode
+        run: tools/ci/select-xcode.sh 26.3
       - name: Install pinned build tools
         run: tools/ci/install-tools.sh
       - name: Generate project
@@ -68,11 +68,9 @@ jobs:
     name: Build & Test (macOS)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - name: Select Xcode
-        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
-        with:
-          xcode-version: '26.3'
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Select pinned Xcode
+        run: tools/ci/select-xcode.sh 26.3
       - name: Install pinned build tools
         run: tools/ci/install-tools.sh
       - name: Generate project

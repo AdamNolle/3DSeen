@@ -22,8 +22,8 @@ struct ContentView: View {
         Group {
             switch nav.section {
             case .library: MacLibraryPane(section: $nav.section, settings: settings, compute: compute)
-            case .viewer: MacViewerPane(section: $nav.section, compute: compute)
-            case .compute: MacComputePane(section: $nav.section, compute: compute)
+            case .viewer: MacViewerPane(section: $nav.section, compute: compute, settings: settings)
+            case .compute: MacComputePane(section: $nav.section, compute: compute, network: compute.network)
             case .export: MacExportPane(section: $nav.section, compute: compute)
             case .settings: MacSettingsPane(section: $nav.section, settings: settings, compute: compute)
             }
@@ -33,6 +33,29 @@ struct ContentView: View {
         .environment(\.theme, theme)
         .preferredColorScheme(settings.colorScheme)
         .frame(minWidth: 1120, minHeight: 720)
+        .alert("Confirm secure pairing", isPresented: pairingPresented) {
+            Button("Reject", role: .destructive) { respondToFirstPairing(accept: false) }
+            Button("Codes Match") { respondToFirstPairing(accept: true) }
+        } message: {
+            let request = compute.pendingPairingRequests.first
+            Text("Check that \(request?.peer.displayName ?? "the device") shows the same code: \(request?.code ?? "------"). Never approve a different code.")
+        }
+    }
+
+    private var pairingPresented: Binding<Bool> {
+        Binding(
+            get: { !compute.pendingPairingRequests.isEmpty },
+            set: { if !$0, !compute.pendingPairingRequests.isEmpty { respondToFirstPairing(accept: false) } }
+        )
+    }
+
+    private func respondToFirstPairing(accept: Bool) {
+        guard let request = compute.pendingPairingRequests.first else { return }
+        if accept {
+            compute.confirmPairing(request)
+        } else {
+            compute.rejectPairing(request)
+        }
     }
 }
 

@@ -11,9 +11,24 @@ final class SettingsStore: ObservableObject {
     // MARK: Choices
 
     enum Appearance: String, CaseIterable { case system, light, dark }
-    enum DefaultMode: String, CaseIterable { case object, space, landscape }
+    enum DefaultMode: String, CaseIterable { case autoPilot = "auto", object, space, landscape }
     enum QualityTier: String, CaseIterable { case preview, reduced, medium, full, raw }
     enum Units: String, CaseIterable { case centimeters, inches }
+    enum RawArchiveRetention: String, CaseIterable {
+        case keepAll
+        case latest10
+        case latest5
+        case latest1
+
+        var limit: Int? {
+            switch self {
+            case .keepAll: nil
+            case .latest10: 10
+            case .latest5: 5
+            case .latest1: 1
+            }
+        }
+    }
 
     // MARK: Storage
 
@@ -23,6 +38,9 @@ final class SettingsStore: ObservableObject {
         static let qualityTier = "settings.qualityTier"
         static let units = "settings.units"
         static let gridIsList = "settings.gridIsList"
+        static let thermalProtectionEnabled = "settings.thermalProtectionEnabled"
+        static let autoSelectTrustedMac = "settings.autoSelectTrustedMac"
+        static let rawArchiveRetention = "settings.rawArchiveRetention"
     }
 
     private let defaults: UserDefaults
@@ -38,7 +56,7 @@ final class SettingsStore: ObservableObject {
         set { write(newValue, Key.appearance) }
     }
     var defaultMode: DefaultMode {
-        get { read(Key.defaultMode, default: .object) }
+        get { read(Key.defaultMode, default: .autoPilot) }
         set { write(newValue, Key.defaultMode) }
     }
     var qualityTier: QualityTier {
@@ -52,6 +70,18 @@ final class SettingsStore: ObservableObject {
     var gridIsList: Bool {
         get { defaults.bool(forKey: Key.gridIsList) }
         set { objectWillChange.send(); defaults.set(newValue, forKey: Key.gridIsList) }
+    }
+    var thermalProtectionEnabled: Bool {
+        get { (defaults.object(forKey: Key.thermalProtectionEnabled) as? Bool) ?? true }
+        set { objectWillChange.send(); defaults.set(newValue, forKey: Key.thermalProtectionEnabled) }
+    }
+    var autoSelectTrustedMac: Bool {
+        get { (defaults.object(forKey: Key.autoSelectTrustedMac) as? Bool) ?? true }
+        set { objectWillChange.send(); defaults.set(newValue, forKey: Key.autoSelectTrustedMac) }
+    }
+    var rawArchiveRetention: RawArchiveRetention {
+        get { read(Key.rawArchiveRetention, default: .keepAll) }
+        set { write(newValue, Key.rawArchiveRetention) }
     }
 
     // MARK: Derived

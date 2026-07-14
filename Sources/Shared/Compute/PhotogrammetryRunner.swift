@@ -5,6 +5,23 @@ import Combine
 
 /// Declares the detail level a compute destination can actually produce. The requested tier is
 /// preserved for Mac handoff; on-device RealityKit currently produces Reduced output only.
+public enum LocalComputeSafetyPolicy {
+    public static func shouldInterrupt(
+        thermalState: ProcessInfo.ThermalState,
+        protectionEnabled: Bool
+    ) -> Bool {
+        guard protectionEnabled else { return false }
+        switch thermalState {
+        case .serious, .critical:
+            return true
+        case .nominal, .fair:
+            return false
+        @unknown default:
+            return true
+        }
+    }
+}
+
 public enum ComputeDetailCapability {
     public enum Destination: Sendable {
         case onDevice

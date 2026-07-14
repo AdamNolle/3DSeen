@@ -15,10 +15,13 @@ final class SettingsStoreTests: XCTestCase {
         let store = SettingsStore(defaults: suite)
 
         XCTAssertEqual(store.appearance, .system)
-        XCTAssertEqual(store.defaultMode, .object)
+        XCTAssertEqual(store.defaultMode, .autoPilot)
         XCTAssertEqual(store.qualityTier, .full)
         XCTAssertEqual(store.units, .centimeters)
         XCTAssertFalse(store.gridIsList)
+        XCTAssertTrue(store.thermalProtectionEnabled)
+        XCTAssertTrue(store.autoSelectTrustedMac)
+        XCTAssertEqual(store.rawArchiveRetention, .keepAll)
         XCTAssertNil(store.colorScheme)
     }
 
@@ -30,6 +33,9 @@ final class SettingsStoreTests: XCTestCase {
         store.qualityTier = .reduced
         store.units = .inches
         store.gridIsList = true
+        store.thermalProtectionEnabled = false
+        store.autoSelectTrustedMac = false
+        store.rawArchiveRetention = .latest5
 
         // A second store over the same suite reads the persisted values.
         let reopened = SettingsStore(defaults: suite)
@@ -38,6 +44,10 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(reopened.qualityTier, .reduced)
         XCTAssertEqual(reopened.units, .inches)
         XCTAssertTrue(reopened.gridIsList)
+        XCTAssertFalse(reopened.thermalProtectionEnabled)
+        XCTAssertFalse(reopened.autoSelectTrustedMac)
+        XCTAssertEqual(reopened.rawArchiveRetention, .latest5)
+        XCTAssertEqual(reopened.rawArchiveRetention.limit, 5)
         XCTAssertEqual(reopened.colorScheme, .dark)
     }
 
@@ -72,6 +82,56 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(session.weakSpotCount, 3)
     }
 
+    func testVersionedManifestPreservesLifecycleAndDisplayMetadata() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ScanManifestV2Tests-\(UUID())", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try ScanAssetStore(rootDirectory: root)
+        let created = Date(timeIntervalSince1970: 1_700_000_000)
+        let exported = Date(timeIntervalSince1970: 1_700_000_100)
+        let source = ScanSession(
+            creationDate: created,
+            captureMode: .landscape,
+            name: "Garden Arch",
+            sizeMB: 412,
+            tier: "Full",
+            tone: "slate",
+            triangles: "1.2M",
+            captureStatus: .packaged,
+            computeStatus: .offloaded
+        )
+        source.measurements = [
+            ScanMeasurement(
+                start: ScanMeasurementPoint(x: 0, y: 0, z: 0),
+                end: ScanMeasurementPoint(x: 1, y: 0, z: 0),
+                label: "Width"
+            )
+        ]
+        source.appliedMaterialRaw = "stone"
+        source.lastExportedFileName = "garden-arch.obj"
+        source.lastExportedAt = exported
+
+        let manifest = try store.manifest(for: source)
+        try store.writeManifest(manifest)
+        let reopened = try store.loadManifest(for: source.id)
+        let destination = ScanSession(id: source.id, captureMode: .object)
+        destination.apply(manifest: reopened)
+
+        XCTAssertEqual(reopened.schemaVersion, ScanAssetManifest.currentSchemaVersion)
+        XCTAssertEqual(destination.name, "Garden Arch")
+        XCTAssertEqual(destination.creationDate, created)
+        XCTAssertEqual(destination.sizeMB, 412)
+        XCTAssertEqual(destination.tierRaw, "Full")
+        XCTAssertEqual(destination.toneRaw, "slate")
+        XCTAssertEqual(destination.triangles, "1.2M")
+        XCTAssertEqual(destination.captureStatus, .packaged)
+        XCTAssertEqual(destination.computeStatus, .offloaded)
+        XCTAssertEqual(destination.measurements.first?.label, "Width")
+        XCTAssertEqual(destination.appliedMaterialRaw, "stone")
+        XCTAssertEqual(destination.lastExportedFileName, "garden-arch.obj")
+        XCTAssertEqual(destination.lastExportedAt, exported)
+    }
+
     func testModelExporterUsesSessionAssetAndRecordsOutput() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("ModelExporterSessionTests-\(UUID().uuidString)", isDirectory: true)
@@ -86,6 +146,8 @@ final class SettingsStoreTests: XCTestCase {
 
         XCTAssertEqual(output.lastPathComponent, "celestial-bust.usdz")
         XCTAssertEqual(session.lastExportedURL, output)
+        XCTAssertEqual(session.lastExportedFileName, "celestial-bust.usdz")
+        XCTAssertNotNil(session.lastExportedAt)
         XCTAssertTrue(FileManager.default.fileExists(atPath: output.path))
     }
 

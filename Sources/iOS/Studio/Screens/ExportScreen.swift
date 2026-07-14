@@ -7,6 +7,7 @@ import UIKit
 struct ExportScreen: View {
     @Environment(\.theme) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var model: StudioModel
     @Query(sort: \ScanSession.creationDate, order: .reverse) private var scans: [ScanSession]
     @State private var format: ExportFormat = .usdz
@@ -15,6 +16,7 @@ struct ExportScreen: View {
     @State private var exportedMeasurementURL: URL?
     @State private var errorMessage: String?
     @State private var showShareSheet = false
+    @State private var exportTask: Task<Void, Never>?
 
     private var activeScan: ScanSession? {
         if let id = model.activeScanID, let scan = scans.first(where: { $0.id == id }) { return scan }
@@ -41,6 +43,10 @@ struct ExportScreen: View {
         }
         .sheet(isPresented: $showShareSheet) {
             if let exportedURL { ShareSheet(items: shareItems(for: exportedURL)) }
+        }
+        .onDisappear {
+            exportTask?.cancel()
+            exportTask = nil
         }
     }
 
@@ -135,35 +141,50 @@ struct ExportScreen: View {
     }
 
     private func export() {
-        guard let activeScan else { return }
+        guard let activeScan, let sourceModelURL = activeScan.displayModelURL else { return }
         isExporting = true
         exportedURL = nil
         exportedMeasurementURL = nil
         errorMessage = nil
         let selectedFormat = format
-        DispatchQueue.global(qos: .userInitiated).async {
+        let request = ModelExportRequest(
+            scanID: activeScan.id,
+            sourceModelURL: sourceModelURL,
+            fileBaseName: activeScan.exportFileBaseName,
+            measurements: activeScan.measurements
+        )
+        exportTask = Task {
+            defer {
+                isExporting = false
+                exportTask = nil
+            }
             do {
-                let output = try ModelExporter().export(session: activeScan, to: selectedFormat)
-                let measurementOutput: URL?
-                if activeScan.measurements.isEmpty {
-                    measurementOutput = nil
-                } else {
-                    measurementOutput = try MeasurementExporter().exportCSV(
-                        activeScan.measurements,
-                        named: activeScan.exportFileBaseName,
-                        to: output.deletingLastPathComponent()
-                    )
+                let result = try await Task.detached(priority: .userInitiated) {
+                    let output = try ModelExporter().export(request: request, to: selectedFormat)
+                    let measurementOutput = request.measurements.isEmpty
+                        ? nil
+                        : try MeasurementExporter().exportCSV(
+                            request.measurements,
+                            named: request.fileBaseName,
+                            to: output.deletingLastPathComponent()
+                        )
+                    return (output, measurementOutput)
+                }.value
+                try Task.checkCancellation()
+                let assetStore = try ScanAssetStore()
+                try ScanExportProvenanceRecorder.record(
+                    result.0,
+                    on: activeScan,
+                    assetStore: assetStore
+                ) {
+                    try modelContext.save()
                 }
-                DispatchQueue.main.async {
-                    exportedURL = output
-                    exportedMeasurementURL = measurementOutput
-                    isExporting = false
-                }
+                exportedURL = result.0
+                exportedMeasurementURL = result.1
+            } catch is CancellationError {
+                errorMessage = "Export cancelled."
             } catch {
-                DispatchQueue.main.async {
-                    errorMessage = error.localizedDescription
-                    isExporting = false
-                }
+                errorMessage = error.localizedDescription
             }
         }
     }

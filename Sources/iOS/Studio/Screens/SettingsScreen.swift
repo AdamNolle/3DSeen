@@ -1,10 +1,13 @@
 // SettingsScreen.swift — persisted preferences with no placeholder account or device state.
 
+import SwiftData
 import SwiftUI
 
 private enum SettingsSection: Int, CaseIterable, Identifiable {
     case capture
     case display
+    case handoff
+    case storage
 
     var id: Int { rawValue }
 
@@ -12,6 +15,8 @@ private enum SettingsSection: Int, CaseIterable, Identifiable {
         switch self {
         case .capture: return "Capture Defaults"
         case .display: return "Appearance & Units"
+        case .handoff: return "Trusted Devices"
+        case .storage: return "Storage Maintenance"
         }
     }
 
@@ -19,11 +24,14 @@ private enum SettingsSection: Int, CaseIterable, Identifiable {
         switch self {
         case .capture: return "camera"
         case .display: return "light"
+        case .handoff: return "mac"
+        case .storage: return "download"
         }
     }
 }
 
 private let captureModeOptions = [
+    ("auto", "Auto-Pilot"),
     ("object", "Object"),
     ("space", "Space"),
     ("landscape", "Landscape"),
@@ -48,13 +56,26 @@ private let unitOptions = [
     ("inches", "Inches"),
 ]
 
+private let retentionOptions = [
+    ("keepAll", "Keep all raw archives"),
+    ("latest10", "Keep latest 10"),
+    ("latest5", "Keep latest 5"),
+    ("latest1", "Keep latest 1"),
+]
+
 struct SettingsScreen: View {
     @Environment(\.theme) private var theme
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var model: StudioModel
     @EnvironmentObject private var settings: SettingsStore
+    @EnvironmentObject private var handoff: IOSHandoffCoordinator
+    @Query private var savedScans: [ScanSession]
     @State private var activeSection: SettingsSection = .capture
+    @State private var storageAudit = ScanStorageAudit(orphanURLs: [], totalBytes: 0)
+    @State private var storageMessage = ""
+    @State private var isCleaningStorage = false
 
     var body: some View {
         ZStack {
@@ -65,6 +86,7 @@ struct SettingsScreen: View {
                 iPhoneBody
             }
         }
+        .task { await refreshStorageAudit() }
     }
 
     private var iPhoneBody: some View {
@@ -163,9 +185,7 @@ struct SettingsScreen: View {
                     .font(.sf(32, .bold))
                     .foregroundStyle(theme.ink)
                     .padding(.top, 6)
-                Text(activeSection == .capture
-                     ? "Used each time you begin a new scan from the Library."
-                     : "Applied immediately to the interface and model measurements.")
+                Text(activeSectionDescription)
                     .font(.sf(13.5))
                     .foregroundStyle(theme.text2)
                     .padding(.top, 8)
@@ -184,11 +204,150 @@ struct SettingsScreen: View {
                 MenuSettingRow(icon: "cube", label: "Default mode", options: captureModeOptions, selection: defaultModeBinding)
                 StRule()
                 MenuSettingRow(icon: "layers", label: "Default Mac detail tier", options: qualityOptions, selection: qualityBinding)
+                StRule()
+                SettingsRow(icon: "thermal", label: "Thermal protection") {
+                    Toggle("Thermal protection", isOn: thermalProtectionBinding)
+                        .labelsHidden()
+                        .accessibilityHint("Cancels and requeues on-device compute if the device reaches a serious thermal state.")
+                }
             case .display:
                 MenuSettingRow(icon: "light", label: "Appearance", options: appearanceOptions, selection: appearanceBinding)
                 StRule()
                 MenuSettingRow(icon: "ruler", label: "Measurement units", options: unitOptions, selection: unitsBinding)
+            case .handoff:
+                SettingsRow(icon: "laptop", label: "Automatically select trusted Mac") {
+                    Toggle("Automatically select trusted Mac", isOn: autoSelectTrustedMacBinding)
+                        .labelsHidden()
+                        .accessibilityHint("Selects one authenticated Mac on the Compute screen without sending until you confirm.")
+                }
+                StRule()
+                trustedDevices
+            case .storage:
+                MenuSettingRow(
+                    icon: "download",
+                    label: "Raw archive retention",
+                    options: retentionOptions,
+                    selection: rawArchiveRetentionBinding
+                )
+                StRule()
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Retention removes only app-owned raw archives from completed scans. Models, previews, exports, and active scans remain available.")
+                        .font(.sf(12.5))
+                        .foregroundStyle(theme.text3)
+                    StButton(
+                        title: "Apply Raw Retention Now",
+                        kind: .secondary,
+                        size: .sm,
+                        icon: "trash",
+                        full: true
+                    ) { applyRawArchiveRetention() }
+                    .disabled(isCleaningStorage || settings.rawArchiveRetention.limit == nil)
+                }
+                .padding(.vertical, 12)
+                StRule()
+                SettingsRow(icon: "download", label: "Orphaned app storage") {
+                    Text("\(storageAudit.itemCount) items · \(storageAudit.formattedSize)")
+                        .font(.sf(13.5))
+                        .foregroundStyle(theme.text2)
+                }
+                StRule()
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Only directories with no matching saved scan and interrupted deletion staging are eligible. Live scans are never removed.")
+                        .font(.sf(12.5))
+                        .foregroundStyle(theme.text3)
+                    StButton(
+                        title: isCleaningStorage ? "Cleaning…" : "Clean Orphaned Files",
+                        kind: .secondary,
+                        size: .sm,
+                        icon: "trash",
+                        full: true
+                    ) { cleanOrphanedStorage() }
+                    .disabled(isCleaningStorage || storageAudit.itemCount == 0)
+                    if !storageMessage.isEmpty {
+                        Text(storageMessage).font(.sf(12.5)).foregroundStyle(theme.text2)
+                    }
+                }
+                .padding(.vertical, 12)
             }
+        }
+    }
+
+    @ViewBuilder private var trustedDevices: some View {
+        if handoff.trustedPeerIDs.isEmpty {
+            Text("No trusted Macs. Approving a matching six-digit code adds one here.")
+                .font(.sf(13.5))
+                .foregroundStyle(theme.text2)
+                .padding(.vertical, 12)
+        } else {
+            ForEach(Array(handoff.trustedPeerIDs), id: \.self) { peerID in
+                SettingsRow(icon: "mac", label: peerID.rawValue.uuidString) {
+                    Button("Forget", role: .destructive) { handoff.forgetPeer(peerID) }
+                        .accessibilityLabel("Forget trusted Mac \(peerID.rawValue.uuidString)")
+                }
+                if peerID != handoff.trustedPeerIDs.max(by: {
+                    $0.rawValue.uuidString < $1.rawValue.uuidString
+                }) {
+                    StRule()
+                }
+            }
+        }
+    }
+
+    private var activeSectionDescription: String {
+        switch activeSection {
+        case .capture: return "Used each time you begin a new scan from the Library."
+        case .display: return "Applied immediately to the interface and model measurements."
+        case .handoff: return "Revoke Macs that should no longer reconnect without code confirmation."
+        case .storage: return "Review and explicitly remove app-owned files that no longer belong to a saved scan."
+        }
+    }
+
+    private func refreshStorageAudit() async {
+        do {
+            let liveIDs = Set(savedScans.map(\.id))
+            let manager = try ScanLifecycleManager()
+            storageAudit = try await Task.detached(priority: .utility) {
+                try manager.auditStorage(liveScanIDs: liveIDs)
+            }.value
+        } catch {
+            storageMessage = "Storage could not be inspected: \(error.localizedDescription)"
+        }
+    }
+
+    private func applyRawArchiveRetention() {
+        guard !isCleaningStorage, let limit = settings.rawArchiveRetention.limit else { return }
+        isCleaningStorage = true
+        defer { isCleaningStorage = false }
+        do {
+            let manager = try ScanLifecycleManager()
+            let removed = try manager.applyRawArchiveRetention(to: savedScans, keepLatest: limit) {
+                try modelContext.save()
+            }
+            storageMessage = removed == 1
+                ? "Removed 1 old raw archive."
+                : "Removed \(removed) old raw archives."
+        } catch {
+            storageMessage = "Raw retention stopped safely: \(error.localizedDescription)"
+        }
+    }
+
+    private func cleanOrphanedStorage() {
+        guard !isCleaningStorage else { return }
+        isCleaningStorage = true
+        let audit = storageAudit
+        let liveIDs = Set(savedScans.map(\.id))
+        Task {
+            defer { isCleaningStorage = false }
+            do {
+                let manager = try ScanLifecycleManager()
+                try await Task.detached(priority: .utility) {
+                    try manager.clean(audit, liveScanIDs: liveIDs)
+                }.value
+                storageMessage = "Removed \(audit.itemCount) orphaned items."
+            } catch {
+                storageMessage = "Cleanup stopped safely: \(error.localizedDescription)"
+            }
+            await refreshStorageAudit()
         }
     }
 
@@ -202,6 +361,19 @@ struct SettingsScreen: View {
                 set: { settings.qualityTier = SettingsStore.QualityTier(rawValue: $0) ?? .full })
     }
 
+    private var autoSelectTrustedMacBinding: Binding<Bool> {
+        Binding(get: { settings.autoSelectTrustedMac }, set: { settings.autoSelectTrustedMac = $0 })
+    }
+
+    private var rawArchiveRetentionBinding: Binding<String> {
+        Binding(
+            get: { settings.rawArchiveRetention.rawValue },
+            set: {
+                settings.rawArchiveRetention = SettingsStore.RawArchiveRetention(rawValue: $0) ?? .keepAll
+            }
+        )
+    }
+
     private var appearanceBinding: Binding<String> {
         Binding(get: { settings.appearance.rawValue },
                 set: { settings.appearance = SettingsStore.Appearance(rawValue: $0) ?? .system })
@@ -210,6 +382,10 @@ struct SettingsScreen: View {
     private var unitsBinding: Binding<String> {
         Binding(get: { settings.units.rawValue },
                 set: { settings.units = SettingsStore.Units(rawValue: $0) ?? .centimeters })
+    }
+
+    private var thermalProtectionBinding: Binding<Bool> {
+        Binding(get: { settings.thermalProtectionEnabled }, set: { settings.thermalProtectionEnabled = $0 })
     }
 }
 

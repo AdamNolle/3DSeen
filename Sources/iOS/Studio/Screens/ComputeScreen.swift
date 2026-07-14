@@ -4,34 +4,6 @@
 import SwiftUI
 import SwiftData
 
-// MARK: - Option data
-
-struct ComputeOption: Identifiable {
-    let id: String
-    let name: String
-    let icon: String
-    let tag: String
-    var best: Bool = false
-    let stats: [(String, String, Color?)]
-}
-
-extension ComputeOption {
-    /// The available render targets. Performance and battery predictions depend on hardware and
-    /// input images, so this UI deliberately does not invent values before compute starts.
-    static func pair(_ t: Theme, requestedTier: String) -> (mac: ComputeOption, local: ComputeOption) {
-        let macTier = ComputeDetailCapability.effectiveTier(for: .macHandoff, requestedTier: requestedTier)
-        let localTier = ComputeDetailCapability.effectiveTier(for: .onDevice, requestedTier: requestedTier)
-        return (
-            ComputeOption(id: "mac", name: "Mac handoff", icon: "laptop",
-                          tag: "Requested \(macTier) output", best: false,
-                          stats: [("Output", macTier, t.accentText)]),
-            ComputeOption(id: "local", name: "On-device", icon: "chip",
-                          tag: "RealityKit · \(localTier) output",
-                          stats: [("Output", localTier, t.warn)])
-        )
-    }
-}
-
 // MARK: - Screen (size-class router)
 
 struct ComputeScreen: View {
@@ -56,9 +28,11 @@ private struct PhoneComputeBody: View {
     @Environment(\.theme) private var theme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var model: StudioModel
     @EnvironmentObject private var stateMachine: ProcessingStateMachine
-    @StateObject private var network = NetworkHandoffManager()
+    @EnvironmentObject private var handoff: IOSHandoffCoordinator
+    @EnvironmentObject private var settings: SettingsStore
     @StateObject private var localCompute = ScanLocalComputeService()
     @Query(sort: \ScanSession.creationDate, order: .reverse) private var savedScans: [ScanSession]
     @State private var computeTask: Task<Void, Never>?
@@ -73,6 +47,11 @@ private struct PhoneComputeBody: View {
 
     private var isBusy: Bool {
         if computeTask != nil || localCompute.isRunning { return true }
+        if case .computingOffloaded = stateMachine.state { return true }
+        return false
+    }
+
+    private var isOffloaded: Bool {
         if case .computingOffloaded = stateMachine.state { return true }
         return false
     }
@@ -104,6 +83,9 @@ private struct PhoneComputeBody: View {
                     WizardHeader(step: 4, onBack: { model.go(.review) }, onClose: { model.go(.library) })
                     titleBlock
                     handoffCard.padding(.top, 14)
+                    if !handoff.connectedPeers.isEmpty {
+                        peerSelector.padding(.top, 10)
+                    }
                     optionStack.padding(.top, 12)
                 }
                 .padding(.horizontal, 20)
@@ -113,14 +95,38 @@ private struct PhoneComputeBody: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             BottomCTA {
-                StButton(title: primaryActionTitle,
-                         kind: .accent, size: .lg, icon: sel == "mac" ? "laptop" : "chip", full: true) { startCompute() }
-                    .disabled(isBusy || activeScan == nil)
+                if isOffloaded {
+                    HStack(spacing: 10) {
+                        StButton(title: "Cancel handoff", kind: .secondary, size: .lg, full: true) {
+                            cancelHandoff()
+                        }
+                        StButton(title: "Compute here", kind: .accent, size: .lg, icon: "chip", full: true) {
+                            fallbackToLocal()
+                        }
+                    }
+                } else {
+                    StButton(title: primaryActionTitle,
+                             kind: .accent, size: .lg, icon: sel == "mac" ? "laptop" : "chip", full: true) { startCompute() }
+                        .disabled(isBusy || activeScan == nil)
+                }
             }
         }
+        .task { applyPreferredComputeTarget() }
+        .onChange(of: handoff.authenticatedPeerIDs) { _, _ in applyPreferredComputeTarget() }
         .onReceive(localCompute.$progress) { progress in
             guard localCompute.isRunning else { return }
             stateMachine.send(.updateLocalProgress(progress))
+        }
+        .onReceive(handoff.$lastCompletion) { completion in
+            guard let completion, completion.scanID == activeScan?.id else { return }
+            stateMachine.send(.computeCompleted(completion.modelURL))
+            model.go(.viewer)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)) { _ in
+            interruptForThermalStateIfNeeded()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { interruptForBackgroundIfNeeded() }
         }
         .onDisappear {
             computeTask?.cancel()
@@ -149,9 +155,9 @@ private struct PhoneComputeBody: View {
                     }
                     HStack(spacing: 7) {
                         Circle()
-                            .fill(network.connectedPeers.isEmpty ? theme.text3 : theme.good)
+                            .fill(handoff.hasAuthenticatedConnectedPeer ? theme.good : theme.text3)
                             .frame(width: 7, height: 7)
-                        Text(network.connectedPeers.isEmpty ? "NO MAC CONNECTED" : "SECURE LOCAL HANDOFF")
+                        Text(handoff.hasAuthenticatedConnectedPeer ? "AUTHENTICATED MAC READY" : "NO AUTHENTICATED MAC")
                             .font(.mono(9.5, .semibold))
                             .tracking(1)
                             .foregroundStyle(theme.accentText)
@@ -161,8 +167,8 @@ private struct PhoneComputeBody: View {
                 HStack {
                     phoneGlyph
                     VStack(spacing: 2) {
-                        HandoffArc(progress: network.transferProgress).frame(height: 54).accessibilityHidden(true)
-                        Text(network.connectedPeers.isEmpty ? "NO MAC CONNECTED" : "SECURE LOCAL HANDOFF")
+                        HandoffArc(progress: handoff.transferProgress).frame(height: 54).accessibilityHidden(true)
+                        Text(handoff.hasAuthenticatedConnectedPeer ? "AUTHENTICATED MAC READY" : "NO AUTHENTICATED MAC")
                             .font(.mono(9.5)).tracking(1).foregroundStyle(theme.accentText)
                     }
                     .padding(.horizontal, 6)
@@ -170,9 +176,46 @@ private struct PhoneComputeBody: View {
                 }
             }
         }
-        .onAppear {
-            configureNetworkCallbacks()
+    }
+
+    private var peerSelector: some View {
+        Menu {
+            ForEach(handoff.connectedPeers) { peer in
+                Button {
+                    handoff.selectPeer(peer.installationID)
+                } label: {
+                    if handoff.selectedPeerID == peer.installationID {
+                        Label(peer.displayName, systemImage: "checkmark")
+                    } else {
+                        Text(peer.displayName)
+                    }
+                }
+            }
+        } label: {
+            HStack {
+                Text("Render Mac").font(.sf(13, .semibold)).foregroundStyle(theme.ink)
+                Spacer()
+                Text(handoff.selectedPeer?.displayName ?? "Select a Mac")
+                    .font(.sf(13)).foregroundStyle(theme.text2)
+                StIcon(name: "chevDown", size: 12, color: theme.text3)
+            }
+            .padding(.horizontal, 14).frame(height: 42)
+            .background(RoundedRectangle(cornerRadius: 12).fill(theme.fieldFill))
         }
+        .accessibilityLabel("Render Mac")
+        .accessibilityValue(handoff.selectedPeer?.displayName ?? "Not selected")
+    }
+
+    private func applyPreferredComputeTarget() {
+        guard handoff.selectedPeerID == nil else { return }
+        if !settings.autoSelectTrustedMac { sel = "local" }
+        guard let peerID = HandoffPeerSelectionPolicy.preferredPeer(
+            connectedPeers: handoff.connectedPeers,
+            authenticatedPeerIDs: handoff.authenticatedPeerIDs,
+            autoSelect: settings.autoSelectTrustedMac
+        ) else { return }
+        handoff.selectPeer(peerID)
+        sel = "mac"
     }
 
     private var phoneGlyph: some View {
@@ -181,105 +224,23 @@ private struct PhoneComputeBody: View {
 
     private var macGlyph: some View {
         DeviceGlyph(kind: .mac, width: 84,
-                    label: network.connectedPeers.first?.displayName ?? "Mac",
-                    sub: network.connectedPeers.isEmpty ? "NOT CONNECTED" : "CONNECTED",
+                    label: handoff.selectedPeer?.displayName ?? "Mac",
+                    sub: handoff.selectedPeer == nil ? "NOT SELECTED" : "SELECTED",
                     subColor: theme.text3)
     }
 
-    private func configureNetworkCallbacks() {
-        network.onReceiveResultPackage = { url, _ in
-            importResultPackage(url)
-        }
-        network.onSendError = { error in
-            activeScan?.computeStatusRaw = ScanComputeStatus.failed.rawValue
-            stateMachine.send(.errorOccurred("Mac handoff failed: \(error.localizedDescription)"))
-        }
+    private func cancelHandoff() {
+        guard let activeScan else { return }
+        handoff.cancel(scan: activeScan)
+        stateMachine.send(.reset)
     }
 
-    private func sendActiveScanToMacIfPossible() {
-        guard let activeScan else {
-            stateMachine.send(.errorOccurred("No active scan is ready for Mac handoff."))
-            return
-        }
-        guard let rawArchiveURL = activeScan.rawArchiveURL else {
-            activeScan.computeStatusRaw = ScanComputeStatus.failed.rawValue
-            stateMachine.send(.errorOccurred("Capture package is missing for Mac handoff."))
-            return
-        }
-        let handoffArchive: URL
-        do {
-            handoffArchive = try ScanHandoffArchive.package(
-                rawArchiveURL,
-                captureQualityReport: activeScan.captureQualityReport
-            )
-        } catch {
-            activeScan.computeStatusRaw = ScanComputeStatus.failed.rawValue
-            stateMachine.send(.errorOccurred(error.localizedDescription))
-            return
-        }
-
-        guard network.sendScanToFirstPeer(
-            handoffArchive,
-            metadata: ScanHandoffMetadata(
-                scanID: activeScan.id,
-                captureMode: activeScan.captureMode,
-                detailTier: activeScan.tierRaw
-            )
-        ) else {
-            activeScan.computeStatusRaw = ScanComputeStatus.queued.rawValue
-            stateMachine.send(.errorOccurred("No Mac is connected for handoff. Choose on-device compute or connect a Mac."))
-            return
-        }
-        activeScan.computeStatusRaw = ScanComputeStatus.offloaded.rawValue
-        stateMachine.send(.offloadToMac)
-        stateMachine.send(.updateOffloadStatus("Sent \(handoffArchive.lastPathComponent) to Mac."))
-    }
-
-    private func importResultPackage(_ packageURL: URL) {
-        defer { network.removeReceivedResource(packageURL) }
-        var importedScan: ScanSession?
-        do {
-            let fm = FileManager.default
-            let importDir = fm.temporaryDirectory.appendingPathComponent("3dseen-result-import-\(UUID().uuidString)", isDirectory: true)
-            try fm.createDirectory(at: importDir, withIntermediateDirectories: true)
-            defer { try? fm.removeItem(at: importDir) }
-
-            let result = try ScanResultPackage().unpack(packageURL, to: importDir)
-            let manifest = result.manifest
-            guard let targetScan = savedScans.first(where: { $0.id == manifest.scanID }) else {
-                throw CocoaError(.fileReadUnknown)
-            }
-            importedScan = targetScan
-            let store = try ScanAssetStore()
-            let destination = try store.importCapture(from: result.modelURL, for: targetScan.id)
-            let previewDestination = try result.previewPLYURL.map {
-                try store.importCapture(from: $0, for: targetScan.id)
-            }
-
-            targetScan.markComputed(
-                modelURL: destination,
-                usdzURL: destination.pathExtension.lowercased() == "usdz" ? destination : nil,
-                previewPLYURL: previewDestination,
-                previewPLYKind: manifest.previewPLYKind
-            )
-            targetScan.captureModeRaw = manifest.captureMode.rawValue
-            targetScan.tierRaw = manifest.detailTier
-            targetScan.frameCount = max(targetScan.frameCount, manifest.frameCount)
-            targetScan.coveragePercent = max(targetScan.coveragePercent, manifest.coveragePercent)
-            targetScan.weakSpotCount = manifest.weakSpotCount
-            if let report = manifest.captureQualityReport {
-                targetScan.captureQualityReport = report
-            }
-            targetScan.triangles = ModelGeometryInspector.inspect(modelURL: destination)?.formattedTriangleCount ?? "Unavailable"
-            try store.writeManifest(try store.manifest(for: targetScan))
-            try modelContext.save()
-            if model.activeScanID == targetScan.id {
-                stateMachine.send(.computeCompleted(destination))
-            }
-        } catch {
-            importedScan?.computeStatusRaw = ScanComputeStatus.failed.rawValue
-            stateMachine.send(.errorOccurred("The returned Mac result could not be matched to its source scan. \(error.localizedDescription)"))
-        }
+    private func fallbackToLocal() {
+        guard let activeScan else { return }
+        handoff.fallbackToLocal(scan: activeScan)
+        stateMachine.send(.reset)
+        sel = "local"
+        startCompute()
     }
 
     private func startCompute() {
@@ -289,9 +250,11 @@ private struct PhoneComputeBody: View {
             return
         }
         if sel == "mac" {
-            activeScan.computeStatusRaw = ScanComputeStatus.offloaded.rawValue
             stateMachine.send(.userSelectsComputeMode(.offload))
-            sendActiveScanToMacIfPossible()
+            if handoff.startOffload(scan: activeScan) {
+                stateMachine.send(.offloadToMac)
+                stateMachine.send(.updateOffloadStatus("Waiting for \(handoff.selectedPeer?.displayName ?? "Mac") to accept the job."))
+            }
         } else {
             activeScan.computeStatusRaw = ScanComputeStatus.local.rawValue
             stateMachine.send(.userSelectsComputeMode(.local))
@@ -321,6 +284,37 @@ private struct PhoneComputeBody: View {
         }
     }
 
+    private func interruptForThermalStateIfNeeded() {
+        guard LocalComputeSafetyPolicy.shouldInterrupt(
+            thermalState: ProcessInfo.processInfo.thermalState,
+            protectionEnabled: settings.thermalProtectionEnabled
+        ) else { return }
+        interruptLocalCompute(
+            message: "On-device compute stopped because the device reached a serious thermal state. The scan was requeued.",
+            thermal: true
+        )
+    }
+
+    private func interruptForBackgroundIfNeeded() {
+        interruptLocalCompute(
+            message: "On-device compute stopped when 3DSeen entered the background. The scan was requeued and can be resumed.",
+            thermal: false
+        )
+    }
+
+    private func interruptLocalCompute(message: String, thermal: Bool) {
+        guard localCompute.isRunning, let activeScan else { return }
+        activeScan.computeStatusRaw = ScanComputeStatus.queued.rawValue
+        try? modelContext.save()
+        if thermal, let savedStateURL = activeScan.rawArchiveURL {
+            stateMachine.send(.thermalCritical(savedStateURL: savedStateURL))
+        } else {
+            stateMachine.send(.errorOccurred(message))
+        }
+        computeTask?.cancel()
+        localCompute.cancel()
+    }
+
     private var optionStack: some View {
         VStack(spacing: 10) {
             ForEach(options) { opt in
@@ -335,9 +329,11 @@ private struct PhoneComputeBody: View {
 private struct PadComputeBody: View {
     @Environment(\.theme) private var theme
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var model: StudioModel
     @EnvironmentObject private var stateMachine: ProcessingStateMachine
-    @StateObject private var network = NetworkHandoffManager()
+    @EnvironmentObject private var handoff: IOSHandoffCoordinator
+    @EnvironmentObject private var settings: SettingsStore
     @StateObject private var localCompute = ScanLocalComputeService()
     @Query(sort: \ScanSession.creationDate, order: .reverse) private var savedScans: [ScanSession]
     @State private var computeTask: Task<Void, Never>?
@@ -356,16 +352,24 @@ private struct PadComputeBody: View {
         return false
     }
 
+    private var isOffloaded: Bool {
+        if case .computingOffloaded = stateMachine.state { return true }
+        return false
+    }
+
     var body: some View {
         ZStack {
             theme.bg.ignoresSafeArea()
             VStack(spacing: 0) {
                 PadComputeHeader(onCompute: startCompute)
                     .disabled(isBusy)
+                if !handoff.connectedPeers.isEmpty {
+                    peerSelector.padding(.top, 10)
+                }
                 PadHubCard(
                     sel: $sel,
-                    peerName: network.connectedPeers.first?.displayName,
-                    transferProgress: network.transferProgress,
+                    peerName: handoff.selectedPeer?.displayName,
+                    transferProgress: handoff.transferProgress,
                     scanSizeText: activeScan.map { "\($0.sizeMB) MB" } ?? "Pending",
                     requestedTier: activeScan?.tierRaw ?? model.selectedDetailTier
                 )
@@ -373,23 +377,86 @@ private struct PadComputeBody: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .padding(24)
-        }
-        .onAppear {
-            network.onReceiveResultPackage = { url, _ in importResultPackage(url) }
-            network.onSendError = { error in
-                activeScan?.computeStatusRaw = ScanComputeStatus.failed.rawValue
-                stateMachine.send(.errorOccurred("Mac handoff failed: \(error.localizedDescription)"))
+            if isOffloaded {
+                VStack {
+                    Spacer()
+                    HStack(spacing: 10) {
+                        StButton(title: "Cancel handoff", kind: .secondary, size: .md) {
+                            cancelHandoff()
+                        }
+                        StButton(title: "Compute here", kind: .accent, size: .md, icon: "chip") {
+                            fallbackToLocal()
+                        }
+                    }
+                    .padding(24)
+                }
             }
+        }
+        .task { applyPreferredComputeTarget() }
+        .onChange(of: handoff.authenticatedPeerIDs) { _, _ in applyPreferredComputeTarget() }
+        .onReceive(handoff.$lastCompletion) { completion in
+            guard let completion, completion.scanID == activeScan?.id else { return }
+            stateMachine.send(.computeCompleted(completion.modelURL))
+            model.go(.viewer)
         }
         .onReceive(localCompute.$progress) { progress in
             guard localCompute.isRunning else { return }
             stateMachine.send(.updateLocalProgress(progress))
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)) { _ in
+            interruptForThermalStateIfNeeded()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { interruptForBackgroundIfNeeded() }
         }
         .onDisappear {
             computeTask?.cancel()
             computeTask = nil
             localCompute.cancel()
         }
+    }
+
+    private var peerSelector: some View {
+        HStack {
+            StLabel(text: "Approved render Mac")
+            Spacer()
+            Menu(handoff.selectedPeer?.displayName ?? "Select a Mac") {
+                ForEach(handoff.connectedPeers) { peer in
+                    Button(peer.displayName) { handoff.selectPeer(peer.installationID) }
+                }
+            }
+            .accessibilityLabel("Approved render Mac")
+            .accessibilityValue(handoff.selectedPeer?.displayName ?? "Not selected")
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 42)
+        .background(RoundedRectangle(cornerRadius: 12).fill(theme.fieldFill))
+    }
+
+    private func applyPreferredComputeTarget() {
+        guard handoff.selectedPeerID == nil else { return }
+        if !settings.autoSelectTrustedMac { sel = "local" }
+        guard let peerID = HandoffPeerSelectionPolicy.preferredPeer(
+            connectedPeers: handoff.connectedPeers,
+            authenticatedPeerIDs: handoff.authenticatedPeerIDs,
+            autoSelect: settings.autoSelectTrustedMac
+        ) else { return }
+        handoff.selectPeer(peerID)
+        sel = "mac"
+    }
+
+    private func cancelHandoff() {
+        guard let activeScan else { return }
+        handoff.cancel(scan: activeScan)
+        stateMachine.send(.reset)
+    }
+
+    private func fallbackToLocal() {
+        guard let activeScan else { return }
+        handoff.fallbackToLocal(scan: activeScan)
+        stateMachine.send(.reset)
+        sel = "local"
+        startCompute("local")
     }
 
     private func startCompute(_ target: String) {
@@ -400,38 +467,11 @@ private struct PadComputeBody: View {
         }
 
         if target == "mac" {
-            guard let rawArchiveURL = activeScan.rawArchiveURL else {
-                activeScan.computeStatusRaw = ScanComputeStatus.failed.rawValue
-                stateMachine.send(.errorOccurred("Capture package is missing for Mac handoff."))
-                return
-            }
-            let handoffArchive: URL
-            do {
-                handoffArchive = try ScanHandoffArchive.package(
-                    rawArchiveURL,
-                    captureQualityReport: activeScan.captureQualityReport
-                )
-            } catch {
-                activeScan.computeStatusRaw = ScanComputeStatus.failed.rawValue
-                stateMachine.send(.errorOccurred(error.localizedDescription))
-                return
-            }
             stateMachine.send(.userSelectsComputeMode(.offload))
-            guard network.sendScanToFirstPeer(
-                handoffArchive,
-                metadata: ScanHandoffMetadata(
-                    scanID: activeScan.id,
-                    captureMode: activeScan.captureMode,
-                    detailTier: activeScan.tierRaw
-                )
-            ) else {
-                activeScan.computeStatusRaw = ScanComputeStatus.queued.rawValue
-                stateMachine.send(.errorOccurred("No Mac is connected for handoff. Choose on-device compute or connect a Mac."))
-                return
+            if handoff.startOffload(scan: activeScan) {
+                stateMachine.send(.offloadToMac)
+                stateMachine.send(.updateOffloadStatus("Waiting for \(handoff.selectedPeer?.displayName ?? "Mac") to accept the job."))
             }
-            activeScan.computeStatusRaw = ScanComputeStatus.offloaded.rawValue
-            stateMachine.send(.offloadToMac)
-            stateMachine.send(.updateOffloadStatus("Sent \(handoffArchive.lastPathComponent) to Mac."))
         } else {
             activeScan.computeStatusRaw = ScanComputeStatus.local.rawValue
             stateMachine.send(.userSelectsComputeMode(.local))
@@ -461,52 +501,35 @@ private struct PadComputeBody: View {
         }
     }
 
-    private func importResultPackage(_ packageURL: URL) {
-        defer { network.removeReceivedResource(packageURL) }
-        var importedScan: ScanSession?
-        do {
-            let fm = FileManager.default
-            let importDirectory = fm.temporaryDirectory
-                .appendingPathComponent("3dseen-result-import-\(UUID().uuidString)", isDirectory: true)
-            try fm.createDirectory(at: importDirectory, withIntermediateDirectories: true)
-            defer { try? fm.removeItem(at: importDirectory) }
+    private func interruptForThermalStateIfNeeded() {
+        guard LocalComputeSafetyPolicy.shouldInterrupt(
+            thermalState: ProcessInfo.processInfo.thermalState,
+            protectionEnabled: settings.thermalProtectionEnabled
+        ) else { return }
+        interruptLocalCompute(
+            message: "On-device compute stopped because the device reached a serious thermal state. The scan was requeued.",
+            thermal: true
+        )
+    }
 
-            let result = try ScanResultPackage().unpack(packageURL, to: importDirectory)
-            guard let targetScan = savedScans.first(where: { $0.id == result.manifest.scanID }) else {
-                throw CocoaError(.fileReadUnknown)
-            }
-            importedScan = targetScan
-            let store = try ScanAssetStore()
-            let destination = try store.importCapture(from: result.modelURL, for: targetScan.id)
-            let previewDestination = try result.previewPLYURL.map {
-                try store.importCapture(from: $0, for: targetScan.id)
-            }
+    private func interruptForBackgroundIfNeeded() {
+        interruptLocalCompute(
+            message: "On-device compute stopped when 3DSeen entered the background. The scan was requeued and can be resumed.",
+            thermal: false
+        )
+    }
 
-            targetScan.markComputed(
-                modelURL: destination,
-                usdzURL: destination.pathExtension.lowercased() == "usdz" ? destination : nil,
-                previewPLYURL: previewDestination,
-                previewPLYKind: result.manifest.previewPLYKind
-            )
-            targetScan.captureModeRaw = result.manifest.captureMode.rawValue
-            targetScan.tierRaw = result.manifest.detailTier
-            targetScan.frameCount = max(targetScan.frameCount, result.manifest.frameCount)
-            targetScan.coveragePercent = max(targetScan.coveragePercent, result.manifest.coveragePercent)
-            targetScan.weakSpotCount = result.manifest.weakSpotCount
-            if let report = result.manifest.captureQualityReport {
-                targetScan.captureQualityReport = report
-            }
-            targetScan.triangles = ModelGeometryInspector.inspect(modelURL: destination)?.formattedTriangleCount ?? "Unavailable"
-            try store.writeManifest(try store.manifest(for: targetScan))
-            try modelContext.save()
-            if model.activeScanID == targetScan.id {
-                stateMachine.send(.computeCompleted(destination))
-                model.go(.viewer)
-            }
-        } catch {
-            importedScan?.computeStatusRaw = ScanComputeStatus.failed.rawValue
-            stateMachine.send(.errorOccurred("The returned Mac result could not be matched to its source scan. \(error.localizedDescription)"))
+    private func interruptLocalCompute(message: String, thermal: Bool) {
+        guard localCompute.isRunning, let activeScan else { return }
+        activeScan.computeStatusRaw = ScanComputeStatus.queued.rawValue
+        try? modelContext.save()
+        if thermal, let savedStateURL = activeScan.rawArchiveURL {
+            stateMachine.send(.thermalCritical(savedStateURL: savedStateURL))
+        } else {
+            stateMachine.send(.errorOccurred(message))
         }
+        computeTask?.cancel()
+        localCompute.cancel()
     }
 }
 

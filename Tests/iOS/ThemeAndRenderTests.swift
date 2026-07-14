@@ -27,9 +27,50 @@ final class StudioScreenTests: XCTestCase {
 
     func testFlowOrder() {
         let flow = StudioModel().flow
-        XCTAssertEqual(flow.first, .library)
-        XCTAssertEqual(flow.last, .settings)
+        XCTAssertEqual(
+            flow,
+            [.library, .mode, .briefing, .quality, .capture, .review, .compute, .viewer, .export, .settings]
+        )
         XCTAssertEqual(flow.count, StudioScreen.allCases.count)
+    }
+
+    @MainActor
+    func testWizardNavigationReachesRoutedCaptureStep() {
+        let model = StudioModel(initialScreen: .mode)
+        model.next()
+        XCTAssertEqual(model.screen, .briefing)
+        model.next()
+        XCTAssertEqual(model.screen, .quality)
+        model.next()
+        XCTAssertEqual(model.screen, .capture)
+        model.next()
+        XCTAssertEqual(model.screen, .review)
+    }
+
+    @MainActor
+    func testCompletedMacResultRoutesSelectedScanToViewer() {
+        let model = StudioModel(initialScreen: .library)
+        let scanID = UUID()
+
+        model.showCompletedScan(scanID)
+
+        XCTAssertEqual(model.activeScanID, scanID)
+        XCTAssertEqual(model.screen, .viewer)
+    }
+
+    func testUSDZQuickLookRequiresAnExistingUSDZFile() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("quick-look-\(UUID())", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let usdz = root.appendingPathComponent("model.usdz")
+        let obj = root.appendingPathComponent("model.obj")
+        try Data("fixture".utf8).write(to: usdz)
+        try Data("fixture".utf8).write(to: obj)
+
+        XCTAssertEqual(USDZPresentationPolicy.eligibleURL(usdz), usdz)
+        XCTAssertNil(USDZPresentationPolicy.eligibleURL(obj))
+        XCTAssertNil(USDZPresentationPolicy.eligibleURL(root.appendingPathComponent("missing.usdz")))
     }
 
     func testNewStudioModelUsesTheFullDetailDefault() {

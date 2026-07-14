@@ -1,0 +1,52 @@
+name: Release Dry Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Marketing version to validate
+        required: true
+        default: 1.0.0
+      build_number:
+        description: Positive integer build number
+        required: true
+        default: '1'
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'project.yml'
+      - 'Sources/**/Info.plist'
+      - 'Sources/Shared/PrivacyInfo.xcprivacy'
+      - 'tools/release/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-dry-run-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Credential-free Release validation
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Select pinned Xcode
+        run: tools/ci/select-xcode.sh 26.3
+      - name: Install pinned build tools
+        run: tools/ci/install-tools.sh
+      - name: Ensure Metal Toolchain
+        run: xcodebuild -downloadComponent MetalToolchain 2>/dev/null || true
+      - name: Run release dry run
+        env:
+          RELEASE_VERSION: ${{ inputs.version || '1.0.0' }}
+          BUILD_NUMBER: ${{ inputs.build_number || github.run_number }}
+        run: tools/release/dry-run.sh
+      - name: Upload unsigned validation bundles
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: release-dry-run-${{ github.run_id }}
+          path: |
+            build/release-dry-run/ios/Build/Products/Release-iphoneos/3DSeen-iOS.app
+            build/release-dry-run/mac/Build/Products/Release/3DSeen-macOS.app

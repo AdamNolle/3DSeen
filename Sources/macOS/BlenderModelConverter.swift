@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// macOS-only USDZ converter backed by a locally installed Blender. It is intentionally opt-in:
@@ -95,7 +96,7 @@ public struct BlenderModelConverter: Sendable {
     }
 
     @discardableResult
-    public func convert(sourceURL: URL, to format: ExportFormat, outputURL: URL) throws -> URL {
+    public func convert(sourceURL: URL, to format: ExportFormat, outputURL: URL) async throws -> URL {
         guard let runtime else { throw ConverterError.unavailable }
         guard supports(format) else { throw ConverterError.unsupportedFormat(format) }
         guard FileManager.default.fileExists(atPath: sourceURL.path) else {
@@ -130,8 +131,7 @@ public struct BlenderModelConverter: Sendable {
         )
         let process = Process()
         let outputPipe = Pipe()
-        process.executableURL = command.executableURL
-        process.arguments = command.arguments
+        Self.configureIsolatedProcess(process, command: command)
         process.standardOutput = outputPipe
         process.standardError = outputPipe
 
@@ -140,8 +140,15 @@ public struct BlenderModelConverter: Sendable {
         } catch {
             throw ConverterError.processFailed(error.localizedDescription)
         }
-        let output = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        let output = await withTaskCancellationHandler {
+            await Task.detached(priority: .utility) {
+                outputPipe.fileHandleForReading.readDataToEndOfFile()
+            }.value
+        } onCancel: {
+            Self.terminateProcessGroup(process)
+        }
         process.waitUntilExit()
+        if Task.isCancelled { throw CancellationError() }
         guard process.terminationStatus == 0 else {
             let detail = String(data: output, encoding: .utf8) ?? "Blender exited with status \(process.terminationStatus)."
             throw ConverterError.processFailed(String(detail.suffix(900)).trimmingCharacters(in: .whitespacesAndNewlines))
@@ -155,6 +162,40 @@ public struct BlenderModelConverter: Sendable {
             try fileManager.moveItem(at: stagingURL, to: outputURL)
         }
         return outputURL
+    }
+
+    private static func configureIsolatedProcess(_ process: Process, command: Command) {
+        let launcher = URL(fileURLWithPath: "/usr/bin/python3")
+        if FileManager.default.isExecutableFile(atPath: launcher.path) {
+            process.executableURL = launcher
+            process.arguments = ["-c", processGroupLauncher, command.executableURL.path] + command.arguments
+        } else {
+            process.executableURL = command.executableURL
+            process.arguments = command.arguments
+        }
+    }
+
+    private static let processGroupLauncher = """
+    import os, sys
+    try:
+        os.setsid()
+    except PermissionError:
+        try:
+            os.setpgid(0, 0)
+        except PermissionError:
+            pass
+    os.execv(sys.argv[1], sys.argv[1:])
+    """
+
+    nonisolated private static func terminateProcessGroup(_ process: Process) {
+        let identifier = process.processIdentifier
+        guard identifier > 0 else { return }
+        if kill(-identifier, SIGTERM) != 0 {
+            process.terminate()
+        }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) {
+            if kill(-identifier, 0) == 0 { _ = kill(-identifier, SIGKILL) }
+        }
     }
 
     public static func isValidOutput(at url: URL, for format: ExportFormat) -> Bool {

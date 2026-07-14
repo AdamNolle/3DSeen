@@ -91,8 +91,13 @@ final class NerfstudioRuntimeInstallerTests: XCTestCase {
         )
         let installer = NerfstudioRuntimeInstaller(paths: paths, colmapInstalled: false)
         let task = Task { try await installer.install() }
-        for _ in 0..<40 where !fm.fileExists(atPath: childPIDURL.path) {
+        for _ in 0..<200 where !fm.fileExists(atPath: childPIDURL.path) {
             try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        guard fm.fileExists(atPath: childPIDURL.path) else {
+            task.cancel()
+            _ = try? await task.value
+            return XCTFail("The disposable installer process did not launch within 10 seconds.")
         }
         let childPID = try XCTUnwrap(
             Int32(String(contentsOf: childPIDURL).trimmingCharacters(in: .whitespacesAndNewlines))

@@ -16,6 +16,8 @@ public final class ScanSession {
     /// Distinguishes an actual trained radiance field from a geometry-derived viewer preview.
     public var previewPLYKindRaw: String = SplatPreviewKind.geometryPreview.rawValue
     public var lastExportedURL: URL?
+    public var lastExportedFileName: String = ""
+    public var lastExportedAt: Date?
     public var captureStatusRaw: String
     public var computeStatusRaw: String
 
@@ -134,6 +136,8 @@ public final class ScanSession {
         self.previewPLYURL = previewPLYURL
         self.previewPLYKindRaw = previewPLYKind.rawValue
         self.lastExportedURL = nil
+        self.lastExportedFileName = ""
+        self.lastExportedAt = nil
         self.captureStatusRaw = captureStatus.rawValue
         self.computeStatusRaw = computeStatus.rawValue
         self.name = name
@@ -254,6 +258,9 @@ public enum SplatPreviewKind: String, Codable, CaseIterable, Sendable {
 }
 
 public struct ScanAssetManifest: Codable, Equatable, Sendable {
+    public static let currentSchemaVersion = 2
+
+    public var schemaVersion: Int?
     public var scanID: UUID
     public var captureModeRaw: String
     public var detailTier: String
@@ -274,6 +281,22 @@ public struct ScanAssetManifest: Codable, Equatable, Sendable {
     public var weakSpotCount: Int
     public var captureQualityReport: CaptureQualityReport?
 
+    // Optional v2 metadata keeps v1 manifests decodable without a custom migration decoder.
+    public var displayName: String?
+    public var creationDate: Date?
+    public var sizeMB: Int?
+    public var toneRaw: String?
+    public var triangles: String?
+    public var measurements: [ScanMeasurement]?
+    public var captureStatusRaw: String?
+    public var computeStatusRaw: String?
+    public var appliedMaterialRaw: String?
+    public var lastExportedFileName: String?
+    public var lastExportedAt: Date?
+    /// Optional source job identity lets the Mac distinguish a newly committed retry from an older
+    /// retained result for the same scan during crash recovery.
+    public var handoffJobID: UUID?
+
     public var captureMode: CaptureMode {
         CaptureMode(rawValue: captureModeRaw) ?? .object
     }
@@ -290,7 +313,21 @@ public struct ScanAssetManifest: Codable, Equatable, Sendable {
                 frameCount: Int = 0,
                 coveragePercent: Int = 0,
                 weakSpotCount: Int = 0,
-                captureQualityReport: CaptureQualityReport? = nil) {
+                captureQualityReport: CaptureQualityReport? = nil,
+                displayName: String? = nil,
+                creationDate: Date? = nil,
+                sizeMB: Int? = nil,
+                toneRaw: String? = nil,
+                triangles: String? = nil,
+                measurements: [ScanMeasurement]? = nil,
+                captureStatus: ScanCaptureStatus? = nil,
+                computeStatus: ScanComputeStatus? = nil,
+                appliedMaterialRaw: String? = nil,
+                lastExportedFileName: String? = nil,
+                lastExportedAt: Date? = nil,
+                handoffJobID: UUID? = nil,
+                schemaVersion: Int? = nil) {
+        self.schemaVersion = schemaVersion
         self.scanID = scanID
         self.captureModeRaw = captureMode.rawValue
         self.detailTier = detailTier
@@ -304,6 +341,18 @@ public struct ScanAssetManifest: Codable, Equatable, Sendable {
         self.coveragePercent = coveragePercent
         self.weakSpotCount = weakSpotCount
         self.captureQualityReport = captureQualityReport
+        self.displayName = displayName
+        self.creationDate = creationDate
+        self.sizeMB = sizeMB
+        self.toneRaw = toneRaw
+        self.triangles = triangles
+        self.measurements = measurements
+        self.captureStatusRaw = captureStatus?.rawValue
+        self.computeStatusRaw = computeStatus?.rawValue
+        self.appliedMaterialRaw = appliedMaterialRaw
+        self.lastExportedFileName = lastExportedFileName
+        self.lastExportedAt = lastExportedAt
+        self.handoffJobID = handoffJobID
     }
 }
 
@@ -321,7 +370,18 @@ public extension ScanSession {
         coveragePercent = manifest.coveragePercent
         weakSpotCount = manifest.weakSpotCount
         captureQualityReport = manifest.captureQualityReport
-        captureStatusRaw = manifest.weakSpotCount > 0 ? ScanCaptureStatus.needsRetake.rawValue : ScanCaptureStatus.captured.rawValue
+        name = manifest.displayName ?? name
+        creationDate = manifest.creationDate ?? creationDate
+        sizeMB = manifest.sizeMB ?? sizeMB
+        toneRaw = manifest.toneRaw ?? toneRaw
+        triangles = manifest.triangles ?? triangles
+        if let measurements = manifest.measurements { self.measurements = measurements }
+        captureStatusRaw = manifest.captureStatusRaw
+            ?? (manifest.weakSpotCount > 0 ? ScanCaptureStatus.needsRetake.rawValue : ScanCaptureStatus.captured.rawValue)
+        computeStatusRaw = manifest.computeStatusRaw ?? computeStatusRaw
+        appliedMaterialRaw = manifest.appliedMaterialRaw ?? appliedMaterialRaw
+        lastExportedFileName = manifest.lastExportedFileName ?? lastExportedFileName
+        lastExportedAt = manifest.lastExportedAt ?? lastExportedAt
     }
 
     func markPackaged(rawArchiveURL: URL?) {
@@ -455,7 +515,19 @@ public struct ScanAssetStore: Sendable {
             frameCount: session.frameCount,
             coveragePercent: session.coveragePercent,
             weakSpotCount: session.weakSpotCount,
-            captureQualityReport: session.captureQualityReport
+            captureQualityReport: session.captureQualityReport,
+            displayName: session.name,
+            creationDate: session.creationDate,
+            sizeMB: session.sizeMB,
+            toneRaw: session.toneRaw,
+            triangles: session.triangles,
+            measurements: session.measurements,
+            captureStatus: session.captureStatus,
+            computeStatus: session.computeStatus,
+            appliedMaterialRaw: session.appliedMaterialRaw,
+            lastExportedFileName: session.lastExportedFileName,
+            lastExportedAt: session.lastExportedAt,
+            schemaVersion: ScanAssetManifest.currentSchemaVersion
         )
     }
 
@@ -481,6 +553,14 @@ public struct ScanAssetStore: Sendable {
         return components[(scanIndex + 1)...].reduce(scanDirectory) { partial, component in
             partial.appendingPathComponent(component)
         }
+    }
+
+    public func encodedManifest(_ manifest: ScanAssetManifest) throws -> Data {
+        try JSONEncoder.scanManifest.encode(portable(manifest))
+    }
+
+    public func beginRevision(for scanID: UUID) throws -> ScanAssetRevisionTransaction {
+        try ScanAssetRevisionTransaction(scanDirectory: directory(for: scanID))
     }
 
     private func portable(_ manifest: ScanAssetManifest) throws -> ScanAssetManifest {
@@ -511,6 +591,115 @@ public struct ScanAssetStore: Sendable {
         guard path.hasPrefix(rootPath) else { return url }
         let relativePath = String(path.dropFirst(rootPath.count))
         return URL(string: relativePath.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? relativePath)
+    }
+}
+
+/// Stages a bounded set of scan-file replacements and retains backups until the caller confirms
+/// that its database save succeeded. A failed save can therefore restore the prior model, preview,
+/// and manifest without copying an entire raw-capture directory.
+public final class ScanAssetRevisionTransaction {
+    public enum TransactionError: Error {
+        case unsafeFileName(String)
+        case duplicateFileName(String)
+    }
+
+    private let fileManager = FileManager.default
+    private let scanDirectory: URL
+    private let transactionDirectory: URL
+    private let stagedDirectory: URL
+    private let backupDirectory: URL
+    private var names: [String] = []
+    private var committed = false
+    private var finalized = false
+
+    fileprivate init(scanDirectory: URL) throws {
+        self.scanDirectory = scanDirectory
+        transactionDirectory = scanDirectory.appendingPathComponent(".revision-\(UUID().uuidString)", isDirectory: true)
+        stagedDirectory = transactionDirectory.appendingPathComponent("staged", isDirectory: true)
+        backupDirectory = transactionDirectory.appendingPathComponent("backup", isDirectory: true)
+        try fileManager.createDirectory(at: stagedDirectory, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: backupDirectory, withIntermediateDirectories: true)
+    }
+
+    public func stage(file source: URL, named name: String) throws -> URL {
+        try validate(name)
+        let destination = stagedDirectory.appendingPathComponent(name)
+        try fileManager.copyItem(at: source, to: destination)
+        names.append(name)
+        return scanDirectory.appendingPathComponent(name)
+    }
+
+    public func stage(data: Data, named name: String) throws -> URL {
+        try validate(name)
+        try data.write(to: stagedDirectory.appendingPathComponent(name), options: .atomic)
+        names.append(name)
+        return scanDirectory.appendingPathComponent(name)
+    }
+
+    public func commit() throws {
+        guard !committed, !finalized else { return }
+        do {
+            for name in names {
+                let destination = scanDirectory.appendingPathComponent(name)
+                let backup = backupDirectory.appendingPathComponent(name)
+                if fileManager.fileExists(atPath: destination.path) {
+                    try fileManager.moveItem(at: destination, to: backup)
+                }
+                try fileManager.moveItem(at: stagedDirectory.appendingPathComponent(name), to: destination)
+            }
+            committed = true
+        } catch {
+            try? rollback()
+            throw error
+        }
+    }
+
+    public func finalize() throws {
+        guard !finalized else { return }
+        try fileManager.removeItem(at: transactionDirectory)
+        finalized = true
+    }
+
+    public func rollback() throws {
+        guard !finalized else { return }
+        if committed {
+            for name in names.reversed() {
+                let destination = scanDirectory.appendingPathComponent(name)
+                let backup = backupDirectory.appendingPathComponent(name)
+                if fileManager.fileExists(atPath: destination.path) {
+                    try fileManager.removeItem(at: destination)
+                }
+                if fileManager.fileExists(atPath: backup.path) {
+                    try fileManager.moveItem(at: backup, to: destination)
+                }
+            }
+        } else {
+            // A partial commit can fail before the committed flag is set. Restore every backup and
+            // remove only destinations whose staged source was already consumed.
+            for name in names.reversed() {
+                let staged = stagedDirectory.appendingPathComponent(name)
+                let destination = scanDirectory.appendingPathComponent(name)
+                let backup = backupDirectory.appendingPathComponent(name)
+                if !fileManager.fileExists(atPath: staged.path), fileManager.fileExists(atPath: destination.path) {
+                    try fileManager.removeItem(at: destination)
+                }
+                if fileManager.fileExists(atPath: backup.path) {
+                    try fileManager.moveItem(at: backup, to: destination)
+                }
+            }
+        }
+        try fileManager.removeItem(at: transactionDirectory)
+        finalized = true
+    }
+
+    private func validate(_ name: String) throws {
+        guard !name.isEmpty,
+              URL(fileURLWithPath: name).lastPathComponent == name,
+              name != ".",
+              name != ".." else {
+            throw TransactionError.unsafeFileName(name)
+        }
+        guard !names.contains(name) else { throw TransactionError.duplicateFileName(name) }
     }
 }
 

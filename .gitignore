@@ -1,5 +1,6 @@
 # Build output and local agent state
 .dd/
+.dd-*/
 build/
 dist/
 DerivedData/
