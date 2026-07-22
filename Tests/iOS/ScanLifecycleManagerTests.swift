@@ -1,7 +1,25 @@
 import XCTest
+import UIKit
 @testable import ThreeDSeen
 
 final class ScanLifecycleManagerTests: XCTestCase {
+    func testDiscardAssetsRemovesOnlyUncommittedScanDirectory() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let discardedID = UUID()
+        let retainedID = UUID()
+        let discarded = try fixture.store.directory(for: discardedID)
+        let retained = try fixture.store.directory(for: retainedID)
+        try Data("partial".utf8).write(to: discarded.appendingPathComponent("frame.jpg"))
+        try Data("committed".utf8).write(to: retained.appendingPathComponent("model.usdz"))
+
+        try fixture.store.discardAssets(for: discardedID)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: discarded.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: retained.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fixture.store.rootDirectory.path))
+    }
+
     func testRenameUpdatesPortableManifestAndRejectsEmptyName() throws {
         let fixture = try Fixture()
         defer { fixture.cleanup() }
@@ -87,6 +105,41 @@ final class ScanLifecycleManagerTests: XCTestCase {
         XCTAssertNil(try fixture.store.loadManifest(for: old.scan.id).rawArchiveURL)
     }
 
+    func testRawRetentionPreservesRealThumbnailOutsideRemovedArchive() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        let scan = ScanSession(
+            creationDate: Date().addingTimeInterval(-100),
+            captureMode: .object,
+            captureStatus: .captured,
+            computeStatus: .completed
+        )
+        let directory = try fixture.store.directory(for: scan.id)
+        let capture = directory.appendingPathComponent("capture", isDirectory: true)
+        try FileManager.default.createDirectory(at: capture, withIntermediateDirectories: true)
+        let capturedFrame = capture.appendingPathComponent("frame.jpg")
+        try writeTestJPEG(to: capturedFrame)
+        let model = directory.appendingPathComponent("model.usdz")
+        try Data("model".utf8).write(to: model)
+        scan.rawArchiveURL = capture
+        scan.thumbnailURL = capturedFrame
+        scan.sourceModelURL = model
+        scan.usdzFileURL = model
+        try fixture.store.writeManifest(try fixture.store.manifest(for: scan))
+
+        XCTAssertEqual(
+            try fixture.manager.applyRawArchiveRetention(to: [scan], keepLatest: 0, save: {}),
+            1
+        )
+
+        XCTAssertNil(scan.rawArchiveURL)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: capture.path))
+        let thumbnail = try XCTUnwrap(scan.thumbnailURL)
+        XCTAssertEqual(thumbnail.lastPathComponent, "thumbnail.jpg")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: thumbnail.path))
+        XCTAssertEqual(try fixture.store.loadManifest(for: scan.id).thumbnailURL, thumbnail)
+    }
+
     func testRawRetentionRollsBackFilesAndManifestWhenSaveFails() throws {
         enum SaveFailure: Error { case rejected }
         let fixture = try Fixture()
@@ -142,6 +195,15 @@ final class ScanLifecycleManagerTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: exportDirectory.path))
         XCTAssertTrue(transaction.moves.allSatisfy { !FileManager.default.fileExists(atPath: $0.staged.path) })
         XCTAssertThrowsError(try transaction.rollback())
+    }
+
+    private func writeTestJPEG(to url: URL) throws {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 40, height: 30))
+        let image = renderer.image { context in
+            UIColor.systemBlue.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 40, height: 30))
+        }
+        try XCTUnwrap(image.jpegData(compressionQuality: 0.9)).write(to: url)
     }
 }
 

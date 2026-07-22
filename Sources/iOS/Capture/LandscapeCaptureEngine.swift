@@ -8,6 +8,7 @@ import OSLog
 /// to a folder that PhotogrammetrySession consumes downstream.
 struct LandscapeCaptureEngine: View {
     @EnvironmentObject var stateMachine: ProcessingStateMachine
+    let attemptID: UUID
     @StateObject private var capture = LandscapeCaptureController()
 
     var body: some View {
@@ -17,7 +18,7 @@ struct LandscapeCaptureEngine: View {
             LiveCaptureHUD(status: captureStatus, onFinish: finishCapture)
                 .allowsHitTesting(!capture.isFinishing)
         }
-        .onDisappear { capture.stop() }
+        .onDisappear { capture.stop(discardUnsealedCapture: true) }
     }
 
     private var captureStatus: LiveCaptureStatus {
@@ -33,7 +34,7 @@ struct LandscapeCaptureEngine: View {
         capture.finish { result in
             switch result {
             case .success(let folder):
-                stateMachine.send(.finishCapture(scanDataURL: folder))
+                stateMachine.send(.finishCapture(scanDataURL: folder, attemptID: attemptID))
             case .failure(let error):
                 stateMachine.send(.errorOccurred(error.localizedDescription))
             }
@@ -59,6 +60,7 @@ final class LandscapeCaptureController: NSObject, ObservableObject, ARSessionDel
     private var lastCaptureTime: TimeInterval = 0
     private var nextFrameIndex = 0
     private var acceptsFrames = true
+    private var sealed = false
     private let minTranslation: Float = 0.08   // metres between frames
     private let minInterval: TimeInterval = 0.25
 
@@ -82,11 +84,17 @@ final class LandscapeCaptureController: NSObject, ObservableObject, ARSessionDel
         session.run(config, options: [.resetTracking, .removeExistingAnchors])
     }
 
-    func stop() {
-        stateLock.lock()
-        acceptsFrames = false
-        stateLock.unlock()
+    func stop(discardUnsealedCapture: Bool = false) {
+        let shouldDiscard = stateLock.withLock { () -> Bool in
+            acceptsFrames = false
+            return discardUnsealedCapture && !sealed
+        }
         session.pause()
+        if shouldDiscard {
+            writerGroup.notify(queue: writerQueue) { [captureFolder] in
+                try? GuidedCaptureTemporarySource.discardIfOwned(captureFolder)
+            }
+        }
     }
 
     /// Stops capture and waits for every queued JPEG write before exposing the folder.
@@ -101,7 +109,9 @@ final class LandscapeCaptureController: NSObject, ObservableObject, ARSessionDel
             guard let self else { return }
             self.logger.info("Landscape capture finished: \(self.frameCount) frames in \(self.captureFolder.lastPathComponent)")
             self.isFinishing = false
-            guard CaptureArchiveInspector.containsImageFrames(in: self.captureFolder) else {
+            let hasFrames = CaptureArchiveInspector.containsImageFrames(in: self.captureFolder)
+            self.stateLock.withLock { self.sealed = hasFrames }
+            guard hasFrames else {
                 completion(.failure(.noFramesCaptured))
                 return
             }

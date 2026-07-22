@@ -30,11 +30,24 @@ public enum AppState: Equatable {
     case thermalThrottled(savedStateURL: URL)
 }
 
-/// Events that trigger state transitions.
+public struct CaptureCompletion: Equatable, Sendable {
+    public let attemptID: UUID
+    public let mode: CaptureMode
+    public let scanDataURL: URL
+
+    public init(attemptID: UUID, mode: CaptureMode, scanDataURL: URL) {
+        self.attemptID = attemptID
+        self.mode = mode
+        self.scanDataURL = scanDataURL
+    }
+}
+
+/// Events that trigger state transitions. Capture events carry an attempt identity so late SDK,
+/// Vision, writer, or persistence callbacks cannot complete a newer scan.
 public enum AppEvent {
-    case startCapture(CaptureMode)
-    case autoPilotResolved(CaptureMode)
-    case finishCapture(scanDataURL: URL)
+    case startCapture(CaptureMode, attemptID: UUID)
+    case autoPilotResolved(CaptureMode, attemptID: UUID)
+    case finishCapture(scanDataURL: URL, attemptID: UUID)
     case userSelectsComputeMode(ComputeMode)
     case startLocalCompute
     case updateLocalProgress(Double)
@@ -52,6 +65,8 @@ public final class ProcessingStateMachine: ObservableObject {
     @Published public private(set) var state: AppState = .idle
     @Published public private(set) var lastScanDataURL: URL?
     @Published public private(set) var lastComputedAssetURL: URL?
+    @Published public private(set) var activeCaptureAttemptID: UUID?
+    @Published public private(set) var lastCaptureCompletion: CaptureCompletion?
     /// The engine that is actually collecting frames. Auto-Pilot starts as `.autoPilot` and is
     /// updated once Vision has chosen a supported engine.
     @Published public private(set) var activeCaptureMode: CaptureMode?
@@ -74,20 +89,31 @@ public final class ProcessingStateMachine: ObservableObject {
 
     private func remember(_ event: AppEvent) {
         switch event {
-        case .startCapture(let mode):
+        case .startCapture(let mode, let attemptID):
             lastScanDataURL = nil
             lastComputedAssetURL = nil
+            lastCaptureCompletion = nil
             activeCaptureMode = mode
-        case .autoPilotResolved(let mode):
+            activeCaptureAttemptID = attemptID
+        case .autoPilotResolved(let mode, _):
             activeCaptureMode = mode
-        case .finishCapture(let scanDataURL):
+        case .finishCapture(let scanDataURL, let attemptID):
             lastScanDataURL = scanDataURL
+            if let activeCaptureMode {
+                lastCaptureCompletion = CaptureCompletion(
+                    attemptID: attemptID,
+                    mode: activeCaptureMode,
+                    scanDataURL: scanDataURL
+                )
+            }
         case .computeCompleted(let assetURL):
             lastComputedAssetURL = assetURL
         case .reset:
             lastScanDataURL = nil
             lastComputedAssetURL = nil
+            lastCaptureCompletion = nil
             activeCaptureMode = nil
+            activeCaptureAttemptID = nil
         default:
             break
         }
@@ -97,16 +123,17 @@ public final class ProcessingStateMachine: ObservableObject {
         switch (currentState, event) {
 
         // From Idle or Completed to Capture Mode
-        case (.idle, .startCapture(let mode)),
-             (.completed, .startCapture(let mode)):
+        case (.idle, .startCapture(let mode, _)),
+             (.completed, .startCapture(let mode, _)):
             return .capturing(mode: mode)
 
         // Vision has selected a concrete engine while the Auto-Pilot preview is running.
-        case (.capturing(mode: .autoPilot), .autoPilotResolved(let mode)) where mode != .autoPilot:
+        case (.capturing(mode: .autoPilot), .autoPilotResolved(let mode, let attemptID))
+            where mode != .autoPilot && attemptID == activeCaptureAttemptID:
             return .capturing(mode: mode)
 
-        // From Capturing to Packaging
-        case (.capturing, .finishCapture):
+        // From Capturing to Packaging. A terminal callback from an older attempt is ignored.
+        case (.capturing, .finishCapture(_, let attemptID)) where attemptID == activeCaptureAttemptID:
             return .packagingScan
 
         // Persisted scans can re-enter compute after relaunch, cancellation, or a recoverable

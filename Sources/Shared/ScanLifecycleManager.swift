@@ -14,6 +14,14 @@ public enum ScanLifecycleError: LocalizedError, Equatable {
     }
 }
 
+private struct RawRetentionMove {
+    let scan: ScanSession
+    let original: URL
+    let staged: URL
+    let previousThumbnail: URL?
+    let derivedThumbnail: URL?
+}
+
 /// Coordinates user-facing scan metadata changes with app-owned files. SwiftData context saves
 /// remain an application-layer responsibility so this service stays deterministic in unit tests.
 public struct ScanLifecycleManager: Sendable {
@@ -96,22 +104,37 @@ public struct ScanLifecycleManager: Sendable {
                 return raw != scan.sourceModelURL?.standardizedFileURL
                     && raw != scan.usdzFileURL?.standardizedFileURL
                     && raw != scan.previewPLYURL?.standardizedFileURL
+                    && raw != scan.thumbnailURL?.standardizedFileURL
             }
             .sorted { $0.creationDate > $1.creationDate }
         let targets = Array(eligible.dropFirst(max(0, limit)))
         guard !targets.isEmpty else { return 0 }
         let stagingRoot = assetStore.rootDirectory.appendingPathComponent(".retention-staging", isDirectory: true)
         try fileManager.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
-        var moves: [(scan: ScanSession, original: URL, staged: URL)] = []
+        var moves: [RawRetentionMove] = []
 
         do {
             for scan in targets {
                 guard let original = scan.rawArchiveURL else { continue }
+                let previousThumbnail = scan.thumbnailURL
+                var derivedThumbnail: URL?
+                if let thumbnail = previousThumbnail,
+                   thumbnail.standardizedFileURL.path.hasPrefix(original.standardizedFileURL.path + "/"),
+                   fileManager.fileExists(atPath: thumbnail.path) {
+                    derivedThumbnail = try assetStore.importThumbnail(from: thumbnail, for: scan.id)
+                    scan.thumbnailURL = derivedThumbnail
+                }
                 let staged = stagingRoot
                     .appendingPathComponent("\(scan.id)-\(UUID().uuidString)")
                     .appendingPathExtension(original.pathExtension)
+                moves.append(RawRetentionMove(
+                    scan: scan,
+                    original: original,
+                    staged: staged,
+                    previousThumbnail: previousThumbnail,
+                    derivedThumbnail: derivedThumbnail
+                ))
                 try fileManager.moveItem(at: original, to: staged)
-                moves.append((scan, original, staged))
                 scan.rawArchiveURL = nil
                 try assetStore.writeManifest(try assetStore.manifest(for: scan))
             }
@@ -121,8 +144,13 @@ public struct ScanLifecycleManager: Sendable {
         } catch {
             for move in moves.reversed() {
                 move.scan.rawArchiveURL = move.original
+                move.scan.thumbnailURL = move.previousThumbnail
                 if fileManager.fileExists(atPath: move.staged.path) {
                     try? fileManager.moveItem(at: move.staged, to: move.original)
+                }
+                if let thumbnail = move.derivedThumbnail,
+                   thumbnail != move.previousThumbnail {
+                    try? fileManager.removeItem(at: thumbnail)
                 }
                 try? assetStore.writeManifest(try assetStore.manifest(for: move.scan))
             }

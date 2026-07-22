@@ -26,6 +26,7 @@ struct ScanItem: Identifiable {
     let mb: Int
     let tier: String        // Preview / Reduced / Medium / Full / Raw
     let tone: String        // bone / rust / graphite / walnut / slate / ice
+    let thumbnailURL: URL?
     let tris: String
     let primaryAction: ScanLibraryAction
     let canExport: Bool

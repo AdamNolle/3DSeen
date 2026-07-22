@@ -4,15 +4,16 @@ import XCTest
 @MainActor
 final class StateMachineTests: XCTestCase {
     private let dummyURL = URL(fileURLWithPath: "/tmp/scan")
+    private let attemptID = UUID()
 
     func testHappyPathLocalCompute() {
         let sm = ProcessingStateMachine()
         XCTAssertEqual(sm.state, .idle)
 
-        sm.send(.startCapture(.object))
+        sm.send(.startCapture(.object, attemptID: attemptID))
         XCTAssertEqual(sm.state, .capturing(mode: .object))
 
-        sm.send(.finishCapture(scanDataURL: dummyURL))
+        sm.send(.finishCapture(scanDataURL: dummyURL, attemptID: attemptID))
         XCTAssertEqual(sm.state, .packagingScan)
 
         sm.send(.userSelectsComputeMode(.local))
@@ -37,8 +38,8 @@ final class StateMachineTests: XCTestCase {
         let captureURL = URL(fileURLWithPath: "/tmp/capture-package")
         let assetURL = URL(fileURLWithPath: "/tmp/model.usdz")
 
-        sm.send(.startCapture(.object))
-        sm.send(.finishCapture(scanDataURL: captureURL))
+        sm.send(.startCapture(.object, attemptID: attemptID))
+        sm.send(.finishCapture(scanDataURL: captureURL, attemptID: attemptID))
         XCTAssertEqual(sm.lastScanDataURL, captureURL)
 
         sm.send(.userSelectsComputeMode(.local))
@@ -62,8 +63,8 @@ final class StateMachineTests: XCTestCase {
 
     func testOffloadPath() {
         let sm = ProcessingStateMachine()
-        sm.send(.startCapture(.space))
-        sm.send(.finishCapture(scanDataURL: dummyURL))
+        sm.send(.startCapture(.space, attemptID: attemptID))
+        sm.send(.finishCapture(scanDataURL: dummyURL, attemptID: attemptID))
         sm.send(.userSelectsComputeMode(.offload))
         XCTAssertEqual(sm.state, .readyForCompute(mode: .offload))
         sm.send(.offloadToMac)
@@ -73,8 +74,8 @@ final class StateMachineTests: XCTestCase {
     func testAutoPilotResolutionTransitionsToTheSelectedCaptureMode() {
         let sm = ProcessingStateMachine()
 
-        sm.send(.startCapture(.autoPilot))
-        sm.send(.autoPilotResolved(.landscape))
+        sm.send(.startCapture(.autoPilot, attemptID: attemptID))
+        sm.send(.autoPilotResolved(.landscape, attemptID: attemptID))
 
         XCTAssertEqual(sm.state, .capturing(mode: .landscape))
         XCTAssertEqual(sm.activeCaptureMode, .landscape)
@@ -82,23 +83,40 @@ final class StateMachineTests: XCTestCase {
 
     func testInvalidTransitionDoesNotMutatePipelineMetadata() {
         let sm = ProcessingStateMachine()
-        sm.send(.finishCapture(scanDataURL: dummyURL)) // invalid from .idle
+        sm.send(.finishCapture(scanDataURL: dummyURL, attemptID: attemptID)) // invalid from .idle
         XCTAssertEqual(sm.state, .idle)
         XCTAssertNil(sm.lastScanDataURL)
         XCTAssertNil(sm.lastComputedAssetURL)
         XCTAssertNil(sm.activeCaptureMode)
 
-        sm.send(.startCapture(.object))
-        sm.send(.finishCapture(scanDataURL: dummyURL))
+        sm.send(.startCapture(.object, attemptID: attemptID))
+        sm.send(.finishCapture(scanDataURL: dummyURL, attemptID: attemptID))
         sm.send(.userSelectsComputeMode(.local))
         sm.send(.startLocalCompute)
         let output = URL(fileURLWithPath: "/tmp/computed.usdz")
         sm.send(.computeCompleted(output))
 
-        sm.send(.finishCapture(scanDataURL: URL(fileURLWithPath: "/tmp/stale")))
+        sm.send(.finishCapture(scanDataURL: URL(fileURLWithPath: "/tmp/stale"), attemptID: attemptID))
         XCTAssertEqual(sm.lastScanDataURL, dummyURL)
         XCTAssertEqual(sm.lastComputedAssetURL, output)
         XCTAssertEqual(sm.activeCaptureMode, .object)
+    }
+
+    func testStaleCaptureAttemptCannotCompleteANewerScan() {
+        let sm = ProcessingStateMachine()
+        let staleAttempt = UUID()
+        let currentAttempt = UUID()
+
+        sm.send(.startCapture(.object, attemptID: staleAttempt))
+        sm.send(.reset)
+        sm.send(.startCapture(.object, attemptID: currentAttempt))
+        sm.send(.finishCapture(scanDataURL: dummyURL, attemptID: staleAttempt))
+
+        XCTAssertEqual(sm.state, .capturing(mode: .object))
+        XCTAssertNil(sm.lastCaptureCompletion)
+        sm.send(.finishCapture(scanDataURL: dummyURL, attemptID: currentAttempt))
+        XCTAssertEqual(sm.lastCaptureCompletion?.attemptID, currentAttempt)
+        XCTAssertEqual(sm.state, .packagingScan)
     }
 
     func testThermalSafetyPolicyIsConservativeAndUserControllable() {
@@ -111,8 +129,8 @@ final class StateMachineTests: XCTestCase {
 
     func testThermalThrottleFromLocalCompute() {
         let sm = ProcessingStateMachine()
-        sm.send(.startCapture(.object))
-        sm.send(.finishCapture(scanDataURL: dummyURL))
+        sm.send(.startCapture(.object, attemptID: attemptID))
+        sm.send(.finishCapture(scanDataURL: dummyURL, attemptID: attemptID))
         sm.send(.userSelectsComputeMode(.local))
         sm.send(.startLocalCompute)
         let saved = URL(fileURLWithPath: "/tmp/saved")
@@ -122,7 +140,7 @@ final class StateMachineTests: XCTestCase {
 
     func testErrorIsGlobal() {
         let sm = ProcessingStateMachine()
-        sm.send(.startCapture(.landscape))
+        sm.send(.startCapture(.landscape, attemptID: attemptID))
         sm.send(.errorOccurred("boom"))
         XCTAssertEqual(sm.state, .error(message: "boom"))
     }

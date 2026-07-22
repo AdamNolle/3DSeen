@@ -33,7 +33,7 @@ final class StudioModel: ObservableObject {
     @Published var activeScanID: UUID?
     /// The requested reconstruction tier travels with a Mac handoff. On-device RealityKit
     /// currently supports only reduced detail, and the local compute service records that fact.
-    @Published var selectedDetailTier = SettingsStore.QualityTier.full.rawValue
+    @Published var selectedDetailTier = SettingsStore.QualityTier.medium.rawValue
     @Published var selectedCaptureModeID = SettingsStore.DefaultMode.object.rawValue
 
     /// Natural walkthrough order (matches FLOWS.phone in shell.jsx).

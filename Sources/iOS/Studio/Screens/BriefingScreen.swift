@@ -31,10 +31,10 @@ private let CHECKLIST: [CheckItem] = [
 ]
 
 private let GUIDES: [GuideItem] = [
-    .init(title: "Move slowly", desc: "Keep angular velocity below 30 °/s. Walk a smooth orbit, not a stroll.", icon: "speed"),
-    .init(title: "Three passes", desc: "Eye-level, then high, then low — 360° each. Overlap by 60%.", icon: "refresh"),
-    .init(title: "Hands-free turntable", desc: "For objects under 30 cm, rotate the object — not the camera.", icon: "hand"),
-    .init(title: "Avoid shiny + clear", desc: "Glass, mirrors, water absorb poorly. Mark them or skip them.", icon: "warning"),
+    .init(title: "Move slowly", desc: "The scanner saves photos automatically when tracking is steady and the image is clear.", icon: "speed"),
+    .init(title: "Circle the subject", desc: "Start at eye level, then add a few higher and lower views while keeping the whole subject visible.", icon: "refresh"),
+    .init(title: "Keep it still", desc: "Leave the subject in one place and move the phone around it for consistent alignment.", icon: "hand"),
+    .init(title: "Avoid shiny or clear items", desc: "Glass, mirrors, and transparent surfaces may not reconstruct reliably.", icon: "warning"),
 ]
 
 // MARK: - Screen (size-class dispatcher)
@@ -66,8 +66,8 @@ private struct PhoneBriefingBody: View {
                     WizardHeader(step: 2, onBack: { model.go(.mode) }, onClose: { model.go(.library) })
 
                     VStack(alignment: .leading, spacing: 0) {
-                        StLabel(text: "Scene briefing")
-                        Text("Prepare your setup")
+                        StLabel(text: "Before you scan")
+                        Text("Get ready to scan")
                             .font(.sf(28, .bold)).tracking(0).lineSpacing(1.4)
                             .foregroundStyle(theme.ink).padding(.top, 6)
                     }
@@ -80,9 +80,9 @@ private struct PhoneBriefingBody: View {
                                 .frame(width: 58, height: 58)
                                 .overlay(StIcon(name: "camera", size: 24, color: theme.accent))
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("Capture guidance")
+                                Text("A few simple steps")
                                     .font(.sf(15, .bold)).tracking(0).foregroundStyle(theme.ink)
-                                Text("Review these recommendations, then choose the detail tier for this scan.")
+                                Text("Good light, a still subject, and slow movement make a stronger photo set.")
                                     .font(.sf(12.5)).foregroundStyle(theme.text2).lineSpacing(4)
                             }
                             Spacer(minLength: 0)
@@ -102,7 +102,7 @@ private struct PhoneBriefingBody: View {
                     }
                     .padding(.top, 12)
 
-                    Text("Pro tips for this scene")
+                    Text("Helpful capture tips")
                         .font(.sf(14, .bold)).tracking(0).foregroundStyle(theme.ink)
                         .padding(.top, 18).padding(.bottom, 10)
 
@@ -117,7 +117,7 @@ private struct PhoneBriefingBody: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             BottomCTA {
-                StButton(title: "Continue to Detail", kind: .accent, size: .lg, icon: "bolt", full: true) { model.go(.quality) }
+                StButton(title: "Choose Result", kind: .accent, size: .lg, icon: "balanced", full: true) { model.go(.quality) }
             }
         }
     }
@@ -151,14 +151,14 @@ private struct PadBriefingBody: View {
                 CircleIconButton(icon: "back", size: 38, action: { model.go(.mode) })
                 VStack(alignment: .leading, spacing: 2) {
                     StLabel(text: "New Scan · Step 2 of 4")
-                    Text("Scene briefing & guidance")
+                    Text("Get ready to scan")
                         .font(.sf(17, .bold)).tracking(0).foregroundStyle(theme.ink)
                 }
             }
             Spacer(minLength: 12)
             StStepTabs(current: 1)
             Spacer(minLength: 12)
-            StButton(title: "Skip briefing", kind: .ghost, size: .sm) { model.go(.quality) }
+            StButton(title: "Choose Result", kind: .ghost, size: .sm) { model.go(.quality) }
         }
     }
 
@@ -244,7 +244,7 @@ private struct PadBriefingBody: View {
     }
 
     private var actionRow: some View {
-        StButton(title: "Continue to Detail", kind: .accent, icon: "bolt", full: true) { model.go(.quality) }
+        StButton(title: "Choose Result", kind: .accent, icon: "balanced", full: true) { model.go(.quality) }
         .frame(height: 44)
     }
 }

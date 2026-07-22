@@ -479,7 +479,7 @@ final class ComputeStageTests: XCTestCase {
 final class MacStateMachineTests: XCTestCase {
     func testSharedStateMachineWorksOnMac() {
         let sm = ProcessingStateMachine()
-        sm.send(.startCapture(.object))
+        sm.send(.startCapture(.object, attemptID: UUID()))
         XCTAssertEqual(sm.state, .capturing(mode: .object))
     }
 }

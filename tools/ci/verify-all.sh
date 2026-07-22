@@ -39,6 +39,16 @@ for path in Path('.github/workflows').glob('*.yml'):
             raise SystemExit(f'{path}: external action is not on the audited Node 24 SHA allowlist: {line.strip()}')
 PY
 
+python3 tools/assets/validate-app-icons.py | tee "$OUTPUT_ROOT/logs/app-icon-validation.log"
+
+PROJECT_HASH_BEFORE=$(shasum -a 256 3DSeen.xcodeproj/project.pbxproj | awk '{ print $1 }')
+xcodegen generate | tee "$OUTPUT_ROOT/logs/xcodegen-drift.log"
+PROJECT_HASH_AFTER=$(shasum -a 256 3DSeen.xcodeproj/project.pbxproj | awk '{ print $1 }')
+[[ "$PROJECT_HASH_BEFORE" == "$PROJECT_HASH_AFTER" ]] || {
+  echo "XcodeGen drift detected: regenerate and commit 3DSeen.xcodeproj" >&2
+  exit 1
+}
+
 RELEASE_OUTPUT_ROOT="$OUTPUT_ROOT/release" \
   RELEASE_VERSION=9.8.7 BUILD_NUMBER=123 \
   tools/release/dry-run.sh | tee "$OUTPUT_ROOT/logs/release-dry-run.log"
@@ -89,6 +99,7 @@ xcodebuild test -quiet \
   -destination "platform=iOS Simulator,id=$IPAD_DEVICE_ID" \
   -derivedDataPath "$OUTPUT_ROOT/tests-ipad" CODE_SIGNING_ALLOWED=NO \
   -only-testing:3DSeen-iOSUITests/WizardFlowUITests/testAccessibilityDynamicTypeKeepsSettingsAndViewerActionsReachable \
+  -only-testing:3DSeen-iOSUITests/WizardFlowUITests/testRegularWizardSurfacesExposeGuidedChoices \
   | tee "$OUTPUT_ROOT/logs/ipad-accessibility.log"
 IPAD_RESULT=$(find "$OUTPUT_ROOT/tests-ipad/Logs/Test" -name '*.xcresult' -type d -print | sort | tail -1)
 xcrun xcresulttool get test-results summary --path "$IPAD_RESULT" --format json \
@@ -104,10 +115,10 @@ python3 - "$OUTPUT_ROOT" <<'PY'
 import json, pathlib, sys
 root = pathlib.Path(sys.argv[1]) / 'logs'
 lines = []
-for label, name in [('iOS', 'ios-summary.json'), ('macOS', 'macos-summary.json'), ('iPad accessibility', 'ipad-summary.json')]:
+for label, name in [('iOS', 'ios-summary.json'), ('macOS', 'macos-summary.json'), ('iPad UI', 'ipad-summary.json')]:
     data = json.loads((root / name).read_text())
     lines.append(f"{label}: {data['passedTests']} passed, {data['failedTests']} failed, {data['skippedTests']} skipped")
-summary = '\n'.join(lines) + '\nRelease dry run: passed\nAction pins: audited Node 24 SHA allowlist passed\n'
+summary = '\n'.join(lines) + '\nRelease dry run: passed\nXcodeGen drift: passed\nApp icon catalogs: validated opaque RGB assets\nAction pins: audited Node 24 SHA allowlist passed\n'
 (root / 'summary.txt').write_text(summary)
 print(summary, end='')
 PY

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>3DSeen blue tesseract app icon</title>
+  <desc>Two bold offset white boxes with corresponding corners connected to create a clear dimensional tesseract mark.</desc>
+  <defs>
+    <linearGradient id="blue" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#68addc"/>
+      <stop offset="1" stop-color="#3175af"/>
+    </linearGradient>
+    <path id="front" d="M240.6 343H670.7V773.1H240.6Z"/>
+    <path id="back" d="M384 209.9H814.1V640H384Z"/>
+    <path id="axis" d="M240.6 343 384 209.9M670.7 343 814.1 209.9M670.7 773.1 814.1 640M240.6 773.1 384 640"/>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#blue)"/>
+  <g fill="none" stroke="#235782" stroke-width="37" stroke-linecap="round" stroke-linejoin="round" transform="translate(0 12)">
+    <use href="#front"/><use href="#back"/><use href="#axis"/>
+  </g>
+  <g fill="none" stroke="#edf8ff" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#axis"/>
+  </g>
+  <g fill="none" stroke="#fff" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#front"/><use href="#back"/>
+  </g>
+</svg>

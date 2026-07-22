@@ -11,11 +11,13 @@ final class ModelExporterTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let nested = root.appendingPathComponent("frames", isDirectory: true)
         try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
-        try writePNG(red: 128, green: 128, blue: 128, to: nested.appendingPathComponent("frame-0001.JPG"))
+        let capturedFrame = nested.appendingPathComponent("frame-0001.JPG")
+        try writePNG(red: 128, green: 128, blue: 128, to: capturedFrame)
         try Data([0x00]).write(to: nested.appendingPathComponent("notes.txt"))
 
         XCTAssertEqual(CaptureArchiveInspector.imageFrameCount(in: root), 1)
         XCTAssertTrue(CaptureArchiveInspector.containsImageFrames(in: root))
+        XCTAssertEqual(CaptureArchiveInspector.firstDecodableImageFrame(in: root), capturedFrame)
     }
 
     func testCaptureArchiveInspectorRejectsMissingOrEmptyFolders() throws {
@@ -32,6 +34,7 @@ final class ModelExporterTests: XCTestCase {
         XCTAssertEqual(CaptureArchiveInspector.imageFrameCount(in: empty), 1)
         XCTAssertEqual(CaptureArchiveInspector.decodableImageFrameCount(in: empty), 0)
         XCTAssertFalse(CaptureArchiveInspector.containsImageFrames(in: empty))
+        XCTAssertNil(CaptureArchiveInspector.firstDecodableImageFrame(in: empty))
     }
 
     func testCaptureQualityReportCountsMeasuredExposureAndSharpnessWarnings() {
@@ -357,6 +360,8 @@ extension ModelExporterTests {
             captureStatus: .packaged,
             computeStatus: .notStarted
         )
+        let thumbnailURL = URL(fileURLWithPath: "/tmp/captured-thumbnail.jpg")
+        retained.thumbnailURL = thumbnailURL
         let offloaded = ScanSession(
             captureMode: .landscape,
             captureStatus: .packaged,
@@ -384,6 +389,7 @@ extension ModelExporterTests {
 
         XCTAssertEqual(ScanItem(draft).primaryAction, .resumeCapture)
         XCTAssertEqual(ScanItem(retained).primaryAction, .resumeReview)
+        XCTAssertEqual(ScanItem(retained).thumbnailURL, thumbnailURL)
         XCTAssertEqual(ScanItem(offloaded).primaryAction, .resumeCompute)
         XCTAssertEqual(ScanItem(failed).primaryAction, .retryCompute)
         XCTAssertEqual(ScanItem(missingCompletedModel).primaryAction, .retryCompute)

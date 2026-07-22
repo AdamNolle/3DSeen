@@ -1,6 +1,6 @@
 # 3DSeen Production Contract
 
-Last updated: 2026-07-14
+Last updated: 2026-07-21
 
 This document is the canonical repository-level definition of production behavior. Source code and automated tests are the implementation authority; `docs/VERIFICATION-STATUS.md` records evidence and external gates. Files under `docs/design-spec/`, `docs/design-ref/`, `docs/review/`, and `docs/audit/`, plus `docs/EXECUTION-PLAN.md`, are historical design and review inputs. They may explain intent but do not override this contract.
 
@@ -12,7 +12,9 @@ This document is the canonical repository-level definition of production behavio
 
 ## Capture
 
-- Object capture uses `ObjectCaptureSession` on supported hardware.
+- Object capture uses one custom ARKit session plus Vision foreground-instance detection. Guidance points must be real LiDAR depth samples or ARKit tracked feature points projected into the selected subject mask; synthetic coverage is prohibited.
+- Object photos are admitted only from current normal tracking plus measured subject-lock freshness, luminance/edge contrast, motion, interval, translation novelty, and bounded writer backlog. Manual capture remains available.
+- Finish closes frame admission and waits for every accepted JPEG write before exposing the capture archive. Capture attempts are UUID-scoped so stale Vision, Auto-Pilot, writer, or SDK callbacks cannot complete a newer attempt.
 - Space capture uses RoomPlan and requires supported LiDAR hardware.
 - Landscape capture uses ARKit world tracking and retained image frames.
 - Auto-Pilot uses Vision classification to recommend a real capture engine; it is not a separate reconstruction algorithm.
@@ -31,7 +33,7 @@ This document is the canonical repository-level definition of production behavio
 ## Library, viewer, and export
 
 - Library actions are derived from persisted capture/compute state and must never route a missing model to Viewer or Export.
-- Persisted models and measurements survive relaunch and sandbox relocation through scan-relative manifests.
+- Persisted models, measurements, and Library thumbnails survive relaunch and sandbox relocation through scan-relative manifests. Photo captures derive a bounded thumbnail from a validated real frame outside the raw archive; no-photo modes use a semantic mode/status fallback rather than fabricated geometry.
 - Geometry previews are labeled separately from trained Gaussian splats.
 - iOS/iPadOS support USDZ pass-through and ModelIO USD, OBJ, STL, and PLY export. macOS additionally supports GLB and FBX through an installed Blender runtime.
 - Export replacement is staged and transactional. Formats unavailable on a platform must not be advertised there.
@@ -39,7 +41,7 @@ This document is the canonical repository-level definition of production behavio
 ## Persistence and integrity
 
 - `ScanSession` and `ScanAssetStore` remain the scan authority.
-- Capture, model, preview, manifest, and export updates must be staged and validated before replacement.
+- Capture, thumbnail, model, preview, manifest, and export updates must be staged and validated before replacement.
 - Rename, deletion, retention, and orphan cleanup must update durable metadata and files consistently.
 - Legacy manifests and v1 handoff packages remain readable during migration.
 

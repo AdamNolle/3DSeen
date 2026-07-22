@@ -1,6 +1,7 @@
 import Foundation
 import ImageIO
 import SwiftData
+import UniformTypeIdentifiers
 
 @Model
 public final class ScanSession {
@@ -214,6 +215,13 @@ public enum CaptureArchiveInspector {
 
     public static func decodableImageFrameCount(in archive: URL) -> Int {
         imageURLs(in: archive).filter(isDecodableImage).count
+    }
+
+    /// Returns a stable, real captured frame for Library presentation; no synthetic thumbnail is substituted.
+    public static func firstDecodableImageFrame(in archive: URL) -> URL? {
+        imageURLs(in: archive)
+            .sorted { $0.path < $1.path }
+            .first(where: isDecodableImage)
     }
 
     private static func imageURLs(in archive: URL) -> [URL] {
@@ -465,8 +473,58 @@ public struct ScanAssetStore: Sendable {
         return destination
     }
 
+    /// Derives a small Library thumbnail from a validated captured frame. The image content is
+    /// real capture data, while the durable file remains independent of raw-archive retention.
+    public func importThumbnail(from source: URL, for scanID: UUID, maximumPixelSize: Int = 640) throws -> URL {
+        guard let imageSource = CGImageSourceCreateWithURL(source as CFURL, nil),
+              let thumbnail = CGImageSourceCreateThumbnailAtIndex(
+                imageSource,
+                0,
+                [
+                    kCGImageSourceCreateThumbnailFromImageAlways: true,
+                    kCGImageSourceCreateThumbnailWithTransform: true,
+                    kCGImageSourceThumbnailMaxPixelSize: max(64, maximumPixelSize),
+                ] as CFDictionary
+              ) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+
+        let scanDirectory = try directory(for: scanID)
+        let destination = scanDirectory.appendingPathComponent("thumbnail.jpg")
+        let staging = scanDirectory.appendingPathComponent(".thumbnail-\(UUID().uuidString).jpg")
+        defer { try? FileManager.default.removeItem(at: staging) }
+        guard let imageDestination = CGImageDestinationCreateWithURL(
+            staging as CFURL,
+            UTType.jpeg.identifier as CFString,
+            1,
+            nil
+        ) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        CGImageDestinationAddImage(imageDestination, thumbnail, [kCGImageDestinationLossyCompressionQuality: 0.82] as CFDictionary)
+        guard CGImageDestinationFinalize(imageDestination) else { throw CocoaError(.fileWriteUnknown) }
+        if FileManager.default.fileExists(atPath: destination.path) {
+            _ = try FileManager.default.replaceItemAt(destination, withItemAt: staging)
+        } else {
+            try FileManager.default.moveItem(at: staging, to: destination)
+        }
+        return destination
+    }
+
     public func manifestURL(for scanID: UUID) throws -> URL {
         try directory(for: scanID).appendingPathComponent("manifest.json")
+    }
+
+    /// Removes only the app-owned directory for a capture that never committed to the database.
+    /// Callers must never use this as a substitute for the staged deletion transaction of a
+    /// persisted scan.
+    public func discardAssets(for scanID: UUID) throws {
+        let root = rootDirectory.standardizedFileURL
+        let target = root.appendingPathComponent(scanID.uuidString, isDirectory: true).standardizedFileURL
+        guard target.deletingLastPathComponent() == root else { throw CocoaError(.fileWriteInvalidFileName) }
+        if FileManager.default.fileExists(atPath: target.path) {
+            try FileManager.default.removeItem(at: target)
+        }
     }
 
     public func writeManifest(_ manifest: ScanAssetManifest) throws {
