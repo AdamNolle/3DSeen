@@ -60,7 +60,7 @@ final class SettingsStore: ObservableObject {
         set { write(newValue, Key.defaultMode) }
     }
     var qualityTier: QualityTier {
-        get { read(Key.qualityTier, default: .full) }
+        get { read(Key.qualityTier, default: .medium) }
         set { write(newValue, Key.qualityTier) }
     }
     var units: Units {

@@ -6,6 +6,7 @@ import OSLog
 /// processes the `CapturedRoom` and exports a parametric USDZ for the compute/export pipeline.
 struct RoomCaptureEngine: View {
     @EnvironmentObject var stateMachine: ProcessingStateMachine
+    let attemptID: UUID
     @StateObject private var controller = RoomCaptureController()
 
     var body: some View {
@@ -24,7 +25,7 @@ struct RoomCaptureEngine: View {
         }
         .onAppear {
             controller.onExported = { url in
-                stateMachine.send(.finishCapture(scanDataURL: url))
+                stateMachine.send(.finishCapture(scanDataURL: url, attemptID: attemptID))
             }
             controller.onFailure = { message in
                 stateMachine.send(.errorOccurred(message))

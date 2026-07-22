@@ -3,6 +3,11 @@
 // SVG sources are recreated with SwiftUI Canvas / Shapes.
 
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 // MARK: - Stage (neutral studio backdrop for 3D content)
 
@@ -364,61 +369,130 @@ struct ScanThumb: View {
     let scan: ScanItem
     var radius: CGFloat = 14
     var label: Bool = true
+    #if canImport(UIKit)
+    @State private var platformThumbnail: UIImage?
+    #elseif canImport(AppKit)
+    @State private var platformThumbnail: NSImage?
+    #endif
 
     var body: some View {
-        let (hi, lo) = ScanTone.pair(scan.tone)
         ZStack {
-            // stage background
-            RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .fill(RadialGradient(
-                    colors: theme.mode == .dark ? [Color(hex: "#2b2b31"), Color(hex: "#161618")] : [Color(hex: "#FAFAF8"), Color(hex: "#E7E5DF")],
-                    center: .top, startRadius: 0, endRadius: 200))
-            // stone object
-            Canvas { ctx, size in
-                let sx = size.width / 100, sy = size.height / 116
-                ctx.fill(Path(ellipseIn: CGRect(x: 24 * sx, y: 88.6 * sy, width: 52 * sx, height: 6.8 * sy)),
-                         with: .color(.black.opacity(0.16)))
-                ctx.fill(Path(ellipseIn: CGRect(x: 23 * sx, y: 23 * sy, width: 54 * sx, height: 66 * sy)),
-                         with: .radialGradient(Gradient(stops: [.init(color: hi, location: 0), .init(color: lo, location: 0.7), .init(color: lo.opacity(0.4), location: 1)]),
-                                               center: CGPoint(x: 40 * sx, y: 37 * sy), startRadius: 0, endRadius: 45 * sx))
-                ctx.fill(Path(ellipseIn: CGRect(x: 29 * sx, y: 28 * sy, width: 26 * sx, height: 36 * sy)),
-                         with: .color(.white.opacity(0.4)))
-            }
-            // mode chip top-left
-            VStack {
-                HStack {
-                    Text(scan.mode.uppercased())
-                        .font(.sf(9, .bold)).tracking(0.4)
-                        .foregroundStyle(theme.text2)
-                        .padding(.horizontal, 7).padding(.vertical, 3)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(theme.glassFill))
-                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.glassBorder, lineWidth: 0.5))
-                    Spacer()
-                }
-                Spacer()
-            }
-            .padding(9)
-            // label gradient bottom
-            if label {
-                VStack {
-                    Spacer()
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(scan.name).font(.sf(13, .semibold)).tracking(0).foregroundStyle(theme.ink)
-                        Text("\(scan.mode) · \(scan.tier) · \(scan.mb) MB")
-                            .font(.mono(9.5)).foregroundStyle(theme.text3)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 11).padding(.top, 22).padding(.bottom, 10)
-                    .background(
-                        LinearGradient(colors: theme.mode == .dark ? [.clear, .black.opacity(0.7)] : [.clear, .white.opacity(0.85)],
-                                       startPoint: .top, endPoint: .bottom)
-                    )
-                }
-            }
+            preview
+            modeChip
+            if label { labelOverlay }
         }
         .aspectRatio(1 / 1.16, contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(theme.line, lineWidth: 0.5))
         .shadow(color: .black.opacity(0.06), radius: 10, y: 6)
+        .task(id: scan.thumbnailURL) { await loadThumbnail() }
+    }
+
+    @ViewBuilder private var preview: some View {
+        if let image = thumbnailImage {
+            image
+                .resizable()
+                .scaledToFill()
+                .accessibilityHidden(true)
+        } else {
+            let (high, low) = ScanTone.pair(scan.tone)
+            ZStack {
+                LinearGradient(
+                    colors: [high.opacity(theme.mode == .dark ? 0.24 : 0.30), low.opacity(theme.mode == .dark ? 0.14 : 0.18)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(theme.card.opacity(0.86))
+                    .frame(width: 64, height: 64)
+                    .overlay(StIcon(name: modeIcon, size: 28, color: theme.accentText))
+                    .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(theme.line, lineWidth: 0.5))
+                Text(previewStatus)
+                    .font(.sf(10.5, .semibold))
+                    .foregroundStyle(theme.text2)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(theme.card.opacity(0.90)))
+                    .offset(y: 48)
+            }
+            .accessibilityHidden(true)
+        }
+    }
+
+    private var modeChip: some View {
+        VStack {
+            HStack {
+                Text(scan.mode.uppercased())
+                    .font(.sf(9, .bold)).tracking(0.4)
+                    .foregroundStyle(theme.text2)
+                    .padding(.horizontal, 7).padding(.vertical, 3)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(theme.glassFill))
+                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.glassBorder, lineWidth: 0.5))
+                Spacer()
+            }
+            Spacer()
+        }
+        .padding(9)
+    }
+
+    private var labelOverlay: some View {
+        VStack {
+            Spacer()
+            VStack(alignment: .leading, spacing: 3) {
+                Text(scan.name).font(.sf(13, .semibold)).tracking(0).foregroundStyle(theme.ink)
+                Text("\(scan.mode) · \(scan.tier) · \(scan.mb) MB")
+                    .font(.mono(9.5)).foregroundStyle(theme.text3)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 11).padding(.top, 22).padding(.bottom, 10)
+            .background(
+                LinearGradient(
+                    colors: theme.mode == .dark ? [.clear, .black.opacity(0.78)] : [.clear, .white.opacity(0.94)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+        }
+    }
+
+    private var modeIcon: String {
+        switch scan.mode.lowercased() {
+        case "space", "room": return "roomMode"
+        case "landscape", "outdoor scene": return "outdoorMode"
+        default: return "objectMode"
+        }
+    }
+
+    private var previewStatus: String {
+        switch scan.primaryAction {
+        case .view: return "Model ready"
+        case .resumeCapture: return "Capture in progress"
+        case .resumeReview: return "Photos saved"
+        case .resumeCompute: return "Build in progress"
+        case .retryCompute: return "Build needs retry"
+        }
+    }
+
+    private var thumbnailImage: Image? {
+        #if canImport(UIKit)
+        platformThumbnail.map(Image.init(uiImage:))
+        #elseif canImport(AppKit)
+        platformThumbnail.map(Image.init(nsImage:))
+        #else
+        nil
+        #endif
+    }
+
+    @MainActor
+    private func loadThumbnail() async {
+        platformThumbnail = nil
+        guard let url = scan.thumbnailURL else { return }
+        let data = await Task.detached(priority: .utility) { try? Data(contentsOf: url) }.value
+        guard !Task.isCancelled else { return }
+        #if canImport(UIKit)
+        platformThumbnail = data.flatMap(UIImage.init(data:))
+        #elseif canImport(AppKit)
+        platformThumbnail = data.flatMap(NSImage.init(data:))
+        #endif
     }
 }

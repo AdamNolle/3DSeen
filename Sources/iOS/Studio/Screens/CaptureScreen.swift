@@ -12,6 +12,8 @@ struct CaptureScreen: View {
     @State private var isPreparing = false
     @State private var isReady = false
     @State private var didPersist = false
+    @State private var captureAttemptID = UUID()
+    @State private var persistenceTask: Task<Void, Never>?
 
     private var selectedInfo: CaptureModeInfo {
         STUDIO_MODES.first { $0.id == model.selectedCaptureModeID } ?? STUDIO_MODES[0]
@@ -22,21 +24,27 @@ struct CaptureScreen: View {
     var body: some View {
         Group {
             if isReady {
-                CaptureCoordinatorView(captureMode: captureMode, onCancel: cancelCapture)
+                CaptureCoordinatorView(
+                    captureMode: captureMode,
+                    attemptID: captureAttemptID,
+                    recommendedObjectFrameCount: recommendedObjectFrameCount,
+                    onCancel: cancelCapture
+                )
             } else {
                 preparationView
             }
         }
         .task { await prepareCapture() }
         .onReceive(stateMachine.$state) { state in
-            switch state {
-            case .packagingScan where !didPersist:
-                didPersist = true
-                Task { await persistCompletedCapture() }
-            default:
-                break
-            }
+            guard case .packagingScan = state,
+                  !didPersist,
+                  let completion = stateMachine.lastCaptureCompletion,
+                  completion.attemptID == captureAttemptID else { return }
+            didPersist = true
+            persistenceTask?.cancel()
+            persistenceTask = Task { await persistCompletedCapture(completion) }
         }
+        .onDisappear { persistenceTask?.cancel() }
     }
 
     private var preparationView: some View {
@@ -45,15 +53,15 @@ struct CaptureScreen: View {
             VStack(spacing: 18) {
                 if isPreparing {
                     ProgressView().controlSize(.large)
-                    Text("Preparing \(selectedInfo.name) capture")
+                    Text("Getting the camera ready")
                         .font(.sf(18, .semibold))
                         .foregroundStyle(theme.ink)
                 } else {
                     StIcon(name: selectedInfo.icon, size: 34, color: theme.accentText)
-                    Text("\(selectedInfo.name) capture is not running")
+                    Text("The scanner is not running")
                         .font(.sf(20, .bold))
                         .foregroundStyle(theme.ink)
-                    StButton(title: "Back to Detail", kind: .secondary, icon: "back") {
+                    StButton(title: "Back to Result", kind: .secondary, icon: "back") {
                         model.go(.quality)
                     }
                 }
@@ -88,6 +96,7 @@ struct CaptureScreen: View {
         }
 
         stateMachine.send(.reset)
+        captureAttemptID = UUID()
         isReady = true
     }
 
@@ -111,16 +120,19 @@ struct CaptureScreen: View {
 
     @MainActor
     private func cancelCapture() {
+        persistenceTask?.cancel()
+        persistenceTask = nil
         stateMachine.send(.reset)
         isReady = false
         model.go(.quality)
     }
 
     @MainActor
-    private func persistCompletedCapture() async {
-        let scanDataURL = stateMachine.lastScanDataURL
-        let frameCount = scanDataURL.map { CaptureArchiveInspector.imageFrameCount(in: $0) } ?? 0
-        let capturedMode = stateMachine.activeCaptureMode ?? captureMode
+    private func persistCompletedCapture(_ completion: CaptureCompletion) async {
+        let scanDataURL = completion.scanDataURL
+        defer { try? GuidedCaptureTemporarySource.discardIfOwned(scanDataURL) }
+        let frameCount = CaptureArchiveInspector.imageFrameCount(in: scanDataURL)
+        let capturedMode = completion.mode
         let session = ScanSession(
             captureMode: capturedMode,
             name: "\(capturedMode.rawValue) Scan",
@@ -135,15 +147,21 @@ struct CaptureScreen: View {
             weakSpotCount: 0
         )
 
+        var store: ScanAssetStore?
         do {
-            guard let scanDataURL else { throw CocoaError(.fileNoSuchFile) }
-            let store = try ScanAssetStore()
-            let persistedURL = try store.importCapture(from: scanDataURL, for: session.id)
+            try Task.checkCancellation()
+            let resolvedStore = try ScanAssetStore()
+            store = resolvedStore
+            let persistedURL = try resolvedStore.importCapture(from: scanDataURL, for: session.id)
             session.sizeMB = Self.sizeMB(for: persistedURL)
+            if let capturedFrame = CaptureArchiveInspector.firstDecodableImageFrame(in: persistedURL) {
+                session.thumbnailURL = try resolvedStore.importThumbnail(from: capturedFrame, for: session.id)
+            }
             if capturedMode != .space {
                 session.captureQualityReport = await Task.detached(priority: .userInitiated) {
                     CaptureQualityAnalyzer.analyze(archive: persistedURL)
                 }.value
+                try Task.checkCancellation()
             }
 
             if capturedMode == .space, persistedURL.pathExtension.lowercased() == "usdz" {
@@ -155,13 +173,32 @@ struct CaptureScreen: View {
                 session.markPackaged(rawArchiveURL: persistedURL)
             }
 
-            try store.writeManifest(try store.manifest(for: session))
+            try resolvedStore.writeManifest(try resolvedStore.manifest(for: session))
+            try Task.checkCancellation()
             modelContext.insert(session)
-            model.activeScanID = session.id
             try modelContext.save()
+            guard !Task.isCancelled, captureAttemptID == completion.attemptID else {
+                throw CancellationError()
+            }
+            model.activeScanID = session.id
             model.go(.review)
+        } catch is CancellationError {
+            modelContext.rollback()
+            try? store?.discardAssets(for: session.id)
         } catch {
+            modelContext.rollback()
+            try? store?.discardAssets(for: session.id)
             stateMachine.send(.errorOccurred("Unable to save the captured scan: \(error.localizedDescription)"))
+        }
+    }
+
+    private var recommendedObjectFrameCount: Int {
+        switch model.selectedDetailTier {
+        case "preview": return 30
+        case "reduced": return 40
+        case "full": return 64
+        case "raw": return 80
+        default: return 48
         }
     }
 

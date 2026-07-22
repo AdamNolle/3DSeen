@@ -72,7 +72,7 @@ private struct PhoneComputeBody: View {
         if sel == "local", localCompute.isRunning {
             return "Computing \(Int((localCompute.progress * 100).rounded()))%"
         }
-        return sel == "mac" ? "Hand off to Mac" : "Compute on device · Reduced"
+        return sel == "mac" ? "Send to Mac" : "Build Here · Reduced"
     }
 
     var body: some View {
@@ -137,9 +137,9 @@ private struct PhoneComputeBody: View {
 
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 0) {
-            StLabel(text: "Where should we render?")
-            Text("Compute pipeline").font(.sf(28, .heavy)).tracking(0).foregroundStyle(theme.ink).padding(.top, 6)
-            Text("On-device RealityKit produces Reduced output. A Mac handoff keeps the selected detail request.")
+            StLabel(text: "Choose where to build")
+            Text("Build your model").font(.sf(28, .heavy)).tracking(0).foregroundStyle(theme.ink).padding(.top, 6)
+            Text("Use a Mac for the result you selected. Building here is convenient and always uses Reduced detail.")
                 .font(.sf(13.5)).foregroundStyle(theme.text2).padding(.top, 8)
         }
         .padding(.top, 18)
@@ -544,17 +544,17 @@ private struct PadComputeHeader: View {
             HStack(spacing: 12) {
                 CircleIconButton(icon: "back", size: 38) { model.go(.review) }
                 VStack(alignment: .leading, spacing: 2) {
-                    StLabel(text: "Step 4 of 4 · Compute pipeline")
-                    Text("Where should we render?")
+                    StLabel(text: "Step 4 of 4 · Build")
+                    Text("Build your model")
                         .font(.sf(17, .bold)).tracking(0).foregroundStyle(theme.ink)
                 }
             }
             Spacer(minLength: 12)
             HStack(spacing: 8) {
-                StButton(title: "Compute on iPad · Reduced", kind: .secondary, size: .sm, icon: "chip") {
+                StButton(title: "Build Here · Reduced", kind: .secondary, size: .sm, icon: "chip") {
                     onCompute("local")
                 }
-                StButton(title: "Hand off to Mac", kind: .accent, size: .sm, icon: "laptop") {
+                StButton(title: "Send to Mac", kind: .accent, size: .sm, icon: "laptop") {
                     onCompute("mac")
                 }
             }
@@ -590,14 +590,14 @@ private struct PadHubCard: View {
     private var headerRow: some View {
         HStack(alignment: .top, spacing: 24) {
             VStack(alignment: .leading, spacing: 0) {
-                StLabel(text: "Hub & spoke", color: theme.accentText)
+                StLabel(text: "Choose a builder", color: theme.accentText)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("Capture here.").foregroundStyle(theme.ink)
-                    Text("Render there.").foregroundStyle(theme.accentText)
+                    Text("Build here.").foregroundStyle(theme.ink)
+                    Text("Or use your Mac.").foregroundStyle(theme.accentText)
                 }
                 .font(.sf(42, .heavy)).tracking(0)
                 .padding(.top, 8)
-                Text("Send the retained capture package to a connected Mac, or use RealityKit on this device.")
+                Text("Use this device for a convenient Reduced model, or securely send the saved photos to a connected Mac.")
                     .font(.sf(14)).foregroundStyle(theme.text2).lineSpacing(6)
                     .frame(maxWidth: 430, alignment: .leading)
                     .padding(.top, 12)

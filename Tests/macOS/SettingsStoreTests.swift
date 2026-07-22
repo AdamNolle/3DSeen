@@ -16,7 +16,7 @@ final class SettingsStoreTests: XCTestCase {
 
         XCTAssertEqual(store.appearance, .system)
         XCTAssertEqual(store.defaultMode, .autoPilot)
-        XCTAssertEqual(store.qualityTier, .full)
+        XCTAssertEqual(store.qualityTier, .medium)
         XCTAssertEqual(store.units, .centimeters)
         XCTAssertFalse(store.gridIsList)
         XCTAssertTrue(store.thermalProtectionEnabled)

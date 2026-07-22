@@ -31,6 +31,7 @@
 		2294A576C20FF5C9AA9B8488 /* StudioComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D535C6B22419107CA1BE97C /* StudioComponents.swift */; };
 		23E3AD837941CD24AB72069B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3FD1D9DF0008E6C70E565D89 /* Assets.xcassets */; };
 		28E252D6230C9F3F27FD4451 /* ViewerScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AD323776CD4D94C47792345 /* ViewerScreen.swift */; };
+		29710434C58197AE062D3B96 /* GuidedObjectCaptureController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECFEBEDA5D72BCD7B00A41D8 /* GuidedObjectCaptureController.swift */; };
 		2E00DF49ACB24E7730FD7A71 /* WizardFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E7DB58CB14F3185D5564E53 /* WizardFlowUITests.swift */; };
 		2F2DCE8C2176A44226EB08EE /* ComputeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8ABEFAF4C800310DE2199BD /* ComputeScreen.swift */; };
 		32E1BAE7B79519B13D39AFBD /* Primitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = 191E7FBB3A8060C3A0D4F62D /* Primitives.swift */; };
@@ -40,6 +41,8 @@
 		3B1475DB7A4A31A8A491AC70 /* LiveCaptureHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = F85DDBDD6E873DC5AAF7C124 /* LiveCaptureHUD.swift */; };
 		3F8832F31EF44497117BAE69 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = B8A7E315EAB4A35CDE7FAF4A /* ZIPFoundation */; };
 		4467A3C868558569446D39A1 /* CaptureScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07651B3FCF956B10B87C371 /* CaptureScreen.swift */; };
+		45B8B960150491FC7CE47919 /* GuidedObjectCaptureController+Writing.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC14915AF3AE9245DB86A3D8 /* GuidedObjectCaptureController+Writing.swift */; };
+		46E00297C81CB0885ACD6EBA /* GuidedScannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A28D2A5101900B49581CE0 /* GuidedScannerTests.swift */; };
 		497EAD07AE55DB09ABE70E8D /* LocalQueueManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D346EB2BD18E2A661B3BF1F /* LocalQueueManager.swift */; };
 		4996E9BB3BA317180388D3D0 /* AutoPilotVisionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A2A28C46F8496F999E0A552 /* AutoPilotVisionManager.swift */; };
 		4CDD4ACDBAC038E47AB73678 /* QualityScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8778A7A62DAFBA745CDB4F67 /* QualityScreen.swift */; };
@@ -103,9 +106,13 @@
 		B796705BCBA29BDB14A9363D /* LandscapeCaptureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = D699E59014BAC0A8CD7BF80F /* LandscapeCaptureEngine.swift */; };
 		B801D9F976BB29CD59A42B23 /* ModelGeometryInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94267FF59D408E2A692E43BB /* ModelGeometryInspector.swift */; };
 		B9F6034ED39489AE835575C6 /* Primitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = 191E7FBB3A8060C3A0D4F62D /* Primitives.swift */; };
+		BE04D46EC3CAA5E7B8533BE8 /* GuidedCaptureTemporarySource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CBF9733CFA99C004E8AAAF6 /* GuidedCaptureTemporarySource.swift */; };
+		BE93A07A3166F0E37B767E95 /* VisionForegroundSubjectDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B652434F37ABC86A66913D4 /* VisionForegroundSubjectDetector.swift */; };
+		C0BB41EDA2B35F1335C2C1BC /* GuidedObjectCaptureController+AR.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73F041A48B09A08901142E55 /* GuidedObjectCaptureController+AR.swift */; };
 		C23D2E164A9213EFFB51719F /* HandoffPairingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96BE68CCC1669D6127D359C5 /* HandoffPairingCoordinator.swift */; };
 		C2F79A0603A7DE28E966095A /* StudioChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBC667D7ECC9E10091C643D0 /* StudioChrome.swift */; };
 		C378704DEF112B1161D98AC7 /* ScanSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA53940BBA8FCD5C9ED3794 /* ScanSession.swift */; };
+		C417A5ED67ABE1893B9627B4 /* GuidedScanCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44807A4146F6D3C1EE584B6D /* GuidedScanCore.swift */; };
 		C7EE7BF07BBF072BCF3950FD /* HandoffTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E9069508A6BB2A6AF3157E7 /* HandoffTransport.swift */; };
 		C9AD59FF6F58547E4021D6B9 /* ObjectCaptureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE453E975B978103D45FAD /* ObjectCaptureEngine.swift */; };
 		D0CBA0375333C13FC38AFBFF /* ComputeOption.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70A9B012C4A9D6C001FE697B /* ComputeOption.swift */; };
@@ -154,6 +161,7 @@
 		028ACBD730FE459DD24F6B08 /* BlenderModelConverterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlenderModelConverterTests.swift; sourceTree = "<group>"; };
 		0ABA6E8C22956A44B83CEA87 /* HandoffTrust.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffTrust.swift; sourceTree = "<group>"; };
 		0BEDEB7EFB54C45767689D41 /* MacLibraryPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacLibraryPane.swift; sourceTree = "<group>"; };
+		0CBF9733CFA99C004E8AAAF6 /* GuidedCaptureTemporarySource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidedCaptureTemporarySource.swift; sourceTree = "<group>"; };
 		0E7DB58CB14F3185D5564E53 /* WizardFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WizardFlowUITests.swift; sourceTree = "<group>"; };
 		0E9069508A6BB2A6AF3157E7 /* HandoffTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffTransport.swift; sourceTree = "<group>"; };
 		10DEAF503F471822B4E715BC /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -175,11 +183,13 @@
 		3FD1D9DF0008E6C70E565D89 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		408269989B88069C5E20274C /* CaptureCoordinatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureCoordinatorView.swift; sourceTree = "<group>"; };
 		40C30F34558AA0A12627CAB5 /* SplatRoundTripTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplatRoundTripTests.swift; sourceTree = "<group>"; };
+		44807A4146F6D3C1EE584B6D /* GuidedScanCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidedScanCore.swift; sourceTree = "<group>"; };
 		4744A87B322A5AC2A6E1CAD5 /* NerfstudioRuntimeInstallerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NerfstudioRuntimeInstallerTests.swift; sourceTree = "<group>"; };
 		4D346EB2BD18E2A661B3BF1F /* LocalQueueManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalQueueManager.swift; sourceTree = "<group>"; };
 		4EA5E31F28CC4DB785424809 /* MacExportPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacExportPane.swift; sourceTree = "<group>"; };
 		5497D160451FC0508F4E6754 /* HandoffPairingCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffPairingCoordinatorTests.swift; sourceTree = "<group>"; };
 		5A9AC885A17E5D03B3EB54B5 /* NerfstudioSplatTrainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NerfstudioSplatTrainer.swift; sourceTree = "<group>"; };
+		5B652434F37ABC86A66913D4 /* VisionForegroundSubjectDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionForegroundSubjectDetector.swift; sourceTree = "<group>"; };
 		5FF65174650149D9D9FAAADD /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
 		60DC68A1A91B1590CD93B795 /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
 		60DF3F918AC67A5FC851F598 /* HandoffProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffProtocol.swift; sourceTree = "<group>"; };
@@ -191,6 +201,7 @@
 		6DBB988AF570CA6FA57C4DC8 /* ModelExporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelExporterTests.swift; sourceTree = "<group>"; };
 		70A9B012C4A9D6C001FE697B /* ComputeOption.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputeOption.swift; sourceTree = "<group>"; };
 		7285F79EED4C6F44B29292AB /* ModePickerScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModePickerScreen.swift; sourceTree = "<group>"; };
+		73F041A48B09A08901142E55 /* GuidedObjectCaptureController+AR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GuidedObjectCaptureController+AR.swift"; sourceTree = "<group>"; };
 		7BEF257A4B59A9E6793F948E /* BriefingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingScreen.swift; sourceTree = "<group>"; };
 		81D8872B17C1E43C16BF0E89 /* LiveCaptureStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveCaptureStatus.swift; sourceTree = "<group>"; };
 		84DE17EB79919A1B79091980 /* NerfstudioRuntimeInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NerfstudioRuntimeInstaller.swift; sourceTree = "<group>"; };
@@ -216,12 +227,14 @@
 		BBC667D7ECC9E10091C643D0 /* StudioChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioChrome.swift; sourceTree = "<group>"; };
 		C081084541E03AFFA18E2B22 /* SettingsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStoreTests.swift; sourceTree = "<group>"; };
 		C0DE453E975B978103D45FAD /* ObjectCaptureEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObjectCaptureEngine.swift; sourceTree = "<group>"; };
+		C1A28D2A5101900B49581CE0 /* GuidedScannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidedScannerTests.swift; sourceTree = "<group>"; };
 		C4731D2A7790417E6D63A9A5 /* MacHandoffJobJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacHandoffJobJournal.swift; sourceTree = "<group>"; };
 		CB80CB2523BFE5E9C74BBFBB /* BlenderModelConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlenderModelConverter.swift; sourceTree = "<group>"; };
 		CFCC585299A17E4BD48468C3 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		D15C2670C33C1808B927D57A /* 3DSeenApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = 3DSeenApp.swift; sourceTree = "<group>"; };
 		D2EFDC324502E8EE8CDCE1FD /* MacSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSettingsPane.swift; sourceTree = "<group>"; };
 		D699E59014BAC0A8CD7BF80F /* LandscapeCaptureEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LandscapeCaptureEngine.swift; sourceTree = "<group>"; };
+		DC14915AF3AE9245DB86A3D8 /* GuidedObjectCaptureController+Writing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GuidedObjectCaptureController+Writing.swift"; sourceTree = "<group>"; };
 		DF6140FFD36ADB270491891B /* NetworkHandoffManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkHandoffManager.swift; sourceTree = "<group>"; };
 		E047A386A69A590077D0400E /* ModelExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelExporter.swift; sourceTree = "<group>"; };
 		E07651B3FCF956B10B87C371 /* CaptureScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureScreen.swift; sourceTree = "<group>"; };
@@ -229,6 +242,7 @@
 		E2D63C1AF9F8FD5E2C6AFC43 /* CaptureTelemetryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureTelemetryTests.swift; sourceTree = "<group>"; };
 		E5390766A930F48BB649338F /* GaussianSplat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GaussianSplat.swift; sourceTree = "<group>"; };
 		E98F370212A0EB3C878F8F5D /* CaptureQualityAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureQualityAnalyzer.swift; sourceTree = "<group>"; };
+		ECFEBEDA5D72BCD7B00A41D8 /* GuidedObjectCaptureController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidedObjectCaptureController.swift; sourceTree = "<group>"; };
 		ED2170C8F12A88B7BEE2C7E5 /* ScanSessionMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanSessionMapping.swift; sourceTree = "<group>"; };
 		F1DB7CB6DEFFA0885362563F /* GaussianSplatGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GaussianSplatGenerator.swift; sourceTree = "<group>"; };
 		F211D1F95F1137E6ED3888EC /* 3DSeenApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = 3DSeenApp.swift; sourceTree = "<group>"; };
@@ -314,10 +328,16 @@
 			isa = PBXGroup;
 			children = (
 				408269989B88069C5E20274C /* CaptureCoordinatorView.swift */,
+				0CBF9733CFA99C004E8AAAF6 /* GuidedCaptureTemporarySource.swift */,
+				ECFEBEDA5D72BCD7B00A41D8 /* GuidedObjectCaptureController.swift */,
+				73F041A48B09A08901142E55 /* GuidedObjectCaptureController+AR.swift */,
+				DC14915AF3AE9245DB86A3D8 /* GuidedObjectCaptureController+Writing.swift */,
+				44807A4146F6D3C1EE584B6D /* GuidedScanCore.swift */,
 				D699E59014BAC0A8CD7BF80F /* LandscapeCaptureEngine.swift */,
 				F85DDBDD6E873DC5AAF7C124 /* LiveCaptureHUD.swift */,
 				C0DE453E975B978103D45FAD /* ObjectCaptureEngine.swift */,
 				9DAD8A7ADE795A2D03C0A5C7 /* RoomCaptureEngine.swift */,
+				5B652434F37ABC86A66913D4 /* VisionForegroundSubjectDetector.swift */,
 			);
 			path = Capture;
 			sourceTree = "<group>";
@@ -427,6 +447,7 @@
 				281F78B7D402BE66E74A9771 /* AutoPilotTests.swift */,
 				E2D63C1AF9F8FD5E2C6AFC43 /* CaptureTelemetryTests.swift */,
 				64953E3F4E46190D0E5C36FE /* ComputeDetailCapabilityTests.swift */,
+				C1A28D2A5101900B49581CE0 /* GuidedScannerTests.swift */,
 				5497D160451FC0508F4E6754 /* HandoffPairingCoordinatorTests.swift */,
 				A7920D74A99B1596A19E73AC /* HandoffProtocolTests.swift */,
 				197D3A95570EDF2EBDC4AE03 /* HandoffTrustTests.swift */,
@@ -647,9 +668,9 @@
 			projectRoot = "";
 			targets = (
 				A4887E1AD8B7BA1740FD76AD /* 3DSeen-iOS */,
+				C8B195E2C4D9380B04FC7074 /* 3DSeen-macOS */,
 				DFD623BA2B972EB470718C19 /* 3DSeen-iOSTests */,
 				A1285B8C102B7FD23D6CB758 /* 3DSeen-iOSUITests */,
-				C8B195E2C4D9380B04FC7074 /* 3DSeen-macOS */,
 				CE33357D7808BAD7581E4BA6 /* 3DSeen-macOSTests */,
 			);
 		};
@@ -696,6 +717,7 @@
 				0B98DA421C4EC7CFC7DA9F9A /* AutoPilotTests.swift in Sources */,
 				E5D1820F52E8DC53581193E6 /* CaptureTelemetryTests.swift in Sources */,
 				E1D81375B20049AEEEC86FF2 /* ComputeDetailCapabilityTests.swift in Sources */,
+				46E00297C81CB0885ACD6EBA /* GuidedScannerTests.swift in Sources */,
 				137225363E194759F2566F11 /* HandoffPairingCoordinatorTests.swift in Sources */,
 				0C17028F1E8678A45B43B9C7 /* HandoffProtocolTests.swift in Sources */,
 				8509104342481E9EFAD8E3BD /* HandoffTrustTests.swift in Sources */,
@@ -779,6 +801,11 @@
 				534EB7A2FF070AE6780F4B84 /* ExportScreen.swift in Sources */,
 				89017EE14CAC361BE71CB61E /* GaussianSplat.swift in Sources */,
 				112217F082CDBA2987000879 /* GaussianSplatGenerator.swift in Sources */,
+				BE04D46EC3CAA5E7B8533BE8 /* GuidedCaptureTemporarySource.swift in Sources */,
+				C0BB41EDA2B35F1335C2C1BC /* GuidedObjectCaptureController+AR.swift in Sources */,
+				45B8B960150491FC7CE47919 /* GuidedObjectCaptureController+Writing.swift in Sources */,
+				29710434C58197AE062D3B96 /* GuidedObjectCaptureController.swift in Sources */,
+				C417A5ED67ABE1893B9627B4 /* GuidedScanCore.swift in Sources */,
 				EE22AADD355AE96D66605E0F /* HandoffCoordinator.swift in Sources */,
 				C23D2E164A9213EFFB51719F /* HandoffPairingCoordinator.swift in Sources */,
 				777FCF8F2A3B4628558342BC /* HandoffProtocol.swift in Sources */,
@@ -816,6 +843,7 @@
 				610A788645A2098F1428BB87 /* StudioRouter.swift in Sources */,
 				FE77DCAB57B4A839EE000B0B /* Theme.swift in Sources */,
 				28E252D6230C9F3F27FD4451 /* ViewerScreen.swift in Sources */,
+				BE93A07A3166F0E37B767E95 /* VisionForegroundSubjectDetector.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

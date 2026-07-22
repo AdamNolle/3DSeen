@@ -73,8 +73,23 @@ final class StudioScreenTests: XCTestCase {
         XCTAssertNil(USDZPresentationPolicy.eligibleURL(root.appendingPathComponent("missing.usdz")))
     }
 
-    func testNewStudioModelUsesTheFullDetailDefault() {
-        XCTAssertEqual(StudioModel().selectedDetailTier, SettingsStore.QualityTier.full.rawValue)
+    func testGuidedQualityChoicesMapToStableUnderlyingTiers() {
+        XCTAssertEqual(GuidedQualityChoice.choice(forTierID: "preview").id, "quick")
+        XCTAssertEqual(GuidedQualityChoice.choice(forTierID: "reduced").tierID, "reduced")
+        XCTAssertEqual(GuidedQualityChoice.choice(forTierID: "medium").id, "balanced")
+        XCTAssertEqual(GuidedQualityChoice.choice(forTierID: "full").id, "maximum")
+        XCTAssertEqual(GuidedQualityChoice.choice(forTierID: "raw").id, "maximum")
+        XCTAssertEqual(GuidedQualityChoice.choices.map(\.tierID), ["reduced", "medium", "full"])
+        XCTAssertEqual(DETAIL_TIERS.map(\.id), ["preview", "reduced", "medium", "full", "raw"])
+    }
+
+    func testModePickerUsesBeginnerNamesAndSemanticIcons() {
+        XCTAssertEqual(STUDIO_MODES.map(\.name), ["Choose for Me", "Object", "Room", "Outdoor Scene"])
+        XCTAssertEqual(STUDIO_MODES.map(\.icon), ["autoMode", "objectMode", "roomMode", "outdoorMode"])
+    }
+
+    func testNewStudioModelUsesTheBalancedDetailDefault() {
+        XCTAssertEqual(StudioModel().selectedDetailTier, SettingsStore.QualityTier.medium.rawValue)
     }
 
     func testBeginningANewScanAppliesPersistedCaptureDefaults() {

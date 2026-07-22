@@ -8,11 +8,20 @@ import RoomPlan
 struct CaptureCoordinatorView: View {
     @EnvironmentObject var stateMachine: ProcessingStateMachine
     let captureMode: CaptureMode
+    let attemptID: UUID
+    let recommendedObjectFrameCount: Int
     var onCancel: (() -> Void)?
     @State private var resolvedAutoPilotMode: CaptureMode?
 
-    init(captureMode: CaptureMode, onCancel: (() -> Void)? = nil) {
+    init(
+        captureMode: CaptureMode,
+        attemptID: UUID,
+        recommendedObjectFrameCount: Int = 48,
+        onCancel: (() -> Void)? = nil
+    ) {
         self.captureMode = captureMode
+        self.attemptID = attemptID
+        self.recommendedObjectFrameCount = recommendedObjectFrameCount
         self.onCancel = onCancel
     }
 
@@ -24,8 +33,9 @@ struct CaptureCoordinatorView: View {
         }
         .navigationBarBackButtonHidden()
         .onAppear {
-            if stateMachine.state != .capturing(mode: captureMode) {
-                stateMachine.send(.startCapture(captureMode))
+            if stateMachine.state != .capturing(mode: captureMode)
+                || stateMachine.activeCaptureAttemptID != attemptID {
+                stateMachine.send(.startCapture(captureMode, attemptID: attemptID))
             }
         }
     }
@@ -39,7 +49,7 @@ struct CaptureCoordinatorView: View {
                 AutoPilotCaptureEngine(
                     onResolved: { mode in
                         resolvedAutoPilotMode = mode
-                        stateMachine.send(.autoPilotResolved(mode))
+                        stateMachine.send(.autoPilotResolved(mode, attemptID: attemptID))
                     },
                     onFailure: { message in
                         stateMachine.send(.errorOccurred(message))
@@ -54,11 +64,14 @@ struct CaptureCoordinatorView: View {
     @ViewBuilder private func captureEngine(for mode: CaptureMode) -> some View {
         switch mode {
         case .object:
-            ObjectCaptureEngine()
+            ObjectCaptureEngine(
+                attemptID: attemptID,
+                recommendedFrameCount: recommendedObjectFrameCount
+            )
         case .space:
-            RoomCaptureEngine()
+            RoomCaptureEngine(attemptID: attemptID)
         case .landscape:
-            LandscapeCaptureEngine()
+            LandscapeCaptureEngine(attemptID: attemptID)
         case .autoPilot:
             EmptyView()
         }

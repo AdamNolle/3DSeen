@@ -25,7 +25,7 @@ private struct ReviewFacts {
     var hasRawArchive: Bool { scan?.rawArchiveURL != nil }
     var canCompute: Bool { !isModelReady && hasRawArchive && scan?.captureStatus == .packaged }
     var canProceed: Bool { isModelReady || canCompute }
-    var primaryTitle: String { isModelReady ? "View model" : "Compute now" }
+    var primaryTitle: String { isModelReady ? "View Model" : "Build Model" }
     var primaryIcon: String { isModelReady ? "cube" : "chip" }
     var mode: String { scan?.captureModeRaw ?? "Scan" }
     var archiveStatus: String { hasRawArchive ? "Ready" : "Missing" }
@@ -79,9 +79,9 @@ private struct PhoneReview: View {
 
     private var title: some View {
         VStack(alignment: .leading, spacing: 6) {
-            StLabel(text: "\(facts.mode) · \(facts.frameCount) frames")
-            Text("Review & compute").font(.sf(28, .heavy)).foregroundStyle(theme.ink)
-            Text("Check that the scene looks complete, then compute the retained capture.")
+            StLabel(text: "\(facts.mode) · \(facts.frameCount) saved photos")
+            Text("Your scan is saved").font(.sf(28, .heavy)).foregroundStyle(theme.ink)
+            Text("Review the photo check below. You can retake now or continue to build a model.")
                 .font(.sf(13.5)).foregroundStyle(theme.text2)
         }
     }
@@ -90,7 +90,7 @@ private struct PhoneReview: View {
         StCard(radius: 8, pad: 18) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
-                    StLabel(text: "Captured asset", color: theme.accentText)
+                    StLabel(text: "Saved scan", color: theme.accentText)
                     Spacer()
                     StTextChip(text: facts.modelStatus.uppercased(), tone: facts.isModelReady ? .good : .neutral)
                 }
@@ -112,7 +112,7 @@ private struct PhoneReview: View {
                         Text(report.summary).font(.sf(13, .semibold)).foregroundStyle(theme.ink)
                     }
                     qualityStats(report)
-                    Text("Exposure and edge detail are sampled from retained frames; this is not a coverage map.")
+                    Text("This checks lighting and sharpness in sampled photos. It does not measure object coverage.")
                         .font(.sf(12)).foregroundStyle(theme.text3)
                 }
             } else {
@@ -210,7 +210,7 @@ private struct PadReview: View {
                 CircleIconButton(icon: "back", size: 38) { model.go(.mode) }
                 VStack(alignment: .leading, spacing: 2) {
                     StLabel(text: "Post-capture · \(facts.mode)", color: facts.scan == nil ? theme.text3 : theme.good)
-                    Text("Review & compute").font(.sf(17, .bold)).foregroundStyle(theme.ink)
+                    Text("Review saved scan").font(.sf(17, .bold)).foregroundStyle(theme.ink)
                 }
             }
             Spacer()
@@ -223,10 +223,10 @@ private struct PadReview: View {
     private var overview: some View {
         StCard(radius: 8, pad: 24) {
             VStack(alignment: .leading, spacing: 0) {
-                StLabel(text: "Captured data", color: theme.accentText)
-                Text(facts.scan == nil ? "No capture selected" : "Ready for compute")
+                StLabel(text: "Saved scan", color: theme.accentText)
+                Text(facts.scan == nil ? "No scan selected" : "Ready to build")
                     .font(.sf(32, .heavy)).foregroundStyle(theme.ink).padding(.top, 8)
-                Text(facts.isModelReady ? "A model is already available for preview and export." : "The retained archive can be reconstructed on this device or a connected Mac.")
+                Text(facts.isModelReady ? "Your model is ready to view and export." : "Build on this device, or use a connected Mac for the selected result quality.")
                     .font(.sf(14)).foregroundStyle(theme.text2).padding(.top, 8)
                 Spacer()
                 Image(systemName: facts.isModelReady ? "cube" : "archivebox")
@@ -258,7 +258,7 @@ private struct PadReview: View {
                                 + "\(report.brightFrameCount) bright, \(report.blurryFrameCount) soft."
                         )
                             .font(.sf(13.5)).foregroundStyle(theme.text2)
-                        Text("Exposure and edge detail only; subject coverage still needs visual review.")
+                        Text("This checks lighting and sharpness only; object coverage still needs visual review.")
                             .font(.sf(12.5)).foregroundStyle(theme.text3)
                     } else {
                         Text("No image-frame quality sample").font(.sf(18, .bold)).foregroundStyle(theme.ink)

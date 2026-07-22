@@ -18,14 +18,14 @@ extension ComputeOption {
         return (
             ComputeOption(
                 id: "mac",
-                name: "Mac handoff",
+                name: "Use a Mac",
                 icon: "laptop",
                 tag: "Requested \(macTier) output",
                 stats: [("Output", macTier, theme.accentText)]
             ),
             ComputeOption(
                 id: "local",
-                name: "On-device",
+                name: "Build on This Device",
                 icon: "chip",
                 tag: "RealityKit · \(localTier) output",
                 stats: [("Output", localTier, theme.warn)]

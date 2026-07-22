@@ -1,14 +1,19 @@
 # Verification Status
 
-Last updated: 2026-07-14
+Last updated: 2026-07-21
 
 ## Automated Evidence
 
-The complete fresh-shell gate is `FINAL_OUTPUT_ROOT="$PWD/build/final-verification" tools/ci/verify-all.sh`, run from the repository root. On 2026-07-14 it passed under Xcode 26.6 (17F113), XcodeGen 2.45.4, and SwiftLint 0.65.0. It preserves logs, xcresults/DerivedData, Release bundles, and machine-readable summaries under `build/final-verification/`.
+The complete fresh-shell gate is `FINAL_OUTPUT_ROOT="$PWD/build/push-verification" tools/ci/verify-all.sh`, run from the repository root. The 2026-07-21 result and exact counts are recorded below under Xcode 26.6 (17F113), XcodeGen 2.45.4, and SwiftLint 0.65.0. It preserves logs, xcresults/DerivedData, Release bundles, and machine-readable summaries under `build/push-verification/`.
 
-- iOS Simulator: `110` tests passed, `0` failed, `1` skipped (unsigned Simulator Keychain entitlement check); includes 2 XCUITests on iPhone 17 Pro, iOS 26.5.
-- macOS test target: `37` tests passed, `0` failed.
-- SwiftLint strict: `0` violations across `81` Swift files.
+- iOS Simulator: `128` passed, `0` failed, `1` skipped; the sole skip is the expected unsigned Simulator Keychain entitlement check.
+- macOS test target: `37` passed, `0` failed.
+- iPad Simulator UI: `2` passed, `0` failed, covering accessibility fallback plus the regular-width Guided wizard.
+- SwiftLint strict: `0` violations across `88` Swift files.
+- Guided Object capture is now a single custom ARKit session with injected Vision foreground-instance detection, two-frame lock stabilization, real subject-filtered LiDAR or tracked-feature points, measured automatic-photo gates, bounded background processing, attempt-scoped stale-callback rejection, and writer admission/drain synchronization. Deterministic policy and lifecycle tests cover selection, lock recovery, coordinate inversion, pose novelty, frame gating, stale attempts, and cleanup scope.
+- The Guided wizard exposes Choose for Me/Object/Room/Outdoor Scene and Quick/Balanced/Maximum by default while retaining exact `preview`, `reduced`, `medium`, `full`, and `raw` IDs under Advanced controls. Accessibility-XXXL iPhone and regular-width iPad XCUITests cover the revised primary actions.
+- Library cards no longer render fabricated stone/egg placeholders. Photo modes derive a bounded durable `thumbnail.jpg` from a validated real frame, load it asynchronously, retain it independently from raw-archive deletion, and use semantic mode/lifecycle fallback UI where no photo exists.
+- Deterministic icon generation and validation cover the installed-device-reviewed white dimensional-box mark, opaque RGB catalogs, referenced dimensions, and iOS/macOS asset compilation.
 - Simulator UI: the Library empty state reports zero real scans and capture availability is explicitly blocked with the mode-specific hardware requirement.
 - Simulator UI: persisted capture defaults flow from Settings into a newly started scan; measurement units update the rendered measurement text. Accessibility-size XCUITests keep thermal, trusted-Mac, retention, Splat, Quick Look/AR, and Export actions reachable; the same test passes on an iPad Simulator adaptive fallback.
 - Simulator UI: Auto-Pilot exposes the Vision-classification choice and accurately blocks live capture on Simulator instead of implying camera support.
@@ -34,35 +39,38 @@ The complete fresh-shell gate is `FINAL_OUTPUT_ROOT="$PWD/build/final-verificati
 - Phone, iPad, and Mac measurements use model-space point picking and the same persisted manifest records, unit formatting, deletion, and CSV exporter. Mac measurement add/delete/CSV durability is covered against an isolated asset store.
 - Geometry and trained-splat PLY files are structurally validated at result-package write and import. Valid ASCII geometry and binary Gaussian fixtures round-trip; missing coordinates, malformed headers/payloads, non-finite scalars, and wrong trained-splat properties are rejected before durable import.
 - iOS export work uses an immutable Sendable request rather than a background SwiftData model. Outputs live under Application Support, while provenance is written to both the portable manifest and explicitly saved ModelContext on the main actor; failed saves restore the prior in-memory and manifest values.
-- The real ObjectCapture, RoomPlan, and Landscape surfaces now share a live HUD backed only by engine state, AR tracking, and saved-frame counts. The former painted-camera `ViewfinderScreen` prototype has been removed.
+- The custom guided Object scanner, RoomPlan, and Landscape surfaces use live HUDs backed only by measured engine state, AR tracking, subject lock, real projected points, and saved-frame counts. The opaque ObjectCapture and former painted-camera prototype surfaces have been removed.
 - On-device compute consistently declares and persists `Reduced` output; Mac handoff preserves the requested detail tier. This policy and its UI-facing labels are covered by unit tests.
 - Export is verified for USDZ pass-through and ModelIO USD, OBJ (including its material sidecar), STL, and PLY output. macOS also provides GLB and embedded-texture FBX through a locally installed Blender runtime; declared GLB length/chunks and FBX version/footer are validated, failed/cancelled conversions preserve prior exports, and a local integration test converts a real USDA fixture to both formats. Blender runs in an isolated process group; task cancellation terminates and verifies both the launcher and its descendant process before the UI reports cancellation.
 - Synthetic model/splat generators are compiled only under `DEBUG`. Unsigned iOS and macOS Release builds passed, and their executable strings contain neither production demo fixture identifier.
 - The macOS external-tools settings panel reports Blender and trained-splat readiness. It can bootstrap COLMAP plus a pinned Nerfstudio `1.1.5` environment and refreshes runtime discovery without an app restart; its subprocess sequence is covered by a disposable-command integration test.
 - Both product bundles include an audited `PrivacyInfo.xcprivacy` declaring no tracking or collected data and required-reason access for app preferences and app-owned file timestamps. Bundle versions expand from `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION`; tag/build validation rejects malformed or mismatched releases.
 - Unsigned Release builds were inspected with overridden version `2.3.4 (42)`: both bundles contained the expanded versions and privacy manifest. iPad declares all four orientations with `UIRequiresFullScreen = false`; iPhone declares portrait plus both landscape orientations. Release build logs contained no compiler/build-system warnings.
-- `tools/release/dry-run.sh` passed at synthetic version `9.8.7 (123)`, validating workflow/project YAML, shell scripts, XcodeGen determinism, strict lint, metadata, and both unsigned Release bundles. Final-gate apps remain under `build/final-verification/release/`; the earlier standalone evidence remains under `build/release-dry-run/`.
+- `tools/release/dry-run.sh` passed at synthetic version `9.8.7 (123)`, validating workflow/project YAML, shell scripts, XcodeGen determinism, strict lint, metadata, and both unsigned Release bundles. The current push-gate apps remain under `build/push-verification/release/`; earlier evidence remains under `build/final-verification/` and `build/release-dry-run/`.
 - CI uses immutable SHA pins for Node 24-compatible `actions/checkout@v6.0.2`, `actions/upload-artifact@v6.0.0`, and `softprops/action-gh-release@v3.0.0`. A repository shell selector replaces the Node 20-based third-party Xcode setup action while still failing unless exact Xcode 26.3 is installed on the hosted image.
 - Secret-gated release jobs now scaffold Apple Distribution archive/export/TestFlight upload and Developer ID hardened-runtime signing/notarization/stapling/Gatekeeper assessment. Script syntax and missing-secret failure guards are verified; credential-backed execution remains an explicit external gate.
 
 ## Remaining Product Work
 
-- The briefing screen is intentionally guidance-only. Live lighting, thermal, and object-analysis diagnostics are not implemented and should only be added when backed by device APIs with clear confidence and failure states.
-- Capture, reconstruction, handoff, and scale-sensitive measurement behavior still need the physical-device UAT below before a production release.
+- The briefing screen is intentionally guidance-only. Scanner lighting and sharpness guidance is computed from the current camera image; broader thermal, dimensions, and scene-completeness claims remain absent unless backed by measured APIs and explicit confidence states.
+- Guided Object capture has physical evidence, but reconstruction, bilateral Mac handoff, Room/Outdoor paths, scale-sensitive measurements, and external runtimes still require the physical UAT below before a production release.
 
-## Physical-Device UAT Required
+## Physical-Device Evidence and Remaining UAT
 
-No iPhone or iPad is currently attached to this Mac. The following cannot be proven in Simulator:
+A wired iPhone 15 Pro Max (`iPhone16,2`), iOS 26.5.2 (`23F84`), was paired with the trusted development Mac. A signed Debug app built under `/tmp/3DSeen-guided-device`, installed, launched, and displayed the Library. On that device the user observed Object scanner entry, Vision subject detection, real guidance dots, automatic photo counting, and a successful Finish → Review repeat. The first Finish attempt was described only as “bugged out” and is recorded as inconclusive because it was not reproducible or accompanied by a specific error. The installed darker-blue app icon was physically reviewed as “Clear and polished.” Evidence is under `build/device-uat/` and `/tmp/3DSeen-guided-device`.
 
-1. ObjectCaptureSession reaches its documented `.completed` terminal state and the resulting directory contains every expected image frame.
-2. Landscape ARKit captures valid, non-empty JPEG frames and drains them before persistence.
-3. Auto-Pilot receives a live camera frame, settles on an appropriate Vision mode, and transitions into the selected capture engine.
-4. RoomPlan on LiDAR hardware exports a USDZ that reaches Viewer and Export.
-5. RealityKit photogrammetry completes at each supported detail request on the target Mac and device.
-6. A real Multipeer handoff transfers the ZIP capture, model, and geometry-preview PLY in both directions and verifies ordering between typed controls and resource callbacks.
-7. SceneKit model-surface hit testing produces sensible real-world measurement distances for the model scale.
-8. The direct-distribution Mac app can run the installed COLMAP + Nerfstudio runtime on a representative image capture, produce a renderable trained PLY, and return that PLY through an actual Multipeer result package.
-9. A reconstructed, textured capture USDZ converts through the macOS Blender path into GLB and FBX that open in a third-party viewer.
+The following remain unproven or need a final repeat on the latest build:
+
+1. Force-quit/relaunch persistence and the new real-frame Library thumbnail after a latest-build Object Finish.
+2. Rapid Object Finish/Cancel and AR interruption recovery under repeated physical stress.
+3. Landscape ARKit captures valid, non-empty JPEG frames and drains them before persistence.
+4. Auto-Pilot receives a live camera frame, settles on an appropriate Vision mode, and transitions into the selected capture engine.
+5. RoomPlan on LiDAR hardware exports a USDZ that reaches Viewer and Export.
+6. RealityKit photogrammetry completes at each supported detail request on the target Mac and device.
+7. A real authenticated Multipeer handoff transfers the ZIP capture, model, and geometry-preview PLY in both directions, including cancellation, disconnect/retry, relaunch reconciliation, and completed-result resend.
+8. SceneKit model-surface hit testing produces sensible real-world measurement distances for the model scale.
+9. The direct-distribution Mac app can run the installed COLMAP + Nerfstudio runtime on a representative image capture, produce a renderable trained PLY, and return that PLY through an actual Multipeer result package.
+10. A reconstructed, textured capture USDZ converts through the macOS Blender path into GLB and FBX that open in a third-party viewer.
 
 ## Known Constraints
 

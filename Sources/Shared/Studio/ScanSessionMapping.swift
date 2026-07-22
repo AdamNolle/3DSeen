@@ -37,6 +37,7 @@ extension ScanItem {
             mb: session.sizeMB,
             tier: session.tierRaw,
             tone: session.toneRaw,
+            thumbnailURL: session.thumbnailURL,
             tris: session.triangles,
             primaryAction: Self.libraryAction(for: session, hasModel: hasModel),
             canExport: session.computeStatus == .completed && hasModel

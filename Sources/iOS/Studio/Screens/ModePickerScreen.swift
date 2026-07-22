@@ -29,18 +29,18 @@ struct CaptureModeInfo: Identifiable {
 }
 
 let STUDIO_MODES: [CaptureModeInfo] = [
-    .init(id: "auto", name: "Auto-Pilot", icon: "sparkle", tag: "Vision scene classification",
-          sub: "A vision model reads the live feed and selects the optimal mode for you.",
-          specs: ["Adaptive", "Recommended", "No setup"], tint: Color(hex: "#2D68F0")),
-    .init(id: "object", name: "Object", icon: "cube", tag: "Photogrammetry · ObjectCapture",
-          sub: "Image capture for a single object. Reconstruct on this device or a connected Mac.",
-          specs: ["Camera", "Image archive", "LiDAR optional"], tint: Color(hex: "#5B7E84")),
-    .init(id: "space", name: "Space", icon: "room", tag: "RoomPlan · Parametric",
-          sub: "Structural blocks of rooms, walls, openings, furniture. LiDAR-required.",
-          specs: ["LiDAR", "USDZ", "Walls + openings"], tint: Color(hex: "#7A6244")),
-    .init(id: "landscape", name: "Landscape", icon: "landscape", tag: "ARKit VIO · World tracking",
-          sub: "Outdoor image capture using ARKit visual-inertial world tracking.",
-          specs: ["VIO", "JPEG archive", "World tracking"], tint: Color(hex: "#4C5A60")),
+    .init(id: "auto", name: "Choose for Me", icon: "autoMode", tag: "Vision-assisted mode routing",
+          sub: "Point the camera at your subject and 3DSeen will choose a capture type.",
+          specs: ["Vision classification", "Automatic routing", "Camera required"], tint: Color(hex: "#2D68F0")),
+    .init(id: "object", name: "Object", icon: "objectMode", tag: "Guided ARKit image capture",
+          sub: "Scan one movable item with automatic photos and real tracked points.",
+          specs: ["Foreground mask", "LiDAR or AR points", "Photo archive"], tint: Color(hex: "#5B7E84")),
+    .init(id: "space", name: "Room", icon: "roomMode", tag: "RoomPlan parametric capture",
+          sub: "Map walls, doors, openings, and furniture in an indoor space.",
+          specs: ["LiDAR required", "USDZ", "Structural geometry"], tint: Color(hex: "#7A6244")),
+    .init(id: "landscape", name: "Outdoor Scene", icon: "outdoorMode", tag: "ARKit visual-inertial capture",
+          sub: "Collect well-spaced photos of larger outdoor subjects and places.",
+          specs: ["World tracking", "Photo archive", "No LiDAR promise"], tint: Color(hex: "#4C5A60")),
 ]
 
 // MARK: - Screen
@@ -141,7 +141,7 @@ struct ModePickerScreen: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             BottomCTA {
-                StButton(title: sel.wrappedValue == "auto" ? "Continue · Auto-Pilot" : "Continue · \(selected.name)",
+                StButton(title: "Continue with \(selected.name)",
                          kind: .accent, size: .lg, icon: selected.icon, full: true,
                          action: { model.go(.briefing) })
             }
@@ -161,6 +161,8 @@ struct ModePickerScreen: View {
                 }
             }
             .padding(.top, 12)
+            ModeAdvancedDisclosure(mode: selected)
+                .padding(.top, 14)
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)
@@ -190,7 +192,7 @@ struct ModePickerScreen: View {
             .padding(.top, 6)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("What are you scanning today?")
-            Text("Auto-Pilot will pick for you — or choose a mode.")
+            Text("Not sure? Choose for Me can decide after seeing the camera view.")
                 .font(.sf(13.5)).foregroundStyle(theme.text2).padding(.top, 8)
             CaptureAvailabilityNotice(status: captureAvailability)
                 .padding(.top, 12)
@@ -267,6 +269,8 @@ private struct PadModePicker: View {
                     .padding(.top, 12)
                 CaptureAvailabilityNotice(status: captureAvailability)
                     .padding(.top, 12)
+                ModeAdvancedDisclosure(mode: selected)
+                    .padding(.top, 12)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             selectedModeCard
@@ -274,8 +278,7 @@ private struct PadModePicker: View {
     }
 
     private static let heroBody =
-        "Auto-Pilot uses Vision scene classification to read the camera feed and pick the optimal capture "
-        + "mode. Or pin a specific mode for full manual control."
+        "Choose for Me decides after seeing the camera view. Pick Object, Room, or Outdoor Scene when you already know what you need."
 
     private var selectedModeCard: some View {
         StCard(radius: 18, pad: 14) {
@@ -288,8 +291,8 @@ private struct PadModePicker: View {
                     StLabel(text: "Selected capture")
                     Text(selected.name)
                         .font(.sf(14, .semibold)).foregroundStyle(theme.ink).padding(.top, 3)
-                    Text(selected.tag)
-                        .font(.mono(10.5)).foregroundStyle(theme.text3).padding(.top, 2)
+                    Text(selected.sub)
+                        .font(.sf(11.5)).foregroundStyle(theme.text3).padding(.top, 2)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -359,7 +362,34 @@ private struct CaptureAvailabilityNotice: View {
     }
 }
 
-// MARK: - Mode tile
+// MARK: - Mode details and tile
+
+private struct ModeAdvancedDisclosure: View {
+    @Environment(\.theme) private var theme
+    let mode: CaptureModeInfo
+
+    var body: some View {
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 7) {
+                Text(mode.tag)
+                    .font(.sf(13, .semibold))
+                    .foregroundStyle(theme.ink)
+                Text(mode.specs.joined(separator: " · "))
+                    .font(.mono(11.5))
+                    .foregroundStyle(theme.text3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.top, 10)
+        } label: {
+            Label("Advanced mode details", systemImage: "info.circle")
+                .font(.sf(13.5, .semibold))
+                .foregroundStyle(theme.ink)
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 15, style: .continuous).fill(theme.card))
+        .overlay(RoundedRectangle(cornerRadius: 15).strokeBorder(theme.line, lineWidth: 0.5))
+    }
+}
 
 struct ModeTile: View {
     @Environment(\.theme) private var theme
@@ -381,25 +411,14 @@ struct ModeTile: View {
                 }
                 Text(mode.name).font(.sf(big ? 22 : 17, .bold)).tracking(0)
                     .foregroundStyle(theme.ink).padding(.top, big ? 14 : 10)
-                StLabel(text: mode.tag, color: selected ? theme.accentText : theme.text3)
-                    .padding(.top, 4)
-                if big {
-                    Text(mode.sub).font(.sf(13)).foregroundStyle(theme.text2)
-                        .lineSpacing(2).padding(.top, 8)
-                    Spacer(minLength: 0)                       // marginTop:auto — push chips down
-                    Group {
-                        if fillHeight {
-                            VStack(alignment: .leading, spacing: 5) {
-                                ForEach(mode.specs, id: \.self) { s in ModeSpecChip(text: s) }
-                            }
-                        } else {
-                            HStack(spacing: 6) {
-                                ForEach(mode.specs, id: \.self) { s in ModeSpecChip(text: s) }
-                            }
-                        }
-                    }
-                    .padding(.top, 14)
-                }
+                Text(mode.sub)
+                    .font(.sf(big ? 13.5 : 12.5))
+                    .foregroundStyle(theme.text2)
+                    .lineSpacing(2)
+                    .lineLimit(big ? 4 : 3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 7)
+                if fillHeight { Spacer(minLength: 0) }
             }
             .frame(maxWidth: .infinity, maxHeight: fillHeight ? .infinity : nil, alignment: .topLeading)
             .padding(big ? 20 : 15)
@@ -410,7 +429,7 @@ struct ModeTile: View {
             .stShadow(theme.cardShadow)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(mode.name). \(mode.tag)")
+        .accessibilityLabel("\(mode.name). \(mode.sub)")
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
@@ -459,31 +478,5 @@ private struct ModeSelectedChip: View {
             .background(Capsule().fill(theme.accentSoft))
             .overlay(Capsule().strokeBorder(theme.accentLine, lineWidth: 0.5))
             .accessibilityHidden(true)   // selection is announced via the tile's `.isSelected` trait
-    }
-}
-
-/// `Chip tone="neutral"` big-tile spec chip — spec fontSize 11 (vs the shared StChip's 12).
-private struct ModeSpecChip: View {
-    @Environment(\.theme) private var theme
-    var text: String
-    var body: some View {
-        Text(text)
-            .font(.sf(11, .semibold)).tracking(0).foregroundStyle(theme.text2)
-            .padding(.horizontal, 10).padding(.vertical, 4)
-            .background(Capsule().fill(theme.fieldFill))
-            .overlay(Capsule().strokeBorder(theme.line, lineWidth: 0.5))
-    }
-}
-
-/// Pad footer status pair: mono overline key over a 13.5/600 ink value.
-private struct ModeStatusPair: View {
-    @Environment(\.theme) private var theme
-    var k: String
-    var v: String
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            StLabel(text: k)
-            Text(v).font(.sf(13.5, .semibold)).foregroundStyle(theme.ink).padding(.top, 3)
-        }
     }
 }

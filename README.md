@@ -11,14 +11,14 @@
 ## Why it's different
 - **Local splat rendering and training** — MetalSplatter renders local PLY assets on iOS; the Mac compute pane can optionally invoke a locally installed COLMAP + Nerfstudio runtime to train and export a Gaussian-splat PLY. Geometry-derived previews are labeled as previews, not trained radiance fields.
 - **No export paywall** — local USDZ pass-through plus USD · OBJ · STL · PLY export via ModelIO; macOS adds GLB and FBX through an installed Blender runtime.
-- **Truthful capture guidance** — live capture HUDs report only engine state, AR tracking, and saved-frame counts. Richer coverage, lighting, thermal, and scene-analysis diagnostics are intentionally deferred until they can be backed by device measurements and clear confidence states.
+- **Truthful guided object capture** — Vision locks onto the foreground subject, while the single ARKit session renders only subject-filtered LiDAR depth samples or tracked feature points. Automatic photos require real tracking, image-quality, motion, interval, and pose-novelty gates; accepted JPEG writes drain before Finish publishes the archive.
 - **Authenticated Mac offload** — explicit discovery and bilateral six-digit pairing establish Keychain-backed trust; typed, journaled jobs support progress, cancellation, timeout, retry, local fallback, relaunch reconciliation, durable completed-result resend, and correlated result validation.
 
 ## Architecture
 A Hub-and-Spoke capture architecture with a dual-option compute pipeline, driven by a thread-safe MVVM-C state machine (`ProcessingStateMachine`).
 
 ### Capture (iOS)
-- **Object** — `ObjectCaptureSession` photogrammetry with interactive AR bounding boxes.
+- **Object** — custom guided Vision + ARKit capture with foreground lock, real LiDAR/feature-point guidance, and quality-gated automatic photos.
 - **Space** — Apple `RoomPlan` → parametric USDZ.
 - **Landscape** — ARKit VIO world tracking (no LiDAR) with automatic frame capture for outdoor scenes.
 - **Auto-Pilot** — Vision scene classification recommends the optimal mode from the live feed.
@@ -31,7 +31,7 @@ A Hub-and-Spoke capture architecture with a dual-option compute pipeline, driven
 A native SwiftUI design system (`Sources/Shared/DesignSystem/`) — warm-paper light + refined dark theme, single cobalt accent, adaptive Liquid Glass — across 10 screens: Library · Mode · Briefing · Detail · Capture · Review · Compute · Viewer · Export · Settings.
 
 ## Requirements
-- **iOS / iPadOS** 17.0+ (LiDAR recommended for Space/Object).
+- **iOS / iPadOS** 17.0+ (LiDAR required for Room and recommended for denser Object guidance; Object truthfully falls back to ARKit tracked feature points).
 - **macOS** 14.0+ (Apple silicon recommended).
 - **Xcode** 26.3+ (CI pins 26.3; the Metal Toolchain component may need to be installed separately).
 
@@ -69,7 +69,7 @@ tools/ci/verify-all.sh
 ```
 
 - **Linting:** `.swiftlint.yml` (strict in CI).
-- **Tests:** XCTest/XCUITest suites cover state, capture routing, transactional persistence, authenticated handoff fault paths, exporter/PLY integrity, measurements, settings retention, adaptive accessibility, Blender process cancellation, and compute.
+- **Tests:** XCTest/XCUITest suites cover attempt-scoped scanner lifecycle, Vision/AR projection policies, drained writes, real-frame thumbnails, transactional persistence, authenticated handoff fault paths, exporter/PLY integrity, measurements, settings retention, adaptive accessibility, Blender process cancellation, and compute.
 - **CI/CD:** `.github/workflows/ci.yml` runs SwiftLint plus both test targets on pushes and pull requests targeting `main`; `release.yml` reruns that gate before building unsigned `v*` artifacts and conditionally executes secret-backed signed distribution. See [`docs/RELEASING.md`](docs/RELEASING.md) for the credential-free dry run, signing variables, TestFlight, and notarization gates.
 
 ## Project layout
