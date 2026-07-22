@@ -66,6 +66,33 @@ targets:
         - 3DSeen-iOSUITests
       gatherCoverageData: true
 
+  3DSeen-iOSTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests/iOS
+    dependencies:
+      - target: 3DSeen-iOS
+      - package: MetalSplatter
+        product: SplatIO
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: 5.9
+
+  3DSeen-iOSUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - Tests/iOSUI
+    dependencies:
+      - target: 3DSeen-iOS
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: 5.9
+        TEST_TARGET_NAME: 3DSeen-iOS
+
   3DSeen-macOS:
     type: application
     platform: macOS
@@ -99,33 +126,6 @@ targets:
       testTargets:
         - 3DSeen-macOSTests
       gatherCoverageData: true
-
-  3DSeen-iOSTests:
-    type: bundle.unit-test
-    platform: iOS
-    sources:
-      - Tests/iOS
-    dependencies:
-      - target: 3DSeen-iOS
-      - package: MetalSplatter
-        product: SplatIO
-    settings:
-      base:
-        GENERATE_INFOPLIST_FILE: YES
-        SWIFT_VERSION: 5.9
-
-  3DSeen-iOSUITests:
-    type: bundle.ui-testing
-    platform: iOS
-    sources:
-      - Tests/iOSUI
-    dependencies:
-      - target: 3DSeen-iOS
-    settings:
-      base:
-        GENERATE_INFOPLIST_FILE: YES
-        SWIFT_VERSION: 5.9
-        TEST_TARGET_NAME: 3DSeen-iOS
 
   3DSeen-macOSTests:
     type: bundle.unit-test
