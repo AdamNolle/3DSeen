@@ -16,7 +16,7 @@ for candidate in "${CANDIDATES[@]}"; do
 done
 
 if [[ -z "$SELECTED" ]]; then
-  SELECTED=$(find /Applications -maxdepth 1 -type d -name "Xcode*${VERSION}*.app" -print | sort | head -1)
+  SELECTED=$(find /Applications -maxdepth 1 -type d -name "Xcode*${VERSION}*.app" -print | sort | sed -n '1p')
 fi
 
 if [[ -z "$SELECTED" || ! -d "$SELECTED/Contents/Developer" ]]; then
@@ -26,9 +26,10 @@ if [[ -z "$SELECTED" || ! -d "$SELECTED/Contents/Developer" ]]; then
 fi
 
 sudo xcode-select --switch "$SELECTED/Contents/Developer"
-ACTUAL=$(xcodebuild -version | head -1)
+VERSION_OUTPUT=$(xcodebuild -version)
+ACTUAL=${VERSION_OUTPUT%%$'\n'*}
 if [[ "$ACTUAL" != "Xcode $VERSION" ]]; then
   echo "Expected Xcode $VERSION, selected: $ACTUAL" >&2
   exit 1
 fi
-xcodebuild -version
+printf '%s\n' "$VERSION_OUTPUT"
