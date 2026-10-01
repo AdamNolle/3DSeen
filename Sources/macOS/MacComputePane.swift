@@ -37,12 +37,22 @@ struct MacComputePane: View {
                 }
             }
 
-            HStack(spacing: 0) {
-                pipeline.frame(width: 330)
-                StRule(vertical: true)
-                preview.frame(maxWidth: .infinity)
-                StRule(vertical: true)
-                eventLog.frame(width: 340)
+            GeometryReader { geometry in
+                HStack(spacing: 0) {
+                    pipeline.frame(width: geometry.size.width > 1_100 ? 300 : 280)
+                    StRule(vertical: true)
+                    if geometry.size.width > 1_100 {
+                        preview.frame(maxWidth: .infinity)
+                        StRule(vertical: true)
+                        eventLog.frame(width: 300)
+                    } else {
+                        VStack(spacing: 0) {
+                            preview.frame(maxHeight: .infinity)
+                            StRule()
+                            eventLog.frame(height: 210)
+                        }
+                    }
+                }
             }
         }
     }
@@ -67,7 +77,8 @@ struct MacComputePane: View {
     }
 
     private var pipeline: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        ScrollView {
+          VStack(alignment: .leading, spacing: 0) {
             StLabel(text: "Pipeline · RealityKit")
             peerConnections.padding(.top, 12)
             splatOutputPicker.padding(.top, 16)
@@ -87,9 +98,9 @@ struct MacComputePane: View {
                     }
                 }
             }
+          }
+          .padding(22)
         }
-        .padding(22)
-        .frame(maxHeight: .infinity)
         .background(theme.card2)
     }
 
@@ -126,12 +137,16 @@ struct MacComputePane: View {
     private var splatOutputPicker: some View {
         VStack(alignment: .leading, spacing: 7) {
             StLabel(text: "Splat output")
-            Picker("Splat output", selection: $compute.selectedSplatOutput) {
-                ForEach(ComputeCoordinator.SplatOutput.allCases) { output in
-                    Text(output.label).tag(output)
-                }
-            }
-            .pickerStyle(.segmented)
+            StSegmented(
+                options: [("geometryPreview", "Preview"), ("trainedSplat", "Trained splat")],
+                value: Binding(
+                    get: { compute.selectedSplatOutput.rawValue },
+                    set: { if let output = ComputeCoordinator.SplatOutput(rawValue: $0) { compute.selectedSplatOutput = output } }
+                ), size: .sm
+            )
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Splat output")
+            .accessibilityValue(compute.selectedSplatOutput.label)
             .disabled(compute.isProcessing)
             Text(splatOutputDescription)
                 .font(.sf(11.5)).foregroundStyle(theme.text3).fixedSize(horizontal: false, vertical: true)

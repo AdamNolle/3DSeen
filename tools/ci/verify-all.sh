@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$ROOT"
 OUTPUT_ROOT=${FINAL_OUTPUT_ROOT:-"$ROOT/build/final-verification"}
+DERIVED_ROOT=${VERIFICATION_DERIVED_DATA_ROOT:-"$HOME/Library/Developer/Xcode/DerivedData/3DSeen-$(basename "$OUTPUT_ROOT")"}
 IOS_DEVICE_ID=${IOS_DEVICE_ID:-}
 IPAD_DEVICE_ID=${IPAD_DEVICE_ID:-}
 MINIMUM_XCODE_VERSION=${MINIMUM_XCODE_VERSION:-26.3}
@@ -53,24 +54,26 @@ RELEASE_OUTPUT_ROOT="$OUTPUT_ROOT/release" \
   RELEASE_VERSION=9.8.7 BUILD_NUMBER=123 \
   tools/release/dry-run.sh | tee "$OUTPUT_ROOT/logs/release-dry-run.log"
 
-rm -rf "$OUTPUT_ROOT/tests-ios" "$OUTPUT_ROOT/tests-macos" "$OUTPUT_ROOT/tests-ipad"
+rm -rf "$DERIVED_ROOT/tests-ios" "$DERIVED_ROOT/tests-macos" "$DERIVED_ROOT/tests-ipad"
 
 if [[ -z "$IOS_DEVICE_ID" ]]; then
   IOS_DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c '
-import json, sys
+import json, re, sys
 devices = json.load(sys.stdin)["devices"]
-items = [d for runtime in devices.values() for d in runtime
-         if d.get("isAvailable") and d["name"].startswith("iPhone")]
+ordered = sorted(devices, key=lambda key: tuple(map(int, re.findall(r"\d+", key))), reverse=True)
+items = [d for runtime in ordered for d in devices[runtime]
+         if d.get("isAvailable") and (".iPhone-" in d.get("deviceTypeIdentifier", "") or d["name"].startswith("iPhone"))]
 if not items: raise SystemExit("No available iPhone Simulator")
 print(items[0]["udid"])
 ')
 fi
 if [[ -z "$IPAD_DEVICE_ID" ]]; then
   IPAD_DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c '
-import json, sys
+import json, re, sys
 devices = json.load(sys.stdin)["devices"]
-items = [d for runtime in devices.values() for d in runtime
-         if d.get("isAvailable") and d["name"].startswith("iPad")]
+ordered = sorted(devices, key=lambda key: tuple(map(int, re.findall(r"\d+", key))), reverse=True)
+items = [d for runtime in ordered for d in devices[runtime]
+         if d.get("isAvailable") and (".iPad-" in d.get("deviceTypeIdentifier", "") or d["name"].startswith("iPad"))]
 if not items: raise SystemExit("No available iPad Simulator")
 print(items[0]["udid"])
 ')
@@ -79,36 +82,41 @@ fi
 xcodebuild test -quiet \
   -project 3DSeen.xcodeproj -scheme 3DSeen-iOS \
   -destination "platform=iOS Simulator,id=$IOS_DEVICE_ID" \
-  -derivedDataPath "$OUTPUT_ROOT/tests-ios" CODE_SIGNING_ALLOWED=NO \
-  | tee "$OUTPUT_ROOT/logs/ios-tests.log"
-IOS_RESULT=$(find "$OUTPUT_ROOT/tests-ios/Logs/Test" -name '*.xcresult' -type d -print | sort | tail -1)
+  -derivedDataPath "$DERIVED_ROOT/tests-ios" -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO \
+  2>&1 | tee "$OUTPUT_ROOT/logs/ios-tests.log"
+IOS_RESULT=$(find "$DERIVED_ROOT/tests-ios/Logs/Test" -name '*.xcresult' -type d -print | sort | tail -1)
 xcrun xcresulttool get test-results summary --path "$IOS_RESULT" --format json \
   > "$OUTPUT_ROOT/logs/ios-summary.json"
 
 xcodebuild test -quiet \
   -project 3DSeen.xcodeproj -scheme 3DSeen-macOS \
   -destination 'platform=macOS,arch=arm64' \
-  -derivedDataPath "$OUTPUT_ROOT/tests-macos" CODE_SIGNING_ALLOWED=NO \
-  | tee "$OUTPUT_ROOT/logs/macos-tests.log"
-MAC_RESULT=$(find "$OUTPUT_ROOT/tests-macos/Logs/Test" -name '*.xcresult' -type d -print | sort | tail -1)
+  -derivedDataPath "$DERIVED_ROOT/tests-macos" CODE_SIGNING_ALLOWED=NO \
+  2>&1 | tee "$OUTPUT_ROOT/logs/macos-tests.log"
+MAC_RESULT=$(find "$DERIVED_ROOT/tests-macos/Logs/Test" -name '*.xcresult' -type d -print | sort | tail -1)
 xcrun xcresulttool get test-results summary --path "$MAC_RESULT" --format json \
   > "$OUTPUT_ROOT/logs/macos-summary.json"
 
 xcodebuild test -quiet \
   -project 3DSeen.xcodeproj -scheme 3DSeen-iOS \
   -destination "platform=iOS Simulator,id=$IPAD_DEVICE_ID" \
-  -derivedDataPath "$OUTPUT_ROOT/tests-ipad" CODE_SIGNING_ALLOWED=NO \
+  -derivedDataPath "$DERIVED_ROOT/tests-ipad" -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO \
   -only-testing:3DSeen-iOSUITests/WizardFlowUITests/testAccessibilityDynamicTypeKeepsSettingsAndViewerActionsReachable \
   -only-testing:3DSeen-iOSUITests/WizardFlowUITests/testRegularWizardSurfacesExposeGuidedChoices \
-  | tee "$OUTPUT_ROOT/logs/ipad-accessibility.log"
-IPAD_RESULT=$(find "$OUTPUT_ROOT/tests-ipad/Logs/Test" -name '*.xcresult' -type d -print | sort | tail -1)
+  2>&1 | tee "$OUTPUT_ROOT/logs/ipad-accessibility.log"
+IPAD_RESULT=$(find "$DERIVED_ROOT/tests-ipad/Logs/Test" -name '*.xcresult' -type d -print | sort | tail -1)
 xcrun xcresulttool get test-results summary --path "$IPAD_RESULT" --format json \
   > "$OUTPUT_ROOT/logs/ipad-summary.json"
 
 IOS_APP=$(find "$OUTPUT_ROOT/release/ios/Build/Products" -name '3DSeen-iOS.app' -print -quit)
 MAC_APP=$(find "$OUTPUT_ROOT/release/mac/Build/Products" -name '3DSeen-macOS.app' -print -quit)
-! strings "$IOS_APP/3DSeen-iOS" | grep -E '3dseen-demo-splat|celestial-bust'
-! strings "$MAC_APP/Contents/MacOS/3DSeen-macOS" | grep -E '3dseen-demo-splat|celestial-bust'
+for binary in "$IOS_APP/3DSeen-iOS" "$MAC_APP/Contents/MacOS/3DSeen-macOS"; do
+  strings "$binary" > "$OUTPUT_ROOT/logs/$(basename "$binary")-strings.txt"
+  if grep -E '3dseen-demo-splat|celestial-bust' "$OUTPUT_ROOT/logs/$(basename "$binary")-strings.txt"; then
+    echo "Release binary contains demo fixtures: $binary" >&2
+    exit 1
+  fi
+done
 
 git diff --check
 python3 - "$OUTPUT_ROOT" <<'PY'
@@ -124,3 +132,4 @@ print(summary, end='')
 PY
 
 echo "Final verification artifacts: $OUTPUT_ROOT"
+echo "Test DerivedData and xcresults: $DERIVED_ROOT"

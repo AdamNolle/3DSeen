@@ -625,7 +625,7 @@ extension NetworkHandoffManager: MCNearbyServiceAdvertiserDelegate {
             invitationHandler(false, nil)
             return
         }
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [self] in
             self.register(peer, peerID: peerID)
             let invitation = HandoffInvitation(peer: peer, expiresAt: Date().addingTimeInterval(30))
             self.invitationRecords[invitation.id] = PendingInvitationRecord(

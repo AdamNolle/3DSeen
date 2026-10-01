@@ -140,38 +140,30 @@ struct MacExportPane: View {
         let scanName = scan.name
         let manifest = scan.manifest
         let converter = blenderConverter
+        let directory = destination.appendingPathComponent(scanID.uuidString, isDirectory: true)
+        let request = ModelExportRequest(
+            scanID: scanID,
+            sourceModelURL: source,
+            fileBaseName: ScanExportLocation.fileBaseName(for: scanName, fallback: "scan-\(scanID)"),
+            measurements: manifest.measurements ?? []
+        )
         exportTask = Task {
             defer {
                 isExporting = false
                 exportTask = nil
             }
             do {
-                try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 let output: URL
                 if selectedFormat.isModelIONative {
                     try Task.checkCancellation()
-                    let session = ScanSession(
-                        id: scanID,
-                        captureMode: manifest.captureMode,
-                        name: scanName,
-                        tier: manifest.detailTier,
-                        usdzFileURL: source.pathExtension.lowercased() == "usdz" ? source : nil,
-                        sourceModelURL: source,
-                        captureStatus: .captured,
-                        computeStatus: .completed,
-                        frameCount: manifest.frameCount,
-                        coveragePercent: manifest.coveragePercent,
-                        weakSpotCount: manifest.weakSpotCount
-                    )
-                    output = try ModelExporter().export(
-                        session: session,
-                        to: selectedFormat,
-                        outputDirectory: destination
-                    )
+                    output = try await Task.detached(priority: .userInitiated) {
+                        try ModelExporter().export(request: request, to: selectedFormat, outputDirectory: directory)
+                    }.value
                     try Task.checkCancellation()
                 } else {
-                    let outputURL = destination
-                        .appendingPathComponent(scanName.replacingOccurrences(of: "/", with: "-"))
+                    let outputURL = directory
+                        .appendingPathComponent(request.fileBaseName)
                         .appendingPathExtension(selectedFormat.fileExtension)
                     output = try await converter.convert(
                         sourceURL: source,
@@ -179,6 +171,11 @@ struct MacExportPane: View {
                         outputURL: outputURL
                     )
                 }
+                try Task.checkCancellation()
+                if !request.measurements.isEmpty {
+                    try MeasurementExporter().exportCSV(request.measurements, named: request.fileBaseName, to: directory)
+                }
+                try compute.recordExport(output, for: scanID)
                 status = "Wrote \(output.lastPathComponent)"
                 NSWorkspace.shared.activateFileViewerSelecting([output])
             } catch is CancellationError {
@@ -191,6 +188,5 @@ struct MacExportPane: View {
 
     private func cancelExport() {
         exportTask?.cancel()
-        exportTask = nil
     }
 }

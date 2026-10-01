@@ -10,6 +10,7 @@ enum GlassTone { case auto, dark }
 /// Background modifier that paints the Liquid Glass material behind any view.
 struct LiquidGlassBackground: ViewModifier {
     @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     var radius: CGFloat = 18
     var tone: GlassTone = .auto
     var shine: Bool = true
@@ -34,6 +35,15 @@ struct LiquidGlassBackground: ViewModifier {
 
     @ViewBuilder
     func body(content: Content) -> some View {
+        if reduceTransparency {
+            content
+                .background(dark ? Color(hex: "#1A1815") : theme.card)
+                .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .strokeBorder(border, lineWidth: 1)
+                }
+        } else {
         #if os(iOS)
         if #available(iOS 26.0, *) {
             content
@@ -56,6 +66,7 @@ struct LiquidGlassBackground: ViewModifier {
         #else
         fallback(content: content)
         #endif
+        }
     }
 
     private func fallback(content: Content) -> some View {

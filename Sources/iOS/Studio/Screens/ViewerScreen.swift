@@ -95,6 +95,8 @@ private struct PhoneViewer: View {
     @State private var showSplat = false
     @State private var showQuickLook = false
     @State private var pendingMeasurementPoint: ScanMeasurementPoint?
+    @State private var measurementError = ""
+    @State private var showMeasurementError = false
 
     private var activeScan: ScanSession? {
         if let id = model.activeScanID, let scan = savedScans.first(where: { $0.id == id }) {
@@ -145,6 +147,10 @@ private struct PhoneViewer: View {
         .sheet(isPresented: $showQuickLook) {
             if let quickLookURL { USDZQuickLookView(url: quickLookURL) }
         }
+        .onChange(of: activeScan?.id) { _, _ in pendingMeasurementPoint = nil }
+        .alert("Measurement could not be saved", isPresented: $showMeasurementError) {
+            Button("OK", role: .cancel) { }
+        } message: { Text(measurementError) }
     }
 
     // Top/bottom legibility scrim over the light stage (spec layer 2).
@@ -180,12 +186,24 @@ private struct PhoneViewer: View {
         MeasurementFormatter.display(meters: measurement.meters, units: settings.units)
     }
 
+    private func persistMeasurements(_ measurements: [ScanMeasurement]) {
+        guard let activeScan else { return }
+        do {
+            try ScanMeasurementRecorder.replace(measurements, on: activeScan, assetStore: ScanAssetStore()) {
+                try modelContext.save()
+            }
+        } catch {
+            measurementError = error.localizedDescription
+            showMeasurementError = true
+        }
+    }
+
     private func addMeasurementPoint(_ point: ScanMeasurementPoint) {
         guard let activeScan else { return }
         if let start = pendingMeasurementPoint {
-            activeScan.measurements.append(ScanMeasurement(start: start, end: point, label: "Distance \(activeScan.measurements.count + 1)"))
+            let measurement = ScanMeasurement(start: start, end: point, label: "Distance \(activeScan.measurements.count + 1)")
+            persistMeasurements(activeScan.measurements + [measurement])
             pendingMeasurementPoint = nil
-            try? modelContext.save()
         } else {
             pendingMeasurementPoint = point
         }
@@ -251,6 +269,24 @@ private struct PhoneViewer: View {
                 }
                 .padding(.top, 12)
                 MaterialPicker(value: $mat, compact: true).padding(.top, 12)
+                if let activeScan, !activeScan.measurements.isEmpty {
+                    DisclosureGroup("Measurements") {
+                        ScrollView {
+                            ForEach(activeScan.measurements) { measurement in
+                                HStack {
+                                    Text(measurementText(measurement)).font(.mono(12))
+                                    Spacer()
+                                    Button(role: .destructive) {
+                                        persistMeasurements(activeScan.measurements.filter { $0.id != measurement.id })
+                                    } label: { Image(systemName: "trash").frame(width: 44, height: 44) }
+                                    .accessibilityLabel("Delete \(measurement.label)")
+                                }
+                            }
+                        }
+                        .frame(maxHeight: 140)
+                    }
+                    .font(.sf(13)).padding(.top, 10)
+                }
             }
             .padding(14)
         }
@@ -286,6 +322,8 @@ private struct PadViewer: View {
     @State private var showSplat = false
     @State private var showQuickLook = false
     @State private var pendingMeasurementPoint: ScanMeasurementPoint?
+    @State private var measurementError = ""
+    @State private var showMeasurementError = false
 
     private var activeScan: ScanSession? {
         if let id = model.activeScanID, let scan = savedScans.first(where: { $0.id == id }) {
@@ -332,6 +370,10 @@ private struct PadViewer: View {
         .sheet(isPresented: $showQuickLook) {
             if let quickLookURL { USDZQuickLookView(url: quickLookURL) }
         }
+        .onChange(of: activeScan?.id) { _, _ in pendingMeasurementPoint = nil }
+        .alert("Measurement could not be saved", isPresented: $showMeasurementError) {
+            Button("OK", role: .cancel) { }
+        } message: { Text(measurementError) }
     }
 
     private var scrim: some View {
@@ -362,12 +404,24 @@ private struct PadViewer: View {
         pendingMeasurementPoint == nil ? "Tap the first point" : "Tap the second point"
     }
 
+    private func persistMeasurements(_ measurements: [ScanMeasurement]) {
+        guard let activeScan else { return }
+        do {
+            try ScanMeasurementRecorder.replace(measurements, on: activeScan, assetStore: ScanAssetStore()) {
+                try modelContext.save()
+            }
+        } catch {
+            measurementError = error.localizedDescription
+            showMeasurementError = true
+        }
+    }
+
     private func addMeasurementPoint(_ point: ScanMeasurementPoint) {
         guard let activeScan else { return }
         if let start = pendingMeasurementPoint {
-            activeScan.measurements.append(ScanMeasurement(start: start, end: point, label: "Distance \(activeScan.measurements.count + 1)"))
+            let measurement = ScanMeasurement(start: start, end: point, label: "Distance \(activeScan.measurements.count + 1)")
+            persistMeasurements(activeScan.measurements + [measurement])
             pendingMeasurementPoint = nil
-            try? modelContext.save()
         } else {
             pendingMeasurementPoint = point
         }
@@ -459,14 +513,23 @@ private struct PadViewer: View {
             VStack(alignment: .leading, spacing: 0) {
                 StLabel(text: "Measurements", color: theme.good)
                 if let measurements = activeScan?.measurements, !measurements.isEmpty {
+                    ScrollView {
+                    VStack(spacing: 0) {
                     ForEach(measurements) { measurement in
                         HStack {
                             Text(measurement.label).font(.sf(13.5)).foregroundStyle(theme.text2)
                             Spacer()
                             Text(measurementText(measurement)).font(.mono(12, .semibold)).foregroundStyle(theme.ink)
+                            Button(role: .destructive) {
+                                persistMeasurements((activeScan?.measurements ?? []).filter { $0.id != measurement.id })
+                            } label: { Image(systemName: "trash").frame(width: 44, height: 44) }
+                            .accessibilityLabel("Delete \(measurement.label)")
                         }
                         .padding(.top, 10)
                     }
+                    }
+                    }
+                    .frame(maxHeight: 180)
                 } else {
                     Text("Select Measure, then tap two model points.")
                         .font(.sf(13.5)).foregroundStyle(theme.text2)

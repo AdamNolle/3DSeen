@@ -246,6 +246,7 @@ public final class PhotogrammetryRunner: ObservableObject {
             }
         }
 
+        try Task.checkCancellation()
         guard processingCompleted, fileManager.fileExists(atPath: stagingURL.path) else {
             throw ScanLocalComputeError.outputMissing(stagingURL)
         }

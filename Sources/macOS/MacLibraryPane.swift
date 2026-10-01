@@ -7,7 +7,7 @@ struct MacLibraryPane: View {
     @Binding var section: MacSection
     @ObservedObject var settings: SettingsStore
     @ObservedObject var compute: ComputeCoordinator
-    @State private var modeFilter = "All"
+    @Binding var modeFilter: String
     @State private var searchText = ""
 
     private var gridList: Binding<String> {
@@ -31,26 +31,15 @@ struct MacLibraryPane: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            MacLibrarySidebar(
-                section: $section,
-                settings: settings,
-                summary: compute.librarySummary,
-                modeFilter: $modeFilter
-            )
-            .frame(width: 264)
-            StRule(vertical: true)
-            VStack(spacing: 0) {
-                toolbar
-                content
-            }
+        VStack(spacing: 0) {
+            toolbar
+            content
         }
         .onAppear { compute.reloadLibrary() }
     }
 
     private var toolbar: some View {
         MacTopBar(leadingInset: 20) {
-            Color.clear.frame(width: 56, height: 1)
             Text(modeFilter == "All" ? "All Scans" : "\(modeFilter) Scans")
                 .font(.sf(15, .bold)).foregroundStyle(theme.ink)
             StTextChip(text: "\(filteredScans.count) \(filteredScans.count == 1 ? "item" : "items")")
@@ -62,17 +51,14 @@ struct MacLibraryPane: View {
                     .font(.sf(13))
                     .foregroundStyle(theme.ink)
             }
-            .frame(width: 260, height: 32)
+            .frame(minWidth: 100, maxWidth: 220, minHeight: 32)
             .padding(.horizontal, 12)
             .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.fieldFill))
             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.line, lineWidth: 0.5))
-            Picker("Library layout", selection: gridList) {
-                Label("Grid", systemImage: "square.grid.2x2").labelStyle(.iconOnly).tag("grid")
-                Label("List", systemImage: "list.bullet").labelStyle(.iconOnly).tag("list")
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 78)
+            StSegmented(options: [("grid", "Grid"), ("list", "List")], value: gridList, size: .sm)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Library layout")
+            .accessibilityValue(settings.gridIsList ? "List" : "Grid")
             .help("Library layout")
             StButton(title: "Open", kind: .accent, size: .sm, icon: "cube") { openSelectedOrFirst() }
                 .disabled(selectedScan == nil)
@@ -82,16 +68,17 @@ struct MacLibraryPane: View {
     private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                if compute.libraryScans.isEmpty {
+                    emptyLibrary
+                } else {
                 if let selectedScan {
                     MacFeaturedResult(scan: selectedScan, section: $section, compute: compute)
-                } else {
-                    emptyLibrary
                 }
-
                 HStack(alignment: .firstTextBaseline) {
                     Text("Recent").font(.sf(18, .bold)).foregroundStyle(theme.ink)
                     Spacer(minLength: 0)
-                    MacLibraryFilters(scans: compute.libraryScans, active: $modeFilter)
+                    Text("\(filteredScans.count) \(filteredScans.count == 1 ? "model" : "models")")
+                        .font(.mono(11)).foregroundStyle(theme.text3)
                 }
                 .padding(.top, 26)
                 .padding(.bottom, 14)
@@ -108,12 +95,13 @@ struct MacLibraryPane: View {
                         }
                     }
                 } else {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 4), spacing: 16) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 175), spacing: 16)], spacing: 16) {
                         ForEach(filteredScans) { scan in
                             Button { open(scan) } label: { MacScanTile(scan: scan, selected: scan.id == selectedScan?.id) }
                                 .buttonStyle(.plain)
                         }
                     }
+                }
                 }
             }
             .padding(24)
@@ -121,18 +109,29 @@ struct MacLibraryPane: View {
     }
 
     private var emptyLibrary: some View {
-        StCard(radius: 8, pad: 28) {
-            HStack(spacing: 18) {
-                Image(systemName: "cube.transparent").font(.system(size: 38)).foregroundStyle(theme.accentText)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("No computed scans yet").font(.sf(20, .bold)).foregroundStyle(theme.ink)
-                    Text("Send a capture from 3DSeen on iPhone or iPad to compute it on this Mac.")
-                        .font(.sf(14)).foregroundStyle(theme.text2)
-                }
-                Spacer(minLength: 0)
-                StButton(title: "Compute", kind: .accent, icon: "chip") { section = .compute }
-            }
+        VStack(alignment: .leading, spacing: 0) {
+            Image(systemName: "cube.transparent")
+                .font(.system(size: 52, weight: .light))
+                .foregroundStyle(theme.accentText)
+                .accessibilityHidden(true)
+                .padding(.bottom, 30)
+            StLabel(text: "Your local 3D workspace", color: theme.accentText)
+            Text("Bring your world\ninto the studio.")
+                .font(.sf(38, .bold)).tracking(-0.8).foregroundStyle(theme.ink)
+                .padding(.top, 12)
+            Text("Capture an object or space with 3DSeen on iPhone or iPad. Connect your device to reconstruct, inspect, and export it here.")
+                .font(.sf(15)).foregroundStyle(theme.text2)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 430, alignment: .leading)
+                .padding(.top, 16)
+            StButton(title: "Connect a device", kind: .accent, icon: "phone") { section = .compute }
+                .padding(.top, 28)
+            Label("Your scans stay on your devices", systemImage: "lock.shield")
+                .font(.sf(12)).foregroundStyle(theme.text3)
+                .padding(.top, 24)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 24).padding(.vertical, 64)
     }
 
     private func open(_ scan: MacComputedScan) {
@@ -158,7 +157,7 @@ private struct MacFeaturedResult: View {
     var body: some View {
         StCard(radius: 8, pad: 22) {
             HStack(spacing: 24) {
-                MacModelStage(assetURL: scan.modelURL).frame(width: 220, height: 200)
+                MacModelStage(assetURL: scan.modelURL).frame(width: 200, height: 220)
                 VStack(alignment: .leading, spacing: 0) {
                     StLabel(text: "Computed model", color: theme.good)
                     Text(scan.name).font(.sf(30, .heavy)).foregroundStyle(theme.ink).padding(.top, 8)
@@ -170,9 +169,7 @@ private struct MacFeaturedResult: View {
                         stat("Format", scan.modelURL.pathExtension.uppercased())
                     }
                     .padding(.top, 20)
-                }
-                Spacer(minLength: 0)
-                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
                     StButton(title: "Open in 3D", kind: .accent, icon: "cube") {
                         compute.selectScan(scan.id)
                         section = .viewer
@@ -181,11 +178,10 @@ private struct MacFeaturedResult: View {
                         compute.selectScan(scan.id)
                         section = .export
                     }
-                    StButton(title: "Compute", kind: .ghost, icon: "chip") {
-                        compute.selectScan(scan.id)
-                        section = .compute
                     }
+                    .padding(.top, 22)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
@@ -246,91 +242,5 @@ private struct MacLibraryListRow: View {
             .background(RoundedRectangle(cornerRadius: 8).fill(selected ? theme.accentSoft : .clear))
         }
         .buttonStyle(.plain)
-    }
-}
-
-private struct MacLibraryFilters: View {
-    @Environment(\.theme) private var theme
-    let scans: [MacComputedScan]
-    @Binding var active: String
-
-    var body: some View {
-        HStack(spacing: 8) {
-            ForEach(["All", "Object", "Space", "Landscape"], id: \.self) { key in
-                let count = key == "All" ? scans.count : scans.filter { $0.manifest.captureMode.rawValue == key }.count
-                Button { active = key } label: {
-                    Text("\(key) \(count)").font(.sf(12.5, .semibold)).foregroundStyle(active == key ? theme.bg : theme.text2)
-                        .padding(.horizontal, 11).padding(.vertical, 7)
-                        .background(Capsule().fill(active == key ? theme.ink : theme.fieldFill))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-}
-
-private struct MacLibrarySidebarRow: Identifiable {
-    let icon: String
-    let title: String
-    let filter: String
-    let count: Int
-
-    var id: String { filter }
-}
-
-private struct MacLibrarySidebar: View {
-    @Environment(\.theme) private var theme
-    @Binding var section: MacSection
-    @ObservedObject var settings: SettingsStore
-    let summary: MacLibrarySummary
-    @Binding var modeFilter: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(rows) { row in
-                Button { modeFilter = row.filter } label: {
-                    HStack(spacing: 11) {
-                        StIcon(name: row.icon, size: 17, color: row.filter == modeFilter ? theme.accent : theme.text2)
-                        Text(row.title).font(.sf(14, row.filter == modeFilter ? .semibold : .regular)).foregroundStyle(row.filter == modeFilter ? theme.ink : theme.text2)
-                        Spacer(minLength: 0)
-                        Text("\(row.count)").font(.mono(11)).foregroundStyle(theme.text3)
-                    }
-                    .padding(.horizontal, 12).padding(.vertical, 9)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(row.filter == modeFilter ? theme.fieldFillHi : .clear))
-                }
-                .buttonStyle(.plain)
-            }
-            Spacer(minLength: 0)
-            StCard(radius: 8, pad: 13, inset: true) {
-                VStack(alignment: .leading, spacing: 6) {
-                    StLabel(text: "Stored models", color: theme.good)
-                    Text(summary.storageText).font(.sf(20, .bold)).monospacedDigit().foregroundStyle(theme.ink)
-                    Text("\(summary.scanCount) completed \(summary.scanCount == 1 ? "scan" : "scans")").font(.sf(12)).foregroundStyle(theme.text3)
-                }
-            }
-            HStack {
-                Button { section = .settings } label: { Label("Settings", systemImage: "gearshape").font(.sf(12.5)).foregroundStyle(theme.text2) }
-                    .buttonStyle(.plain)
-                Spacer()
-                Button { settings.appearance = theme.mode == .dark ? .light : .dark } label: {
-                    StIcon(name: theme.mode == .dark ? "light" : "moon", size: 14, color: theme.text2)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(theme.mode == .dark ? "Use light appearance" : "Use dark appearance")
-                .help(theme.mode == .dark ? "Use light appearance" : "Use dark appearance")
-            }
-        }
-        .padding(.top, 52).padding(.horizontal, 16).padding(.bottom, 18)
-        .frame(maxHeight: .infinity, alignment: .top)
-        .background(theme.card2)
-    }
-
-    private var rows: [MacLibrarySidebarRow] {
-        [
-            .init(icon: "grid", title: "All Scans", filter: "All", count: summary.scanCount),
-            .init(icon: "cube", title: "Objects", filter: "Object", count: summary.objectCount),
-            .init(icon: "room", title: "Spaces", filter: "Space", count: summary.spaceCount),
-            .init(icon: "landscape", title: "Landscapes", filter: "Landscape", count: summary.landscapeCount),
-        ]
     }
 }

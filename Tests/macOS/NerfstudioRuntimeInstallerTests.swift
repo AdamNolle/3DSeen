@@ -103,6 +103,13 @@ final class NerfstudioRuntimeInstallerTests: XCTestCase {
             Int32(String(contentsOf: childPIDURL).trimmingCharacters(in: .whitespacesAndNewlines))
         )
 
+        installer.cancel()
+        do {
+            try await installer.install()
+            XCTFail("A cancelled installation must finish cleanup before another installation starts")
+        } catch NerfstudioRuntimeInstaller.InstallerError.alreadyInstalling {
+            XCTAssertTrue(installer.isInstalling)
+        }
         task.cancel()
         do {
             try await task.value

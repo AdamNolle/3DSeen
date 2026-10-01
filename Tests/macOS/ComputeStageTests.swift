@@ -59,6 +59,43 @@ final class ComputeStageTests: XCTestCase {
         XCTAssertEqual(reopened.records[committedBeforeJournal.jobID]?.progress, 1)
     }
 
+    @MainActor
+    func testAuthenticatedPeerCannotReplaceOrCancelAnotherPeersJob() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("job-owner-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let journalURL = root.appendingPathComponent("jobs.json")
+        let coordinator = ComputeCoordinator(
+            credentialStore: InMemoryPairingCredentialStore(),
+            assetStore: try ScanAssetStore(rootDirectory: root.appendingPathComponent("scans")),
+            remoteJobJournalURL: journalURL
+        )
+        let owner = HandoffInstallationID(), other = HandoffInstallationID()
+        let job = UUID(), scan = UUID()
+        let offer = HandoffJobOffer(captureMode: .object, detailTier: "Full", resource: .init(
+            byteCount: 100, sha256: String(repeating: "a", count: 64)
+        ))
+        func deliver(_ peer: HandoffInstallationID, scanID: UUID, payload: HandoffMessagePayload) {
+            coordinator.handleAuthenticatedControlEvent(HandoffControlEvent(message: .init(
+                jobID: job, scanID: scanID, senderInstallationID: peer, payload: payload
+            ), peerID: peer))
+        }
+        deliver(owner, scanID: scan, payload: .jobOffer(offer))
+        deliver(owner, scanID: scan, payload: .jobOffer(offer))
+        XCTAssertEqual(coordinator.queuedRemoteJobCount, 1)
+        deliver(other, scanID: UUID(), payload: .jobOffer(offer))
+        deliver(owner, scanID: UUID(), payload: .jobOffer(offer))
+        deliver(other, scanID: scan, payload: .cancel)
+        let accepted = try XCTUnwrap(MacHandoffJobJournal(fileURL: journalURL).records[job])
+        XCTAssertEqual(accepted.peerID, owner)
+        XCTAssertEqual(accepted.scanID, scan)
+        XCTAssertEqual(accepted.state, .accepted)
+        XCTAssertEqual(coordinator.queuedRemoteJobCount, 1)
+        deliver(owner, scanID: scan, payload: .cancel)
+        deliver(owner, scanID: scan, payload: .jobOffer(offer))
+        XCTAssertEqual(MacHandoffJobJournal(fileURL: journalURL).records[job]?.state, .cancelled)
+        XCTAssertEqual(coordinator.queuedRemoteJobCount, 0)
+    }
+
     func testTrainerRuntimeRequiresAllCommands() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("trainer-runtime-\(UUID().uuidString)", isDirectory: true)
@@ -155,6 +192,7 @@ final class ComputeStageTests: XCTestCase {
 
         let processData = try command(named: "process", in: root, script: """
         #!/bin/sh
+        sleep 1
         exit 0
         """)
         let train = try command(named: "train", in: root, script: """
@@ -207,7 +245,7 @@ final class ComputeStageTests: XCTestCase {
             exportURL: export,
             colmapURL: URL(fileURLWithPath: "/usr/bin/true")
         )
-        let trainer = NerfstudioSplatTrainer(runtime: runtime)
+        let trainer = NerfstudioSplatTrainer(runtime: runtime, runtimeProvider: { nil })
         let job = NerfstudioSplatTrainer.Job(
             inputImagesURL: imageDirectory,
             workingDirectory: root.appendingPathComponent("work", isDirectory: true),
@@ -215,7 +253,16 @@ final class ComputeStageTests: XCTestCase {
             iterationCount: 2
         )
 
-        let output = try await trainer.train(job: job)
+        let task = Task { try await trainer.train(job: job) }
+        while !trainer.isRunning { await Task.yield() }
+        XCTAssertFalse(trainer.refreshRuntime())
+        do {
+            _ = try await trainer.train(job: job)
+            XCTFail("A concurrent job must not delete the active job's working files")
+        } catch NerfstudioSplatTrainer.TrainerError.alreadyRunning {
+            // The active job retains its runtime even when discovery no longer finds it.
+        }
+        let output = try await task.value
 
         XCTAssertEqual(output, job.exportURL)
         XCTAssertEqual(trainer.stage, .completed)

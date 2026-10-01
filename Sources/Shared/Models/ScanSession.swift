@@ -95,16 +95,7 @@ public final class ScanSession {
     }
 
     public var exportFileBaseName: String {
-        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
-        let collapsed = name
-            .lowercased()
-            .replacingOccurrences(of: " ", with: "-")
-            .unicodeScalars
-            .map { allowed.contains($0) ? Character($0) : "-" }
-        let sanitized = String(collapsed)
-            .split(separator: "-")
-            .joined(separator: "-")
-        return sanitized.isEmpty ? "scan-\(id.uuidString.lowercased())" : sanitized
+        ScanExportLocation.fileBaseName(for: name, fallback: "scan-\(id.uuidString.lowercased())")
     }
 
     public init(id: UUID = UUID(),

@@ -141,7 +141,7 @@ public struct MeasurementExporter {
     public func exportCSV(_ measurements: [ScanMeasurement], named baseName: String, to directory: URL) throws -> URL {
         let fm = FileManager.default
         try fm.createDirectory(at: directory, withIntermediateDirectories: true)
-        let sanitized = baseName.isEmpty ? "scan" : baseName
+        let sanitized = ScanExportLocation.fileBaseName(for: baseName, fallback: "scan")
         let output = directory.appendingPathComponent("\(sanitized)-measurements.csv")
         let header = "label,meters,centimeters,inches,start_x,start_y,start_z,end_x,end_y,end_z\n"
         let rows = measurements.map { measurement in
@@ -162,7 +162,7 @@ public struct MeasurementExporter {
     }
 
     private func csvField(_ value: String) -> String {
-        if value.contains(",") || value.contains("\"") || value.contains("\n") {
+        if value.contains(",") || value.contains("\"") || value.contains("\n") || value.contains("\r") {
             return "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
         }
         return value
@@ -184,6 +184,14 @@ public struct ModelExportRequest: Sendable {
 }
 
 public enum ScanExportLocation {
+    public static func fileBaseName(for name: String, fallback: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        let characters = name.lowercased().unicodeScalars
+            .map { allowed.contains($0) ? Character($0) : "-" }
+        let sanitized = String(characters).split(separator: "-").joined(separator: "-")
+        return sanitized.isEmpty ? fallback : String(sanitized.prefix(80))
+    }
+
     public static func rootDirectory(fileManager: FileManager = .default) -> URL {
         let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? fileManager.temporaryDirectory
@@ -328,17 +336,45 @@ public final class ModelExporter {
         }
     }
 
-    private func commitExportDirectory(_ stagingDirectory: URL, primary: URL, to outputURL: URL) throws {
+    func commitExportDirectory(_ stagingDirectory: URL, primary: URL, to outputURL: URL) throws {
         let fileManager = FileManager.default
         let stagedFiles = try fileManager.contentsOfDirectory(
             at: stagingDirectory,
             includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles]
         )
-        for file in stagedFiles where file != primary {
-            try commit(file, to: outputURL.deletingLastPathComponent().appendingPathComponent(file.lastPathComponent))
+        // Directory enumeration may canonicalize /var to /private/var. Identify the
+        // primary by its unique filename so it is committed exactly once.
+        let files = stagedFiles.filter { $0.lastPathComponent != primary.lastPathComponent } + [primary]
+        let backup = stagingDirectory.appendingPathComponent(".previous", isDirectory: true)
+        try fileManager.createDirectory(at: backup, withIntermediateDirectories: true)
+        var existing = Set<URL>()
+        for file in files {
+            let destination = outputURL.deletingLastPathComponent().appendingPathComponent(file.lastPathComponent)
+            var isDirectory: ObjCBool = false
+            if fileManager.fileExists(atPath: destination.path, isDirectory: &isDirectory) {
+                guard !isDirectory.boolValue else { throw CocoaError(.fileWriteFileExists) }
+                try fileManager.copyItem(at: destination, to: backup.appendingPathComponent(file.lastPathComponent))
+                existing.insert(destination)
+            }
         }
-        try commit(primary, to: outputURL)
+        var committed: [URL] = []
+        do {
+            for file in files {
+                let destination = outputURL.deletingLastPathComponent().appendingPathComponent(file.lastPathComponent)
+                try commit(file, to: destination)
+                committed.append(destination)
+            }
+        } catch {
+            for destination in committed.reversed() {
+                if existing.contains(destination) {
+                    try commit(backup.appendingPathComponent(destination.lastPathComponent), to: destination)
+                } else {
+                    try fileManager.removeItem(at: destination)
+                }
+            }
+            throw error
+        }
     }
 
     #if DEBUG

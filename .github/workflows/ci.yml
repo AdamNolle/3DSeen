@@ -8,7 +8,7 @@ on:
     branches: [main]
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -21,12 +21,19 @@ jobs:
         run: tools/ci/install-tools.sh
       - name: Validate default bundle version
         run: tools/release/validate-version.sh
+      - name: Validate app icons
+        run: python3 tools/assets/validate-app-icons.py
       - name: Lint (strict)
         run: swiftlint lint --strict --reporter github-actions-logging
 
   test-ios:
-    name: Build & Test (iOS)
+    name: Build & Test (${{ matrix.device }})
     runs-on: macos-15
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [iPhone, iPad]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Select pinned Xcode
@@ -41,16 +48,21 @@ jobs:
         run: xcodebuild -resolvePackageDependencies -scheme 3DSeen-iOS
       - name: Verify generated project and package lock
         run: git diff --exit-code -- 3DSeen.xcodeproj/project.pbxproj 3DSeen.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
-      - name: Select available iPhone simulator
+      - name: Select available simulator
         id: simulator
+        env:
+          DEVICE_FAMILY: ${{ matrix.device }}
         run: |
           DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c '
-          import json, sys
+          import json, os, re, sys
           devices = json.load(sys.stdin)["devices"]
-          candidates = [device for runtime in devices.values() for device in runtime
-                        if device.get("isAvailable") and device["name"].startswith("iPhone")]
+          runtimes = sorted(devices, key=lambda value: tuple(map(int, re.findall(r"\d+", value))), reverse=True)
+          family = os.environ["DEVICE_FAMILY"]
+          candidates = [device for runtime in runtimes if ".iOS-" in runtime
+                        for device in devices[runtime]
+                        if device.get("isAvailable") and device["name"].startswith(family)]
           if not candidates:
-              raise SystemExit("No available iPhone simulator")
+              raise SystemExit(f"No available {family} simulator")
           print(candidates[0]["udid"])
           ')
           echo "id=$DEVICE_ID" >> "$GITHUB_OUTPUT"
@@ -61,12 +73,23 @@ jobs:
           xcodebuild test \
             -scheme 3DSeen-iOS \
             -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.id }}' \
+            -parallel-testing-enabled NO \
+            -resultBundlePath '${{ runner.temp }}/ios-${{ matrix.device }}.xcresult' \
             -enableCodeCoverage YES \
             CODE_SIGNING_ALLOWED=NO
+
+      - name: Preserve test results
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: ios-${{ matrix.device }}-test-results
+          path: ${{ runner.temp }}/ios-${{ matrix.device }}.xcresult
+          if-no-files-found: ignore
 
   test-macos:
     name: Build & Test (macOS)
     runs-on: macos-15
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Select pinned Xcode

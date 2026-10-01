@@ -67,12 +67,31 @@ def main() -> int:
                     errors.append(f"{path.relative_to(ROOT)}: icon must be opaque RGB without alpha")
             except (OSError, ValueError, struct.error) as error:
                 errors.append(f"{path.relative_to(ROOT)}: {error}")
-    if not (ROOT / "docs/brand/3dseen-tesseract.svg").is_file():
-        errors.append("missing vector brand master: docs/brand/3dseen-tesseract.svg")
+    if not (ROOT / "docs/brand/3dseen-cube.svg").is_file():
+        errors.append("missing vector brand companion: docs/brand/3dseen-cube.svg")
+    icon = ROOT / "Sources/Shared/DesignSystem/3DSeenIcon.icon"
+    try:
+        composition = json.loads((icon / "icon.json").read_text())
+        if composition["fill-specializations"][0]["value"]["solid"] != "extended-srgb:0.11765,0.34510,0.86275,1.00000":
+            errors.append("Icon Composer background must use blueprint blue")
+        dark_fill = next((entry["value"] for entry in composition["fill-specializations"]
+                          if entry.get("appearance") == "dark"), None)
+        if dark_fill != composition["fill-specializations"][0]["value"]:
+            errors.append("Icon Composer dark appearance must preserve blueprint blue")
+        layers = [layer for group in composition["groups"] for layer in group["layers"]]
+        if len(layers) != 1 or layers[0]["image-name"] != "3dseen-cube.svg":
+            errors.append("Icon Composer must contain the approved cube layer")
+        vector = (icon / "Assets/3dseen-cube.svg").read_text()
+        if vector != (ROOT / "docs/brand/3dseen-cube.svg").read_text() or 'stroke="#FFFFFF"' not in vector:
+            errors.append("Icon Composer cube must match the white vector mark")
+        if (ROOT / "project.yml").read_text().count("ASSETCATALOG_COMPILER_APPICON_NAME: 3DSeenIcon") != 2:
+            errors.append("Both app targets must use the Icon Composer icon")
+    except (OSError, KeyError, json.JSONDecodeError) as error:
+        errors.append(f"Invalid Icon Composer document: {error}")
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
-    print("App icon catalogs valid: referenced dimensions, opaque RGB PNGs, and vector master.")
+    print("App icons valid: referenced dimensions, opaque RGB catalogs, and shared Icon Composer cube with blue default/dark backgrounds.")
     return 0
 
 

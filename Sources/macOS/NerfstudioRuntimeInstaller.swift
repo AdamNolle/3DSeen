@@ -43,7 +43,7 @@ public final class NerfstudioRuntimeInstaller: ObservableObject {
         public static func discover(fileManager: FileManager = .default) -> Paths? {
             let brewCandidates = ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"]
                 .map(URL.init(fileURLWithPath:))
-            let pythonCandidates = ["/opt/homebrew/bin/python3.11", "/usr/local/bin/python3.11", "/usr/bin/python3"]
+            let pythonCandidates = ["/opt/homebrew/bin/python3.11", "/usr/local/bin/python3.11"]
                 .map(URL.init(fileURLWithPath:))
             guard let brew = brewCandidates.first(where: { fileManager.isExecutableFile(atPath: $0.path) }),
                   let python = pythonCandidates.first(where: { fileManager.isExecutableFile(atPath: $0.path) }) else {
@@ -52,7 +52,7 @@ public final class NerfstudioRuntimeInstaller: ObservableObject {
             let colmapCandidates = ["/opt/homebrew/bin/colmap", "/usr/local/bin/colmap", "/usr/bin/colmap"]
                 .map(URL.init(fileURLWithPath:))
             let colmap = colmapCandidates.first(where: { fileManager.isExecutableFile(atPath: $0.path) })
-                ?? URL(fileURLWithPath: "/opt/homebrew/bin/colmap")
+                ?? brew.deletingLastPathComponent().appendingPathComponent("colmap")
             let venv = fileManager.homeDirectoryForCurrentUser
                 .appendingPathComponent("Library/Application Support/3DSeen/trainer/venv", isDirectory: true)
             return Paths(brewURL: brew, pythonURL: python, colmapURL: colmap, virtualEnvironmentURL: venv)
@@ -71,12 +71,14 @@ public final class NerfstudioRuntimeInstaller: ObservableObject {
 
     public enum InstallerError: LocalizedError {
         case unavailable
+        case alreadyInstalling
         case commandFailed(String)
 
         public var errorDescription: String? {
             switch self {
             case .unavailable:
                 return "Homebrew and Python 3.11 are required to install the trained-splat runtime."
+            case .alreadyInstalling: return "Runtime setup is already in progress."
             case .commandFailed(let output):
                 return "Runtime setup failed. \(output)"
             }
@@ -119,6 +121,8 @@ public final class NerfstudioRuntimeInstaller: ObservableObject {
     }
 
     public func install() async throws {
+        guard !isInstalling else { throw InstallerError.alreadyInstalling }
+        try Task.checkCancellation()
         guard paths != nil else { throw InstallerError.unavailable }
         isInstalling = true
         cancellationRequested = false
@@ -144,7 +148,6 @@ public final class NerfstudioRuntimeInstaller: ObservableObject {
         cancellationRequested = true
         if let activeProcess { Self.terminateProcessGroup(activeProcess) }
         stage = .idle
-        isInstalling = false
     }
 
     private func stage(for index: Int, commandCount: Int) -> Stage {
@@ -159,6 +162,8 @@ public final class NerfstudioRuntimeInstaller: ObservableObject {
     }
 
     private func execute(_ command: Command) async throws {
+        try Task.checkCancellation()
+        guard !cancellationRequested else { throw CancellationError() }
         let process = Process()
         let outputPipe = Pipe()
         Self.configureIsolatedProcess(process, command: command)

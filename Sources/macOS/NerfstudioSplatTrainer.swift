@@ -104,6 +104,7 @@ public final class NerfstudioSplatTrainer: ObservableObject {
 
     public enum TrainerError: LocalizedError {
         case unavailable
+        case alreadyRunning
         case invalidInput(URL)
         case processFailed(command: String, output: String)
         case trainingConfigurationMissing(URL)
@@ -113,6 +114,8 @@ public final class NerfstudioSplatTrainer: ObservableObject {
             switch self {
             case .unavailable:
                 return "Nerfstudio and COLMAP are not configured on this Mac."
+            case .alreadyRunning:
+                return "A splat training job is already running."
             case .invalidInput(let url):
                 return "The handoff does not contain image frames at \(url.lastPathComponent)."
             case .processFailed(let command, let output):
@@ -179,6 +182,9 @@ public final class NerfstudioSplatTrainer: ObservableObject {
 
     @discardableResult
     public func train(job: Job) async throws -> URL {
+        guard !isRunning else { throw TrainerError.alreadyRunning }
+        guard let runtime else { throw TrainerError.unavailable }
+        try Task.checkCancellation()
         guard CaptureArchiveInspector.containsImageFrames(in: job.inputImagesURL) else {
             throw TrainerError.invalidInput(job.inputImagesURL)
         }
@@ -208,7 +214,7 @@ public final class NerfstudioSplatTrainer: ObservableObject {
         stage = .exporting
         try fm.createDirectory(at: job.exportDirectory, withIntermediateDirectories: true)
         try await execute(Command(
-            executableURL: runtime!.exportURL,
+            executableURL: runtime.exportURL,
             arguments: [
                 "gaussian-splat",
                 "--load-config", configURL.path,
@@ -221,6 +227,7 @@ public final class NerfstudioSplatTrainer: ObservableObject {
             throw TrainerError.exportMissing(job.exportURL)
         }
         stage = .completed
+        try Task.checkCancellation()
         return job.exportURL
     }
 
@@ -228,72 +235,10 @@ public final class NerfstudioSplatTrainer: ObservableObject {
         cancellationRequested = true
         if let activeProcess { Self.terminateProcessGroup(activeProcess) }
         stage = .idle
-        isRunning = false
     }
 
     public static func isValidTrainedPLY(at url: URL) -> Bool {
-        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe),
-              let terminatorRange = data.range(of: Data("end_header\n".utf8))
-                ?? data.range(of: Data("end_header\r\n".utf8)) else { return false }
-        let payloadOffset = terminatorRange.upperBound
-        guard let header = String(data: data[..<payloadOffset], encoding: .ascii) else { return false }
-        let lines = header.components(separatedBy: .newlines)
-        guard lines.first == "ply",
-              lines.contains("format binary_little_endian 1.0") else { return false }
-
-        var vertexCount: Int?
-        var vertexStride = 0
-        var vertexProperties = Set<String>()
-        var propertyOffsets: [String: (offset: Int, size: Int)] = [:]
-        var parsingVertex = false
-        let scalarSizes = [
-            "char": 1, "uchar": 1, "int8": 1, "uint8": 1,
-            "short": 2, "ushort": 2, "int16": 2, "uint16": 2,
-            "int": 4, "uint": 4, "int32": 4, "uint32": 4, "float": 4, "float32": 4,
-            "double": 8, "float64": 8
-        ]
-        for line in lines {
-            let parts = line.split(separator: " ").map(String.init)
-            if parts.count == 3, parts[0] == "element" {
-                parsingVertex = parts[1] == "vertex"
-                if parsingVertex { vertexCount = Int(parts[2]) }
-                continue
-            }
-            guard parsingVertex, parts.count == 3, parts[0] == "property",
-                  let size = scalarSizes[parts[1]] else { continue }
-            propertyOffsets[parts[2]] = (vertexStride, size)
-            vertexStride += size
-            vertexProperties.insert(parts[2])
-        }
-
-        let requiredProperties: Set<String> = [
-            "x", "y", "z", "f_dc_0", "f_dc_1", "f_dc_2",
-            "opacity", "scale_0", "scale_1", "scale_2",
-            "rot_0", "rot_1", "rot_2", "rot_3"
-        ]
-        guard let vertexCount, vertexCount > 0, vertexStride > 0,
-              requiredProperties.isSubset(of: vertexProperties),
-              requiredProperties.allSatisfy({ propertyOffsets[$0]?.size == 4 }),
-              data.count >= payloadOffset + vertexCount * vertexStride else { return false }
-
-        let sampledVertices: [Int]
-        if vertexCount <= 1_024 {
-            sampledVertices = Array(0..<vertexCount)
-        } else {
-            sampledVertices = [0, vertexCount / 2, vertexCount - 1]
-        }
-        for vertex in sampledVertices {
-            for property in requiredProperties {
-                guard let offset = propertyOffsets[property]?.offset else { return false }
-                let start = payloadOffset + vertex * vertexStride + offset
-                let bits = UInt32(data[start])
-                    | UInt32(data[start + 1]) << 8
-                    | UInt32(data[start + 2]) << 16
-                    | UInt32(data[start + 3]) << 24
-                guard Float(bitPattern: bits).isFinite else { return false }
-            }
-        }
-        return true
+        PLYValidator.isValid(url, kind: .trainedSplat)
     }
 
     private func findTrainingConfiguration(in directory: URL) -> URL? {
@@ -303,6 +248,8 @@ public final class NerfstudioSplatTrainer: ObservableObject {
     }
 
     private func execute(_ command: Command) async throws {
+        try Task.checkCancellation()
+        if cancellationRequested { throw CancellationError() }
         let process = Process()
         let outputPipe = Pipe()
         Self.configureIsolatedProcess(process, command: command)

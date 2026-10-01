@@ -5,9 +5,15 @@ import SwiftUI
 /// → Export (workspace) → Settings (preferences). Reuses the shared Studio design system.
 struct ContentView: View {
     @ObservedObject var nav: MacNav
-    @StateObject private var compute = ComputeCoordinator()
-    @StateObject private var settings = SettingsStore()
+    @StateObject private var compute: ComputeCoordinator
+    @StateObject private var settings: SettingsStore
     @Environment(\.colorScheme) private var systemScheme
+
+    @MainActor init(nav: MacNav, compute: ComputeCoordinator? = nil, settings: SettingsStore? = nil) {
+        self.nav = nav
+        _compute = StateObject(wrappedValue: compute ?? ComputeCoordinator())
+        _settings = StateObject(wrappedValue: settings ?? SettingsStore())
+    }
 
     private var dark: Bool {
         switch settings.appearance {
@@ -19,20 +25,18 @@ struct ContentView: View {
     private var theme: Theme { dark ? .dark : .light }
 
     var body: some View {
-        Group {
-            switch nav.section {
-            case .library: MacLibraryPane(section: $nav.section, settings: settings, compute: compute)
-            case .viewer: MacViewerPane(section: $nav.section, compute: compute, settings: settings)
-            case .compute: MacComputePane(section: $nav.section, compute: compute, network: compute.network)
-            case .export: MacExportPane(section: $nav.section, compute: compute)
-            case .settings: MacSettingsPane(section: $nav.section, settings: settings, compute: compute)
+        HStack(spacing: 0) {
+            if nav.section != .settings {
+                MacWorkspaceSidebar(nav: nav, compute: compute).frame(width: 224)
+                StRule(vertical: true)
             }
+            workspace
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.bg.ignoresSafeArea())
         .environment(\.theme, theme)
         .preferredColorScheme(settings.colorScheme)
-        .frame(minWidth: 1120, minHeight: 720)
+        .frame(minWidth: 1040, minHeight: 680)
         .alert("Confirm secure pairing", isPresented: pairingPresented) {
             Button("Reject", role: .destructive) { respondToFirstPairing(accept: false) }
             Button("Codes Match") { respondToFirstPairing(accept: true) }
@@ -41,6 +45,16 @@ struct ContentView: View {
             Text("Check that \(request?.peer.displayName ?? "the device") shows the same code: \(request?.code ?? "------"). Never approve a different code.")
         }
     }
+
+    @ViewBuilder private var workspace: some View {
+            switch nav.section {
+            case .library: MacLibraryPane(section: $nav.section, settings: settings, compute: compute, modeFilter: $nav.libraryFilter)
+            case .viewer: MacViewerPane(section: $nav.section, compute: compute, settings: settings)
+            case .compute: MacComputePane(section: $nav.section, compute: compute, network: compute.network)
+            case .export: MacExportPane(section: $nav.section, compute: compute)
+            case .settings: MacSettingsPane(section: $nav.section, settings: settings, compute: compute)
+            }
+        }
 
     private var pairingPresented: Binding<Bool> {
         Binding(
@@ -62,6 +76,7 @@ struct ContentView: View {
 /// Window-level navigation, owned by the App so menu commands (⌘,) can drive it too.
 @MainActor final class MacNav: ObservableObject {
     @Published var section: MacSection = .library
+    @Published var libraryFilter = "All"
 }
 
 enum MacSection: String, CaseIterable {
@@ -75,7 +90,7 @@ enum MacSection: String, CaseIterable {
 /// Compute/Export), smaller where a sidebar already occupies the top-left corner.
 struct MacTopBar<Content: View>: View {
     @Environment(\.theme) private var theme
-    var leadingInset: CGFloat = 84
+    var leadingInset: CGFloat = 22
     var trailingInset: CGFloat = 18
     @ViewBuilder var content: () -> Content
 

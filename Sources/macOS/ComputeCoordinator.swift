@@ -5,62 +5,10 @@ import ZIPFoundation
 import RealityKit
 import OSLog
 
-/// A completed model retained by the Mac app. The record is reconstructed from the durable
-/// scan manifest at launch, rather than from design-time sample data.
-public struct MacComputedScan: Identifiable, Equatable {
-    public let manifest: ScanAssetManifest
-    public let modelURL: URL
-    public let byteCount: Int64
-    public let creationDate: Date
-
-    public var id: UUID { manifest.scanID }
-    public var name: String {
-        manifest.displayName ?? "\(manifest.captureMode.rawValue)-\(manifest.scanID.uuidString.prefix(8))"
-    }
-    public var sizeMB: Int { max(0, Int((Double(byteCount) / 1_000_000).rounded(.up))) }
-    public var isRenderable: Bool { FileManager.default.fileExists(atPath: modelURL.path) }
-}
-
-/// Derived display facts for the desktop library. Counts and storage always originate from
-/// actual persisted scan records, so an empty library stays empty.
-public struct MacLibrarySummary: Equatable {
-    public let scanCount: Int
-    public let objectCount: Int
-    public let spaceCount: Int
-    public let landscapeCount: Int
-    public let totalByteCount: Int64
-
-    public init(scans: [MacComputedScan]) {
-        scanCount = scans.count
-        objectCount = scans.filter { $0.manifest.captureMode == .object }.count
-        spaceCount = scans.filter { $0.manifest.captureMode == .space }.count
-        landscapeCount = scans.filter { $0.manifest.captureMode == .landscape }.count
-        totalByteCount = scans.reduce(0) { $0 + max(0, $1.byteCount) }
-    }
-
-    public var storageText: String {
-        if totalByteCount < 1_000_000 { return "\(totalByteCount / 1_000) KB" }
-        if totalByteCount < 1_000_000_000 { return String(format: "%.1f MB", Double(totalByteCount) / 1_000_000) }
-        return String(format: "%.2f GB", Double(totalByteCount) / 1_000_000_000)
-    }
-}
-
 /// Drives the macOS "Studio" compute dashboard: receives a scan archive over MultipeerConnectivity,
 /// unzips it, runs RealityKit PhotogrammetrySession on Apple Silicon, and publishes pipeline state.
 @MainActor
 public final class ComputeCoordinator: ObservableObject {
-    public enum SplatOutput: String, CaseIterable, Identifiable {
-        case geometryPreview
-        case trainedSplat
-
-        public var id: String { rawValue }
-        public var label: String {
-            switch self {
-            case .geometryPreview: return "Geometry preview"
-            case .trainedSplat: return "Trained splat"
-            }
-        }
-    }
 
     private struct PendingHandoff {
         let archive: URL
@@ -258,11 +206,31 @@ public final class ComputeCoordinator: ObservableObject {
 
     private func handleControlEvent(_ event: HandoffControlEvent) {
         guard pairing.isAuthenticated(event.peerID) else { return }
+        handleAuthenticatedControlEvent(event)
+    }
+
+    /// Routing after the transport's authenticated-peer gate; also permits isolated protocol tests.
+    func handleAuthenticatedControlEvent(_ event: HandoffControlEvent) {
         switch event.message.payload {
         case .jobOffer(let offer):
             guard let jobID = event.message.jobID, let scanID = event.message.scanID else {
                 send(.failed(HandoffFailure(code: .corruptArchive, detail: "Job identity is missing.")), event: event)
                 return
+            }
+            if let existing = remoteJobJournal.records[jobID] {
+                guard existing.peerID == event.peerID, existing.scanID == scanID else {
+                    send(.failed(HandoffFailure(code: .corruptArchive, detail: "Job identity does not match its owner.")), event: event)
+                    return
+                }
+                if existing.state != .accepted || pendingOffers[jobID] == nil {
+                    send(.statusResponse(HandoffJobStatus(state: existing.state, progress: existing.progress)), event: event)
+                    if existing.state == .completed { resendCompletedResult(existing) }
+                    return
+                }
+                guard pendingOffers[jobID]?.offer == offer else {
+                    send(.failed(HandoffFailure(code: .corruptArchive, detail: "A repeated offer changed its resource.")), event: event)
+                    return
+                }
             }
             pendingOffers[jobID] = PendingOffer(peerID: event.peerID, scanID: scanID, offer: offer)
             recordRemoteJob(jobID: jobID, scanID: scanID, peerID: event.peerID, state: .accepted, progress: 0)
@@ -275,21 +243,20 @@ public final class ComputeCoordinator: ObservableObject {
         case .statusRequest:
             let status: HandoffJobStatus
             let durableRecord = event.message.jobID.flatMap { remoteJobJournal.records[$0] }
+            guard let durableRecord, durableRecord.peerID == event.peerID,
+                  durableRecord.scanID == event.message.scanID else {
+                send(.statusResponse(HandoffJobStatus(state: .failed, progress: 0)), event: event)
+                return
+            }
             if activeRemoteJob?.jobID == event.message.jobID {
                 status = HandoffJobStatus(state: .processing, progress: progress)
             } else if pendingOffers[event.message.jobID ?? UUID()] != nil {
                 status = HandoffJobStatus(state: .accepted, progress: 0)
-            } else if let durableRecord,
-                      durableRecord.peerID == event.peerID,
-                      durableRecord.scanID == event.message.scanID {
-                status = HandoffJobStatus(state: durableRecord.state, progress: durableRecord.progress)
             } else {
-                status = HandoffJobStatus(state: .failed, progress: 0)
+                status = HandoffJobStatus(state: durableRecord.state, progress: durableRecord.progress)
             }
             send(.statusResponse(status), event: event)
-            if let durableRecord, durableRecord.state == .completed {
-                resendCompletedResult(durableRecord)
-            }
+            if durableRecord.state == .completed { resendCompletedResult(durableRecord) }
         default:
             break
         }
@@ -307,7 +274,9 @@ public final class ComputeCoordinator: ObservableObject {
                   offer.scanID == metadata.scanID,
                   (try? HandoffResourceDescriptor.inspect(archive)) == offer.offer.resource else {
                 network.removeReceivedResource(archive)
-                if let scanID = metadata.scanID {
+                if let scanID = metadata.scanID,
+                   remoteJobJournal.records[jobID]?.peerID == peerID,
+                   remoteJobJournal.records[jobID]?.scanID == scanID {
                     recordRemoteJob(jobID: jobID, scanID: scanID, peerID: peerID, state: .failed, progress: 0)
                 }
                 send(
@@ -393,7 +362,8 @@ public final class ComputeCoordinator: ObservableObject {
         var completed = false
         defer {
             isExecutingProcess = false
-            if let remoteJob, !completed, cancelledRemoteJobIDs.remove(remoteJob.jobID) == nil {
+            let wasCancelled = remoteJob.map { cancelledRemoteJobIDs.remove($0.jobID) != nil } ?? false
+            if let remoteJob, !completed, !wasCancelled {
                 recordRemoteJob(
                     jobID: remoteJob.jobID,
                     scanID: remoteJob.scanID,
@@ -531,6 +501,8 @@ public final class ComputeCoordinator: ObservableObject {
 
     private func complete(_ input: CompletionInput, previewOverride: URL? = nil,
                           previewKind: SplatPreviewKind? = nil) throws {
+        try Task.checkCancellation()
+        if let jobID = input.jobID, cancelledRemoteJobIDs.contains(jobID) { throw CancellationError() }
         guard FileManager.default.fileExists(atPath: input.output.path), let assetStore else {
             throw ScanLocalComputeError.outputMissing(input.output)
         }
@@ -637,12 +609,15 @@ public final class ComputeCoordinator: ObservableObject {
 
 extension ComputeCoordinator {
     private func cancelRemoteJob(_ jobID: UUID, event: HandoffControlEvent) {
+        guard let record = remoteJobJournal.records[jobID],
+              record.peerID == event.peerID, record.scanID == event.message.scanID,
+              !record.state.isTerminal else { return }
         pendingOffers.removeValue(forKey: jobID)
         let removed = pendingHandoffs.filter { $0.metadata.jobID == jobID }
         pendingHandoffs.removeAll { $0.metadata.jobID == jobID }
         for handoff in removed { network.removeReceivedResource(handoff.archive) }
-        cancelledRemoteJobIDs.insert(jobID)
         if activeRemoteJob?.jobID == jobID {
+            cancelledRemoteJobIDs.insert(jobID)
             runner.cancelSession()
             splatTrainer.cancel()
         }
@@ -700,7 +675,7 @@ extension ComputeCoordinator {
     }
 
     private func sendActiveProgress(_ progress: Double) {
-        guard let job = activeRemoteJob else { return }
+        guard let job = activeRemoteJob, !cancelledRemoteJobIDs.contains(job.jobID) else { return }
         send(.progress(progress), jobID: job.jobID, scanID: job.scanID, to: job.peerID)
     }
 
@@ -854,6 +829,16 @@ extension ComputeCoordinator {
         try assetStore.writeManifest(manifest)
         reloadLibrary()
         selectScan(scanID)
+    }
+
+    public func recordExport(_ outputURL: URL, for scanID: UUID) throws {
+        guard let assetStore else { throw CocoaError(.fileNoSuchFile) }
+        var manifest = try assetStore.loadManifest(for: scanID)
+        manifest.lastExportedFileName = outputURL.lastPathComponent
+        manifest.lastExportedAt = Date()
+        try assetStore.writeManifest(manifest)
+        reloadLibrary()
+        if selectedScanID == scanID { selectScan(scanID) }
     }
 
     @discardableResult

@@ -126,15 +126,16 @@ struct LibraryScreen: View {
 
 // MARK: - Library data (single source of truth: live SwiftData)
 
-private enum LibraryData {
+enum LibraryData {
     /// The backing scan list contains only persisted capture sessions.
     static func source(_ saved: [ScanSession]) -> [ScanItem] {
         saved.map(ScanItem.init)
     }
 
     /// The hero scan — the most recent live capture.
-    static func featured(_ saved: [ScanSession]) -> ScanItem? {
-        source(saved).first
+    static func featured(_ saved: [ScanSession], filter: String = "All", query: String = "") -> ScanItem? {
+        guard filter == "All", query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return source(saved).first
     }
 
     static func summary(_ saved: [ScanSession]) -> ScanLibrarySummary {
@@ -144,8 +145,9 @@ private enum LibraryData {
     /// The Recent grid: everything after the featured scan, filtered by the active mode pill and
     /// the search query. `limit` caps the unfiltered phone grid to the spec's `slice(1, 7)`.
     static func grid(_ saved: [ScanSession], filter: String, query: String, limit: Int?) -> [ScanItem] {
-        let rest = Array(source(saved).dropFirst())
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sourceItems = source(saved)
+        let rest = q.isEmpty && filter == "All" ? Array(sourceItems.dropFirst()) : sourceItems
         let result = rest.filter { item in
             let modeOK = filter == "All" || item.mode == filter
             guard modeOK else { return false }
@@ -175,7 +177,7 @@ private struct PhoneLibrary: View {
     let onDelete: (ScanItem) -> Void
 
     private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
-    private var featured: ScanItem? { LibraryData.featured(saved) }
+    private var featured: ScanItem? { LibraryData.featured(saved, filter: filter, query: query) }
     private var items: [ScanItem] { LibraryData.grid(saved, filter: filter, query: query, limit: 6) }
     private var summary: ScanLibrarySummary { LibraryData.summary(saved) }
 
@@ -199,21 +201,25 @@ private struct PhoneLibrary: View {
                         .font(.sf(13.5)).foregroundStyle(theme.text2)
                         .padding(.top, 6)
 
-                    LibrarySearchField(query: $query, placeholder: "Search scans, tags, materials")
+                    LibrarySearchField(query: $query, placeholder: "Search scans")
                         .padding(.top, 16)
 
                     if let featured {
                         FeaturedCard(scan: featured, onRename: onRename, onDelete: onDelete).padding(.top, 16)
-                    } else {
+                    } else if saved.isEmpty {
                         EmptyLibraryState().padding(.top, 16)
                     }
 
-                    FilterPills(active: $filter, scans: items).padding(.top, 18).padding(.bottom, 12)
+                    FilterPills(active: $filter, scans: LibraryData.source(saved)).padding(.top, 18).padding(.bottom, 12)
 
                     LazyVGrid(columns: columns, spacing: 12) {
                         ForEach(items, id: \.id) { s in
                             ScanThumbButton(scan: s, onRename: onRename, onDelete: onDelete)
                         }
+                    }
+                    if items.isEmpty && !saved.isEmpty && (filter != "All" || !query.isEmpty) {
+                        Text("No matching scans. Try another search or capture mode.")
+                            .font(.sf(14)).foregroundStyle(theme.text2).padding(.vertical, 24)
                     }
                 }
                 .padding(.horizontal, 20)
@@ -230,7 +236,7 @@ private struct PhoneLibrary: View {
             Spacer()
             Button { model.go(.settings) } label: {
                 StIcon(name: "settings", size: 18, color: theme.text2)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
                     .background(Circle().fill(theme.fieldFill))
             }
             .buttonStyle(.plain)
@@ -265,8 +271,8 @@ private struct PadLibrary: View {
     let onRename: (ScanItem) -> Void
     let onDelete: (ScanItem) -> Void
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 14), count: 5)
-    private var featured: ScanItem? { LibraryData.featured(saved) }
+    private let columns = [GridItem(.adaptive(minimum: 160), spacing: 14)]
+    private var featured: ScanItem? { LibraryData.featured(saved, filter: filter, query: query) }
     private var items: [ScanItem] { LibraryData.grid(saved, filter: filter, query: query, limit: nil) }
 
     var body: some View {
@@ -283,7 +289,7 @@ private struct PadLibrary: View {
                         searchRow
                         if let featured {
                             FeaturedCard(scan: featured, big: true, onRename: onRename, onDelete: onDelete).padding(.top, 18)
-                        } else {
+                        } else if saved.isEmpty {
                             EmptyLibraryState(big: true).padding(.top, 18)
                         }
                         recentHeader
@@ -291,6 +297,10 @@ private struct PadLibrary: View {
                             ForEach(items, id: \.id) { s in
                                 ScanThumbButton(scan: s, onRename: onRename, onDelete: onDelete)
                             }
+                        }
+                        if items.isEmpty && !saved.isEmpty && (filter != "All" || !query.isEmpty) {
+                            Text("No matching scans. Try another search or capture mode.")
+                                .font(.sf(14)).foregroundStyle(theme.text2).padding(.vertical, 24)
                         }
                     }
                     .padding(.bottom, 24)
@@ -303,7 +313,7 @@ private struct PadLibrary: View {
     private var searchRow: some View {
         HStack(alignment: .center, spacing: 12) {
             LibrarySearchField(query: $query,
-                               placeholder: "Search scans, tags, materials…",
+                               placeholder: "Search scans…",
                                height: 46, iconSize: 18)
             StButton(title: "New Scan", kind: .accent, icon: "scan") { model.beginNewScan(using: settings) }
         }
@@ -315,7 +325,7 @@ private struct PadLibrary: View {
                 .font(.sf(20, .bold)).tracking(0)
                 .foregroundStyle(theme.ink)
             Spacer()
-            FilterPills(active: $filter, scans: items, fill: false)
+            FilterPills(active: $filter, scans: LibraryData.source(saved), fill: false)
         }
         .padding(.top, 24).padding(.bottom, 12)
     }
@@ -359,15 +369,14 @@ private struct LibrarySidebar: View {
 
     private var logoHeader: some View {
         HStack(spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 9, style: .continuous).fill(theme.accent)
-                StIcon(name: "scan", size: 18, color: theme.onAccent, weight: .semibold)
-            }
+            Image("BrandIcon").resizable()
             .frame(width: 30, height: 30)
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 1) {
                 Text("3DSeen").font(.sf(15, .bold)).tracking(0).foregroundStyle(theme.ink)
-                Text("v2.4 · STUDIO").font(.mono(9.5)).foregroundStyle(theme.text3)
+                Text("v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—") · STUDIO")
+                    .font(.mono(9.5)).foregroundStyle(theme.text3)
             }
         }
         .padding(.horizontal, 8).padding(.top, 4).padding(.bottom, 12)

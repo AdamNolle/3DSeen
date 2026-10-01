@@ -5,6 +5,16 @@ name: Release
 #  secrets; wire those in as repository secrets to extend this into a full pipeline.)
 
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Marketing version to validate without publishing
+        required: true
+        default: '1.0.0'
+      build_number:
+        description: Positive integer build number
+        required: true
+        default: '1'
   push:
     tags: ["v*"]
 
@@ -13,7 +23,7 @@ permissions:
 
 jobs:
   quality:
-    name: Verify tagged commit
+    name: Verify release commit
     uses: ./.github/workflows/ci.yml
 
   build-artifacts:
@@ -32,10 +42,11 @@ jobs:
         run: xcodegen generate
       - name: Validate and export release version
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
-          BUILD_NUMBER: ${{ github.run_number }}
+          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
+          RELEASE_VERSION: ${{ inputs.version || '' }}
+          BUILD_NUMBER: ${{ inputs.build_number || github.run_number }}
         run: |
-          RELEASE_VERSION="${RELEASE_TAG#v}" \
+          RELEASE_VERSION="${RELEASE_VERSION:-${RELEASE_TAG#v}}" \
             tools/release/validate-version.sh --github-env
       - name: Ensure Metal Toolchain (no-op on stable Xcode)
         run: xcodebuild -downloadComponent MetalToolchain 2>/dev/null || true
@@ -71,17 +82,18 @@ jobs:
           test -n "$MAC_APP" && test -d "$MAC_APP"
           mkdir -p dist
           ditto -c -k --sequesterRsrc --keepParent \
-            "$IOS_APP" dist/3DSeen-iOS-${{ github.ref_name }}.app.zip
+            "$IOS_APP" "dist/3DSeen-iOS-$MARKETING_VERSION.app.zip"
           ditto -c -k --sequesterRsrc --keepParent \
-            "$MAC_APP" dist/3DSeen-macOS-${{ github.ref_name }}.app.zip
+            "$MAC_APP" "dist/3DSeen-macOS-$MARKETING_VERSION.app.zip"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: 3DSeen-${{ github.ref_name }}
+          name: 3DSeen-${{ github.run_id }}
           path: dist/*.zip
 
       - name: Attach to GitHub Release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           files: dist/*.zip
@@ -89,7 +101,7 @@ jobs:
 
   signed-ios:
     name: Signed iOS archive and TestFlight upload
-    if: vars.ENABLE_SIGNED_IOS_RELEASE == 'true'
+    if: github.event_name == 'push' && vars.ENABLE_SIGNED_IOS_RELEASE == 'true'
     needs: quality
     runs-on: macos-15
     steps:
@@ -134,7 +146,7 @@ jobs:
 
   signed-macos:
     name: Developer ID, notarization, and Gatekeeper
-    if: vars.ENABLE_SIGNED_MACOS_RELEASE == 'true'
+    if: github.event_name == 'push' && vars.ENABLE_SIGNED_MACOS_RELEASE == 'true'
     needs: quality
     runs-on: macos-15
     steps:

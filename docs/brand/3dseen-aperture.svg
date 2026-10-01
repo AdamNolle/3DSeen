@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" fill="currentColor">
+  <title>3DSeen folded aperture</title>
+  <desc>Three folded faces surrounding an open dimensional volume. Monochrome companion to the sculpted app icon.</desc>
+  <path d="M492 153Q512 141 532 153L797 306Q817 318 797 330L532 483Q512 495 492 483L227 330Q207 318 227 306Z"/>
+  <path d="M204 354Q185 342 185 366V677Q185 702 207 715L472 868Q493 880 493 855V548Q493 522 471 509Z"/>
+  <path d="M820 354Q839 342 839 366V677Q839 702 817 715L552 868Q531 880 531 855V548Q531 522 553 509Z"/>
+</svg>

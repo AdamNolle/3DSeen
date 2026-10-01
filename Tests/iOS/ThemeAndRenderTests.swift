@@ -12,6 +12,19 @@ final class ThemeTests: XCTestCase {
 }
 
 final class StudioScreenTests: XCTestCase {
+    @MainActor
+    func testLibrarySearchAndModeFilterIncludeFeaturedScan() {
+        let newest = ScanSession(captureMode: .object, name: "Ceramic Vase")
+        let older = ScanSession(captureMode: .landscape, name: "Garden")
+        let scans = [newest, older]
+        XCTAssertEqual(LibraryData.featured(scans)?.id, newest.id.uuidString)
+        XCTAssertNil(LibraryData.featured(scans, query: "Vase"))
+        XCTAssertNil(LibraryData.featured(scans, filter: "Object"))
+        XCTAssertEqual(LibraryData.grid(scans, filter: "All", query: "Vase", limit: nil).map(\.id), [newest.id.uuidString])
+        XCTAssertEqual(LibraryData.grid(scans, filter: "Object", query: "", limit: nil).map(\.id), [newest.id.uuidString])
+        XCTAssertEqual(LibraryData.grid(scans, filter: "All", query: "", limit: nil).map(\.id), [older.id.uuidString])
+    }
+
     func testAuditLaunchScreenAcceptsKnownStudioRoute() {
         XCTAssertEqual(
             StudioScreen.auditLaunchScreen(environment: ["THREEDSEEN_UI_AUDIT_SCREEN": "quality"]),

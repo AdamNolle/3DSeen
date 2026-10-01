@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate and validate 3DSeen's powder-blue tesseract app icons."""
+"""Build opaque, deterministic app-icon sizes from the blueprint cube artwork."""
 
 from __future__ import annotations
 
@@ -8,83 +8,25 @@ import json
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
 IOS_SET = ROOT / "Sources/iOS/Assets.xcassets/AppIcon.appiconset"
 MAC_SET = ROOT / "Sources/macOS/Assets.xcassets/AppIcon.appiconset"
 MAC_SIZES = (16, 32, 64, 128, 256, 512, 1024)
-SCALE = 4
-
-
-def mix(first: tuple[int, int, int], second: tuple[int, int, int], amount: float) -> tuple[int, int, int]:
-    return tuple(round(a + (b - a) * amount) for a, b in zip(first, second))
+BRAND_SETS = (IOS_SET.parent / "BrandIcon.imageset", MAC_SET.parent / "BrandIcon.imageset")
+MASTER = ROOT / "docs/brand/3dseen-blueprint-master.png"
 
 
 def render(size: int) -> Image.Image:
-    canvas = size * SCALE
-    image = Image.new("RGB", (canvas, canvas))
-    draw = ImageDraw.Draw(image)
-    top = (104, 173, 220)
-    bottom = (49, 117, 175)
-    for y in range(canvas):
-        progress = y / max(canvas - 1, 1)
-        eased = progress * progress * (3 - 2 * progress)
-        draw.line([(0, y), (canvas, y)], fill=mix(top, bottom, eased))
-    # A minimal offset-box projection: two equal boxes connected corner-to-corner. The
-    # asymmetry reads as dimensional motion instead of a flat tunnel at Home Screen size.
-    outer = [(0.235, 0.335), (0.655, 0.335), (0.655, 0.755), (0.235, 0.755)]
-    inner = [(0.375, 0.205), (0.795, 0.205), (0.795, 0.625), (0.375, 0.625)]
-    outer_points = [(round(x * canvas), round(y * canvas)) for x, y in outer]
-    inner_points = [(round(x * canvas), round(y * canvas)) for x, y in inner]
-    cube_edges = [(0, 1), (1, 2), (2, 3), (3, 0)]
-    connector_edges = [(index, index) for index in range(4)]
-
-    def line(points: list[tuple[int, int]], edge: tuple[int, int], fill: tuple[int, int, int], width: int,
-             offset: tuple[int, int] = (0, 0)) -> None:
-        first = points[edge[0]]
-        second = points[edge[1]]
-        draw.line(
-            [(first[0] + offset[0], first[1] + offset[1]),
-             (second[0] + offset[0], second[1] + offset[1])],
-            fill=fill,
-            width=width,
-        )
-
-    shadow_width = max(8, round(canvas * 0.036))
-    mark_width = max(6, round(canvas * 0.027))
-    shadow_offset = (0, round(canvas * 0.012))
-    shadow = (35, 87, 130)
-    for edge in cube_edges:
-        line(outer_points, edge, shadow, shadow_width, shadow_offset)
-        line(inner_points, edge, shadow, shadow_width, shadow_offset)
-    for outer_index, inner_index in connector_edges:
-        draw.line(
-            [
-                (outer_points[outer_index][0] + shadow_offset[0], outer_points[outer_index][1] + shadow_offset[1]),
-                (inner_points[inner_index][0] + shadow_offset[0], inner_points[inner_index][1] + shadow_offset[1]),
-            ],
-            fill=shadow,
-            width=shadow_width,
-        )
-
-    connector = (236, 247, 255)
-    for outer_index, inner_index in connector_edges:
-        draw.line(
-            [outer_points[outer_index], inner_points[inner_index]],
-            fill=connector,
-            width=mark_width,
-        )
-    for edge in cube_edges:
-        line(outer_points, edge, (255, 255, 255), mark_width)
-        line(inner_points, edge, (255, 255, 255), mark_width)
-
-    return image.resize((size, size), Image.Resampling.LANCZOS)
+    with Image.open(MASTER) as source:
+        return source.convert("RGB").resize((size, size), Image.Resampling.LANCZOS)
 
 
 def expected_assets() -> dict[Path, Image.Image]:
     assets = {IOS_SET / "icon-1024.png": render(1024)}
     assets.update({MAC_SET / f"icon-{size}.png": render(size) for size in MAC_SIZES})
+    assets.update({root / f"brand-{scale}x.png": render(48 * scale) for root in BRAND_SETS for scale in (1, 2, 3)})
     return assets
 
 
@@ -122,7 +64,7 @@ def check_assets() -> int:
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
-    print("App icons valid: deterministic blue RGB assets with no alpha channel.")
+    print("App icons valid: deterministic blueprint cube RGB assets with no alpha channel.")
     return 0
 
 

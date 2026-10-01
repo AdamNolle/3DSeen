@@ -4,18 +4,26 @@
 import SwiftUI
 import MetalKit
 import MetalSplatter
+import SplatIO
 import simd
 import OSLog
 
 /// Shared orbit/state for the splat renderer, driven by SwiftUI gestures.
 final class SplatController: ObservableObject {
-    @Published var url: URL?
+    @Published private(set) var url: URL?
+    @Published private(set) var loadAttemptID = UUID()
     @Published var status: String = "No splat loaded"
     // orbit
     var yaw: Float = 0.6
     var pitch: Float = -0.15
     var distance: Float = 2.4
     var splatCount: Int = 0
+
+    func load(_ url: URL) {
+        self.url = url
+        loadAttemptID = UUID()
+        status = "Loading \(url.lastPathComponent)…"
+    }
 }
 
 /// SwiftUI screen: loads a Gaussian-splat PLY and renders it on-device with orbit controls.
@@ -86,16 +94,12 @@ struct SplatViewerScreen: View {
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.init(filenameExtension: "ply")!, .init(filenameExtension: "splat") ?? .data]) { result in
             if case .success(let url) = result {
-                let ok = url.startAccessingSecurityScopedResource()
-                controller.url = url
-                controller.status = "Loading \(url.lastPathComponent)…"
-                if ok { /* keep access for the render session */ }
+                controller.load(url)
             }
         }
         .onAppear {
             guard controller.url == nil, let assetURL else { return }
-            controller.url = assetURL
-            controller.status = "Loading \(assetURL.lastPathComponent)…"
+            controller.load(assetURL)
         }
     }
 
@@ -146,17 +150,21 @@ struct GaussianSplatMetalView: UIViewRepresentable {
         private var device: MTLDevice?
         private var queue: MTLCommandQueue?
         private var renderer: SplatRenderer?
-        private var loadedURL: URL?
+        private var loadedAttemptID: UUID?
         private var viewportSize = CGSize(width: 1, height: 1)
 
         init(controller: SplatController) { self.controller = controller }
 
         func configure(view: MTKView) {
-            device = view.device
-            queue = view.device?.makeCommandQueue()
+            guard let device = view.device else {
+                DispatchQueue.main.async { self.controller.status = "3D rendering is unavailable on this device" }
+                return
+            }
+            self.device = device
+            queue = device.makeCommandQueue()
             do {
                 renderer = try SplatRenderer(
-                    device: view.device!,
+                    device: device,
                     colorFormat: view.colorPixelFormat,
                     depthFormat: view.depthStencilPixelFormat,
                     stencilFormat: .invalid,
@@ -171,18 +179,47 @@ struct GaussianSplatMetalView: UIViewRepresentable {
         }
 
         func loadIfNeeded() {
-            guard let url = controller.url, url != loadedURL, let renderer else { return }
-            loadedURL = url
+            guard let url = controller.url, controller.loadAttemptID != loadedAttemptID else { return }
+            let attemptID = controller.loadAttemptID
+            loadedAttemptID = attemptID
+            guard let renderer else {
+                DispatchQueue.main.async {
+                    guard self.controller.loadAttemptID == attemptID else { return }
+                    self.controller.status = "3D rendering is unavailable on this device"
+                }
+                return
+            }
+            let accessing = url.startAccessingSecurityScopedResource()
+            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
             do {
                 renderer.reset()
-                try renderer.readPLY(from: url)
+                if url.pathExtension.lowercased() == "splat" {
+                    let file = try CompactSplatFile(contentsOf: url)
+                    try renderer.ensureAdditionalCapacity(file.count)
+                    for index in 0..<file.count {
+                        let point = try file.point(at: index)
+                        try renderer.add(SplatScenePoint(
+                            position: point.position, normal: .zero,
+                            color: .linearUInt8(point.rgba.x, point.rgba.y, point.rgba.z),
+                            opacity: point.opacityLogit, scale: point.logScale,
+                            rotation: simd_quatf(ix: point.rotation.y, iy: point.rotation.z,
+                                                 iz: point.rotation.w, r: point.rotation.x)
+                        ))
+                    }
+                } else {
+                    try renderer.readPLY(from: url)
+                }
                 DispatchQueue.main.async {
+                    guard self.controller.loadAttemptID == attemptID else { return }
                     self.controller.splatCount = renderer.splatCount
                     self.controller.status = "\(renderer.splatCount) splats"
                 }
             } catch {
                 logger.error("readPLY failed: \(error.localizedDescription)")
-                DispatchQueue.main.async { self.controller.status = "Could not read PLY" }
+                DispatchQueue.main.async {
+                    guard self.controller.loadAttemptID == attemptID else { return }
+                    self.controller.status = "Could not open splat file"
+                }
             }
         }
 

@@ -6,7 +6,7 @@ import SwiftUI
 struct CircleIconButton: View {
     @Environment(\.theme) private var theme
     var icon: String
-    var size: CGFloat = 36
+    var size: CGFloat = 44
     var action: () -> Void
     var accessibilityLabel: String?
     var body: some View {

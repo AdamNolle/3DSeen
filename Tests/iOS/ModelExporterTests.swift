@@ -316,6 +316,23 @@ final class ModelExporterTests: XCTestCase {
         XCTAssertNil(try store.loadManifest(for: scan.id).lastExportedAt)
     }
 
+    func testFailedPrimaryCommitPreservesMaterialSidecar() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("export-sidecar-\(UUID())", isDirectory: true)
+        defer { try? fm.removeItem(at: root) }
+        let staging = root.appendingPathComponent("staging", isDirectory: true)
+        try fm.createDirectory(at: staging, withIntermediateDirectories: true)
+        let primary = staging.appendingPathComponent("model.obj")
+        let material = root.appendingPathComponent("model.mtl")
+        try Data("new model".utf8).write(to: primary)
+        try Data("new material".utf8).write(to: staging.appendingPathComponent("model.mtl"))
+        try Data("old material".utf8).write(to: material)
+        let blockedOutput = root.appendingPathComponent("model.obj", isDirectory: true)
+        try fm.createDirectory(at: blockedOutput, withIntermediateDirectories: true)
+        XCTAssertThrowsError(try ModelExporter().commitExportDirectory(staging, primary: primary, to: blockedOutput))
+        XCTAssertEqual(try Data(contentsOf: material), Data("old material".utf8))
+    }
+
     func testExportSampleWritesRealFiles() throws {
         let exporter = ModelExporter()
         for format in [ExportFormat.usd, .obj, .stl, .ply] {

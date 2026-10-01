@@ -26,6 +26,10 @@ struct MacViewerPane: View {
                 inspector.frame(width: 320)
             }
         }
+        .onChange(of: scan?.id) { _, _ in
+            pendingMeasurementPoint = nil
+            measurementStatus = ""
+        }
     }
 
     private var toolbar: some View {

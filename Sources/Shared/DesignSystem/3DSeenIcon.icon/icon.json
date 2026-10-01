@@ -1,0 +1,44 @@
+{
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name": "3dseen-cube.svg",
+          "name": "3dseen-cube",
+          "fill-specializations": [
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "extended-srgb:1.00000,1.00000,1.00000,1.00000"
+              }
+            }
+          ]
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.2
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.0
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": "shared"
+  },
+  "fill-specializations": [
+    {
+      "value": {
+        "solid": "extended-srgb:0.11765,0.34510,0.86275,1.00000"
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": {
+        "solid": "extended-srgb:0.11765,0.34510,0.86275,1.00000"
+      }
+    }
+  ]
+}

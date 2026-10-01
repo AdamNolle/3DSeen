@@ -7,7 +7,7 @@ struct ThreeDSeenMacApp: App {
     @StateObject private var nav = MacNav()
 
     var body: some Scene {
-        WindowGroup {
+        Window("3DSeen", id: "studio") {
             ContentView(nav: nav)
                 .environmentObject(stateMachine)
         }

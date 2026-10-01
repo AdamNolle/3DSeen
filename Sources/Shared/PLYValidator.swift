@@ -39,7 +39,7 @@ public enum PLYValidator {
 
         switch kind {
         case .geometry:
-            return validateGeometry(data, header: header, properties: properties)
+            return validateGeometry(data, header: header)
         case .trainedSplat:
             return validateTrainedSplat(data, header: header, properties: properties)
         }
@@ -54,7 +54,9 @@ public enum PLYValidator {
         let lines = text.components(separatedBy: .newlines)
         guard lines.first?.trimmingCharacters(in: .whitespacesAndNewlines) == "ply",
               let formatLine = lines.first(where: { $0.hasPrefix("format ") }) else { return nil }
-        let format = formatLine.split(separator: " ").dropFirst().first.map(String.init) ?? ""
+        let formatParts = formatLine.split(separator: " ")
+        guard formatParts.count == 3, formatParts[2] == "1.0" else { return nil }
+        let format = String(formatParts[1])
         guard format == "ascii" || format == "binary_little_endian" else { return nil }
 
         var vertexCount: Int?
@@ -65,11 +67,16 @@ public enum PLYValidator {
             let parts = line.split(separator: " ").map(String.init)
             if parts.count == 3, parts[0] == "element" {
                 parsingVertex = parts[1] == "vertex"
-                if parsingVertex { vertexCount = Int(parts[2]) }
+                if parsingVertex {
+                    guard vertexCount == nil, properties.isEmpty,
+                          lines.first(where: { $0.hasPrefix("element ") }) == line else { return nil }
+                    vertexCount = Int(parts[2])
+                }
                 continue
             }
             guard parsingVertex, parts.first == "property" else { continue }
-            guard parts.count == 3, let size = scalarSizes[parts[1]] else { return nil }
+            guard parts.count == 3, let size = scalarSizes[parts[1]],
+                  !properties.contains(where: { $0.name == parts[2] }) else { return nil }
             properties.append(Property(type: parts[1], name: parts[2], offset: stride, size: size))
             stride += size
         }
@@ -85,8 +92,7 @@ public enum PLYValidator {
 
     private static func validateGeometry(
         _ data: Data,
-        header: Header,
-        properties: [String: Property]
+        header: Header
     ) -> Bool {
         if header.format == "ascii" {
             guard let payload = String(data: data[header.payloadOffset...], encoding: .ascii) else { return false }
@@ -94,20 +100,20 @@ public enum PLYValidator {
             guard rows.count >= header.vertexCount else { return false }
             let indices = Dictionary(uniqueKeysWithValues: header.properties.enumerated().map { ($0.element.name, $0.offset) })
             guard let x = indices["x"], let y = indices["y"], let z = indices["z"] else { return false }
-            return sampledIndices(count: header.vertexCount).allSatisfy { index in
+            return (0..<header.vertexCount).allSatisfy { index in
                 let values = rows[index].split(whereSeparator: \.isWhitespace)
-                guard max(x, y, z) < values.count,
+                guard values.count == header.properties.count, max(x, y, z) < values.count,
                       let vx = Double(values[x]), let vy = Double(values[y]), let vz = Double(values[z]) else {
                     return false
                 }
                 return vx.isFinite && vy.isFinite && vz.isFinite
+                    && values.allSatisfy { Double($0)?.isFinite == true }
             }
         }
         guard header.vertexStride > 0,
-              data.count >= header.payloadOffset + header.vertexCount * header.vertexStride else { return false }
-        return sampledIndices(count: header.vertexCount).allSatisfy { vertex in
-            ["x", "y", "z"].allSatisfy { name in
-                guard let property = properties[name] else { return false }
+              header.vertexCount <= (data.count - header.payloadOffset) / header.vertexStride else { return false }
+        return (0..<header.vertexCount).allSatisfy { vertex in
+            header.properties.allSatisfy { property in
                 return finiteScalar(
                     data,
                     offset: header.payloadOffset + vertex * header.vertexStride + property.offset,
@@ -129,12 +135,11 @@ public enum PLYValidator {
         ])
         guard header.format == "binary_little_endian",
               required.isSubset(of: Set(properties.keys)),
-              required.allSatisfy({ properties[$0]?.size == 4 }),
+              required.allSatisfy({ properties[$0]?.type == "float" || properties[$0]?.type == "float32" }),
               header.vertexStride > 0,
-              data.count >= header.payloadOffset + header.vertexCount * header.vertexStride else { return false }
-        return sampledIndices(count: header.vertexCount).allSatisfy { vertex in
-            required.allSatisfy { name in
-                guard let property = properties[name] else { return false }
+              header.vertexCount <= (data.count - header.payloadOffset) / header.vertexStride else { return false }
+        return (0..<header.vertexCount).allSatisfy { vertex in
+            header.properties.allSatisfy { property in
                 return finiteScalar(
                     data,
                     offset: header.payloadOffset + vertex * header.vertexStride + property.offset,
@@ -142,10 +147,6 @@ public enum PLYValidator {
                 )
             }
         }
-    }
-
-    private static func sampledIndices(count: Int) -> [Int] {
-        count <= 1_024 ? Array(0..<count) : [0, count / 2, count - 1]
     }
 
     private static func finiteScalar(_ data: Data, offset: Int, property: Property) -> Bool {

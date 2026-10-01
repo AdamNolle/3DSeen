@@ -1,6 +1,6 @@
 # 3DSeen Production Contract
 
-Last updated: 2026-07-21
+Last updated: 2026-10-01
 
 This document is the canonical repository-level definition of production behavior. Source code and automated tests are the implementation authority; `docs/VERIFICATION-STATUS.md` records evidence and external gates. Files under `docs/design-spec/`, `docs/design-ref/`, `docs/review/`, and `docs/audit/`, plus `docs/EXECUTION-PLAN.md`, are historical design and review inputs. They may explain intent but do not override this contract.
 
@@ -8,6 +8,7 @@ This document is the canonical repository-level definition of production behavio
 
 - iPhone and iPad run the same persisted Studio workflow with adaptive layouts: Library → Mode → Briefing → Detail → Capture → Review → Compute → Viewer → Export.
 - macOS provides Library, Viewer, Compute, Export, and Settings panes and acts as an optional local reconstruction worker.
+- macOS uses a single Studio window with persistent navigation. Library grids adapt to available width; phone and iPad controls respect larger touch areas, Reduce Motion, and Reduce Transparency.
 - Minimum deployment targets are iOS/iPadOS 17 and macOS 14. Local verification supports Xcode 26.3 or newer; hosted CI deliberately selects exact Xcode 26.3 for reproducibility.
 
 ## Capture
@@ -37,6 +38,7 @@ This document is the canonical repository-level definition of production behavio
 - Geometry previews are labeled separately from trained Gaussian splats.
 - iOS/iPadOS support USDZ pass-through and ModelIO USD, OBJ, STL, and PLY export. macOS additionally supports GLB and FBX through an installed Blender runtime.
 - Export replacement is staged and transactional. Formats unavailable on a platform must not be advertised there.
+- Measurements are saved to both the database and portable manifest with rollback on failure. Scan display names must never become unvalidated filesystem paths.
 
 ## Persistence and integrity
 

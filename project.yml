@@ -24,10 +24,6 @@ targets:
       - package: ZIPFoundation
       - package: MetalSplatter
         product: MetalSplatter
-      - package: MetalSplatter
-        product: SplatIO
-      - package: MetalSplatter
-        product: PLYIO
     info:
       path: Sources/iOS/Info.plist
       properties:
@@ -58,7 +54,7 @@ targets:
         CURRENT_PROJECT_VERSION: 1
         TARGETED_DEVICE_FAMILY: "1,2"
         PRODUCT_MODULE_NAME: ThreeDSeen
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_APPICON_NAME: 3DSeenIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
     scheme:
       testTargets:
@@ -71,10 +67,9 @@ targets:
     platform: iOS
     sources:
       - Tests/iOS
+      - Tests/Shared
     dependencies:
       - target: 3DSeen-iOS
-      - package: MetalSplatter
-        product: SplatIO
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
@@ -104,6 +99,7 @@ targets:
     info:
       path: Sources/macOS/Info.plist
       properties:
+        LSApplicationCategoryType: public.app-category.graphics-design
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSLocalNetworkUsageDescription: "3DSeen requires local network access to receive renders from your iPhone."
@@ -120,7 +116,7 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
         PRODUCT_MODULE_NAME: ThreeDSeenMac
         CODE_SIGN_ENTITLEMENTS: Sources/macOS/3DSeen-macOS.entitlements
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_APPICON_NAME: 3DSeenIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
     scheme:
       testTargets:
@@ -132,6 +128,7 @@ targets:
     platform: macOS
     sources:
       - Tests/macOS
+      - Tests/Shared
     dependencies:
       - target: 3DSeen-macOS
     settings:
