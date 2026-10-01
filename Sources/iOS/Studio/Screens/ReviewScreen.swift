@@ -32,6 +32,13 @@ private struct ReviewFacts {
     var modelStatus: String { isModelReady ? "Ready" : "Pending" }
     var qualityReport: CaptureQualityReport? { scan?.captureQualityReport }
     var hasQualityWarnings: Bool { qualityReport?.warningCount ?? 0 > 0 }
+    var surfaceReport: LiDARCaptureReport? {
+        guard let modelURL = scan?.sourceModelURL,
+              let data = try? Data(contentsOf: modelURL.deletingLastPathComponent().appendingPathComponent(LiDARCaptureBundle.reportName)) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(LiDARCaptureReport.self, from: data)
+    }
 }
 
 private struct PhoneReview: View {
@@ -81,7 +88,9 @@ private struct PhoneReview: View {
         VStack(alignment: .leading, spacing: 6) {
             StLabel(text: "\(facts.mode) · \(facts.frameCount) saved photos")
             Text("Your scan is saved").font(.sf(28, .heavy)).foregroundStyle(theme.ink)
-            Text("Review the photo check below. You can retake now or continue to build a model.")
+            Text(facts.isModelReady
+                 ? "Your model is ready. Inspect its surfaces and textures, then export or retake any incomplete areas."
+                 : "Review the photo check below. You can retake now or continue to build a model.")
                 .font(.sf(13.5)).foregroundStyle(theme.text2)
         }
     }
@@ -104,7 +113,9 @@ private struct PhoneReview: View {
 
     private var qualityNotice: some View {
         StCard(radius: 8, pad: 18, inset: true) {
-            if let report = facts.qualityReport {
+            if let report = facts.surfaceReport {
+                SurfaceTextureSummary(report: report)
+            } else if let report = facts.qualityReport {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 10) {
                         StIcon(name: facts.hasQualityWarnings ? "info" : "check", size: 18,
@@ -250,7 +261,9 @@ private struct PadReview: View {
             StCard(radius: 8, pad: 18) {
                 VStack(alignment: .leading, spacing: 10) {
                     StLabel(text: "Quality review")
-                    if let report = facts.qualityReport {
+                    if let report = facts.surfaceReport {
+                        SurfaceTextureSummary(report: report)
+                    } else if let report = facts.qualityReport {
                         Text(report.summary).font(.sf(18, .bold)).foregroundStyle(theme.ink)
                         Text(
                             "Sampled \(report.analyzedFrameCount) of \(report.totalFrameCount) retained frames: "
@@ -282,5 +295,22 @@ private struct PadReview: View {
 
     private func proceed() {
         model.go(facts.isModelReady ? .viewer : .compute)
+    }
+}
+
+private struct SurfaceTextureSummary: View {
+    @Environment(\.theme) private var theme
+    let report: LiDARCaptureReport
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Measured surfaces with captured textures").font(.sf(17, .bold)).foregroundStyle(theme.ink)
+            Text("\(report.texturedTriangleCount.formatted()) of \(report.triangleCount.formatted()) mesh faces have a depth-matched camera texture.")
+                .font(.sf(13.5)).foregroundStyle(theme.text2)
+            Text("\(report.textureFrameCount) camera frames and \(report.textureSnapshotCount) reusable texture snapshots retained.")
+                .font(.sf(13)).foregroundStyle(theme.text2)
+            Text("Inspect the whole space for holes and gray, untextured surfaces. Another viewpoint can capture areas that were hidden.")
+                .font(.sf(12.5)).foregroundStyle(theme.text3)
+        }
     }
 }

@@ -25,12 +25,17 @@ final class CaptureTelemetryTests: XCTestCase {
         XCTAssertEqual(status.primaryActionTitle, "Start auto-detection")
     }
 
+    func testSpaceCaptureShowsMeasuredSurfaceCount() {
+        let status = LiveCaptureStatus(mode: .space, phase: .capturing, frameCount: 3, surfaceTriangleCount: 400)
+        XCTAssertEqual(status.primaryFacts, ["3 frames", "400 faces"])
+    }
+
     func testSpaceProcessingStatusExplainsThatTheModelIsBeingBuilt() {
         let status = LiveCaptureStatus(mode: .space, phase: .processing)
 
         XCTAssertEqual(status.title, "Space capture")
         XCTAssertEqual(status.phaseLabel, "Building room model")
-        XCTAssertEqual(status.guidance, "RoomPlan is processing the captured space into a USDZ model.")
+        XCTAssertEqual(status.guidance, "Building the measured LiDAR surface and embedding captured camera textures in your model.")
         XCTAssertNil(status.finishActionTitle)
     }
 }

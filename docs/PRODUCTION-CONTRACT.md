@@ -16,7 +16,8 @@ This document is the canonical repository-level definition of production behavio
 - Object capture uses one custom ARKit session plus Vision foreground-instance detection. Guidance points must be real LiDAR depth samples or ARKit tracked feature points projected into the selected subject mask; synthetic coverage is prohibited.
 - Object photos are admitted only from current normal tracking plus measured subject-lock freshness, luminance/edge contrast, motion, interval, translation novelty, and bounded writer backlog. Manual capture remains available.
 - Finish closes frame admission and waits for every accepted JPEG write before exposing the capture archive. Capture attempts are UUID-scoped so stale Vision, Auto-Pilot, writer, or SDK callbacks cannot complete a newer attempt.
-- Space capture uses RoomPlan and requires supported LiDAR hardware.
+- Space capture requires ARKit scene-reconstruction mesh and scene-depth support on LiDAR hardware. It retains actual world-space triangles and depth-checked RGB camera projections; plane detection is disabled to avoid flattening irregular surfaces. Unobserved faces remain neutral, and face counts describe measured geometry rather than complete room coverage.
+- Surface snapshots are user-requested center crops saved as PNG. They retain captured lighting; they are not seamless textures or measured PBR maps. Embedded model textures and reusable snapshots survive deletion of source frames.
 - Landscape capture uses ARKit world tracking and retained image frames.
 - Auto-Pilot uses Vision classification to recommend a real capture engine; it is not a separate reconstruction algorithm.
 - Simulator and unsupported-hardware paths must block honestly. No synthetic capture may be presented as a real scan.
@@ -25,7 +26,7 @@ This document is the canonical repository-level definition of production behavio
 ## Compute and handoff
 
 - On-device image reconstruction uses RealityKit photogrammetry and is labeled Reduced where that is the actual request.
-- RoomPlan USDZ may proceed directly as a computed model.
+- Completed textured LiDAR USDZ proceeds directly to Viewer and Export. Mac room-model import preserves embedded USDZ geometry and textures without photogrammetry.
 - Mac reconstruction uses RealityKit photogrammetry. Optional trained-splat output requires a validated local COLMAP and pinned Nerfstudio runtime.
 - Scan assets and `ScanAssetManifest` are authoritative durable scan data. Cross-launch handoff jobs use separate atomic phone and Mac journals; the transient processing state machine is not durable job authority. Completed Mac results can be rebuilt from the retained manifest and resent after authenticated status reconciliation.
 - Returned results must correlate by authenticated peer, job, scan, byte count, and SHA-256 before transactionally replacing durable assets. Resource-before-control ordering is bounded until the typed descriptor arrives; unsolicited resources are rejected.

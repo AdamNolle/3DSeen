@@ -15,12 +15,15 @@ public struct LiveCaptureStatus: Equatable, Sendable {
     public let phase: Phase
     public let frameCount: Int?
     public let trackingStatus: String?
+    public let surfaceTriangleCount: Int?
 
-    public init(mode: CaptureMode, phase: Phase, frameCount: Int? = nil, trackingStatus: String? = nil) {
+    public init(mode: CaptureMode, phase: Phase, frameCount: Int? = nil, trackingStatus: String? = nil,
+                surfaceTriangleCount: Int? = nil) {
         self.mode = mode
         self.phase = phase
         self.frameCount = frameCount.map { max(0, $0) }
         self.trackingStatus = trackingStatus?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.surfaceTriangleCount = surfaceTriangleCount.map { max(0, $0) }
     }
 
     public var title: String {
@@ -45,6 +48,9 @@ public struct LiveCaptureStatus: Equatable, Sendable {
     public var primaryFacts: [String] {
         var facts: [String] = []
         if let frameCount { facts.append("\(frameCount) frames") }
+        if let surfaceTriangleCount {
+            facts.append("\(ModelGeometryFacts(vertexCount: 0, triangleCount: surfaceTriangleCount).formattedTriangleCount) faces")
+        }
         if let trackingStatus, !trackingStatus.isEmpty { facts.append(trackingStatus.capitalized) }
         return facts
     }
@@ -62,9 +68,9 @@ public struct LiveCaptureStatus: Equatable, Sendable {
         case (.object, .processing):
             return "Object Capture is processing the captured object."
         case (.space, .processing):
-            return "RoomPlan is processing the captured space into a USDZ model."
+            return "Building the measured LiDAR surface and embedding captured camera textures in your model."
         case (.space, _):
-            return "Pan across walls, openings, and furniture before finishing the scan."
+            return "Move slowly around the room. Scan walls, floors, furniture, and corners from several angles. Aim at a material and save a texture snapshot when needed."
         case (.landscape, .capturing):
             return "Walk a smooth arc while frames are captured automatically."
         case (.landscape, .finalizing):

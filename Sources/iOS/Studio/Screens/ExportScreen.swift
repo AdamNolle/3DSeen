@@ -16,6 +16,7 @@ struct ExportScreen: View {
     @State private var exportedMeasurementURL: URL?
     @State private var errorMessage: String?
     @State private var showShareSheet = false
+    @State private var showTextureShareSheet = false
     @State private var exportTask: Task<Void, Never>?
 
     private var activeScan: ScanSession? {
@@ -33,6 +34,7 @@ struct ExportScreen: View {
                     header
                     preview
                     formatPicker
+                    textureSnapshots
                     status
                     StButton(title: isExporting ? "Writing export…" : "Export \(format.rawValue)",
                              kind: .accent, size: .lg, icon: "export", full: true) { export() }
@@ -44,9 +46,29 @@ struct ExportScreen: View {
         .sheet(isPresented: $showShareSheet) {
             if let exportedURL { ShareSheet(items: shareItems(for: exportedURL)) }
         }
+        .sheet(isPresented: $showTextureShareSheet) {
+            ShareSheet(items: LiDARCaptureBundle.textureSnapshots(for: activeScan?.sourceModelURL))
+        }
         .onDisappear {
             exportTask?.cancel()
             exportTask = nil
+        }
+    }
+
+    @ViewBuilder
+    private var textureSnapshots: some View {
+        let textures = LiDARCaptureBundle.textureSnapshots(for: activeScan?.sourceModelURL)
+        if !textures.isEmpty {
+            StCard(radius: 16, pad: 16) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Captured surface textures").font(.sf(16, .bold)).foregroundStyle(theme.ink)
+                    Text("\(textures.count) reusable PNG snapshots. These preserve the photographed surface and lighting.")
+                        .font(.sf(13)).foregroundStyle(theme.text2)
+                    StButton(title: "Share texture snapshots", kind: .secondary, icon: "export", full: true) {
+                        showTextureShareSheet = true
+                    }
+                }
+            }
         }
     }
 

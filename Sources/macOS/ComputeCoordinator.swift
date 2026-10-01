@@ -327,7 +327,7 @@ public final class ComputeCoordinator: ObservableObject {
     }
 
     /// Retain an incoming capture, pass image archives to PhotogrammetrySession, or preserve an
-    /// already-computed RoomPlan USDZ without pretending it needs image reconstruction.
+    /// already-computed textured USDZ without pretending it needs image reconstruction.
     public func process(
         archive: URL,
         replyPeer: MCPeerID? = nil,
@@ -411,7 +411,7 @@ public final class ComputeCoordinator: ObservableObject {
         let out = stagingDirectory.appendingPathComponent("model.usdz")
         let mode = captureMode ?? .object
 
-        // RoomPlan already produces an honest USDZ. Copy it into this Mac's durable scan store
+        // A captured model already contains its geometry and textures. Copy it into this Mac's durable scan store
         // and return it instead of attempting photogrammetry on an empty image folder.
         if archive.pathExtension.lowercased() == "usdz" {
             do {
@@ -423,12 +423,12 @@ public final class ComputeCoordinator: ObservableObject {
                     throw ScanLocalComputeError.outputMissing(out)
                 }
                 try complete(.init(output: out, scanID: scanID, rawArchiveURL: rawArchiveURL,
-                                   captureMode: mode, detailTier: "RoomPlan", frameCount: 0,
+                                   captureMode: mode, detailTier: detailTier ?? "Captured model", frameCount: 0,
                                    captureQualityReport: nil, replyPeer: replyPeer,
                                    replyPeerID: replyPeerID, jobID: jobID))
                 completed = true
             } catch {
-                addLog("Could not retain RoomPlan model: \(error.localizedDescription)")
+                addLog("Could not retain captured model: \(error.localizedDescription)")
                 stage = .waiting
             }
             return

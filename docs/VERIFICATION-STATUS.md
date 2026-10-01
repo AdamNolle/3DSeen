@@ -2,6 +2,14 @@
 
 Last updated: 2026-10-01
 
+## Textured LiDAR room capture — October 1
+
+The new Rooms & Spaces engine replaces parametric RoomPlan boxes with real ARKit mesh triangles and depth-checked RGB textures. It adds reusable PNG surface snapshots, direct on-device USDZ completion, measured face counts, review guidance, texture sharing, and Mac room-model import. See [capture guide](LIDAR-ROOM-CAPTURE.md).
+
+Local validation: all 60 Mac tests passed, including eight surface/export/import tests. The tests cover camera projection, missing depth and occlusion rejection, irregular geometry, embedded texture round trips, cancellation, durable snapshots after source deletion, and preservation of a user-selected Mac import. Strict SwiftLint and project generation passed. The iOS Simulator app and test targets build successfully; hosted phone/tablet tests validate the room setup flow and unsupported-hardware behavior.
+
+A simulator cannot validate LiDAR capture. The new engine still needs a physical room walkthrough on a supported iPhone/iPad to assess texture alignment, depth coverage, and sustained capture/export performance. Previously recorded notarized apps below precede this feature and do not establish signing or notarization of this new revision. Current revision release evidence is recorded separately after builds and deployment.
+
 ## October audit results and remaining gates
 
 Current tooling is Xcode 27.0 (27A266a), macOS 27.0.1, and the newly installed Apple iOS 27.0 Simulator runtime. The October gate preserves logs under `build/october-verification` and keeps test DerivedData and xcresults outside the synced Desktop checkout under `~/Library/Developer/Xcode/DerivedData/3DSeen-Final`.

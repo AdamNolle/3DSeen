@@ -97,13 +97,17 @@ struct QualityScreen: View {
                         onClose: { model.go(.library) }
                     )
                     titleBlock
-                    LazyVGrid(columns: columns, spacing: 14) {
-                        ForEach(GuidedQualityChoice.choices) { choice in
-                            qualityCard(choice)
+                    if model.selectedCaptureModeID == "space" {
+                        spaceResult
+                    } else {
+                        LazyVGrid(columns: columns, spacing: 14) {
+                            ForEach(GuidedQualityChoice.choices) { choice in
+                                qualityCard(choice)
+                            }
                         }
+                        advancedDisclosure
+                        captureFacts
                     }
-                    advancedDisclosure
-                    captureFacts
                 }
                 .padding(.horizontal, horizontalSizeClass == .regular ? 28 : 20)
                 .padding(.top, 8)
@@ -129,13 +133,32 @@ struct QualityScreen: View {
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
             StLabel(text: "Step 3 · Result")
-            Text("Choose your result")
+            Text(model.selectedCaptureModeID == "space" ? "Your space model" : "Choose your result")
                 .font(.sf(horizontalSizeClass == .regular ? 38 : 28, .bold))
                 .foregroundStyle(theme.ink)
-            Text("Capture keeps the original photos. This choice sets the reconstruction request and can be changed later.")
+            Text(model.selectedCaptureModeID == "space"
+                 ? "LiDAR measures the surface geometry. Camera images capture its appearance. Your textured model is built on this device when you finish."
+                 : "Capture keeps the original photos. This choice sets the reconstruction request and can be changed later.")
                 .font(.sf(14))
                 .foregroundStyle(theme.text2)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var spaceResult: some View {
+        StCard(radius: 20, pad: 20) {
+            VStack(alignment: .leading, spacing: 14) {
+                Label("Textured surface model", systemImage: "cube.fill")
+                    .font(.sf(21, .bold)).foregroundStyle(theme.ink)
+                Text("Capture walls, floors, furnishings, and irregular shapes. Move through the space slowly and revisit surfaces from different angles.")
+                    .font(.sf(14)).foregroundStyle(theme.text2)
+                Text("The USDZ contains the measured mesh and its textures for viewing, measuring, and exporting on iPhone, iPad, and Mac.")
+                    .font(.sf(14)).foregroundStyle(theme.text2)
+                Label("Save reusable texture snapshots during capture", systemImage: "viewfinder")
+                    .font(.sf(13, .semibold)).foregroundStyle(theme.accentText)
+                Text("LiDAR sets geometry resolution. Even lighting and closer camera views improve texture detail. Glass, mirrors, and unobserved surfaces may remain incomplete.")
+                    .font(.sf(12.5)).foregroundStyle(theme.text3)
+            }
         }
     }
 

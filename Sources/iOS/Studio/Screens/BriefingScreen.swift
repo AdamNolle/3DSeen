@@ -37,6 +37,22 @@ private let GUIDES: [GuideItem] = [
     .init(title: "Avoid shiny or clear items", desc: "Glass, mirrors, and transparent surfaces may not reconstruct reliably.", icon: "warning"),
 ]
 
+private let SPACE_CHECKLIST: [CheckItem] = [
+    .init(id: "light", label: "Use steady, even lighting", status: "note", detail: "Camera photos record the room’s surface appearance.", icon: "light"),
+    .init(id: "reflect", label: "Watch glass and mirrors", status: "note", detail: "Reflective or transparent surfaces may have missing geometry.", icon: "warning"),
+    .init(id: "distance", label: "Scan from several viewpoints", status: "note", detail: "Move closer to small details and revisit hidden corners.", icon: "ruler"),
+    .init(id: "support", label: "Keep the room still", status: "note", detail: "Avoid moving people and objects while you scan.", icon: "roomMode"),
+    .init(id: "thermal", label: "Start with a cool device", status: "note", detail: "Scan large spaces in sections to keep memory and heat manageable.", icon: "thermal"),
+    .init(id: "storage", label: "Leave room for textures", status: "note", detail: "The model, original camera frames, and texture snapshots are saved locally.", icon: "download"),
+]
+
+private let SPACE_GUIDES: [GuideItem] = [
+    .init(title: "Walk through the space", desc: "Move slowly around the room, then revisit corners and furniture from other angles.", icon: "speed"),
+    .init(title: "Cover real surfaces", desc: "Include walls, floor, furniture, openings, and irregular shapes. Hidden surfaces need another viewpoint.", icon: "roomMode"),
+    .init(title: "Save a texture", desc: "Aim the center of the camera at wood, fabric, brick, or another material and tap Save texture.", icon: "camera"),
+    .init(title: "Finish and inspect", desc: "The device builds a textured USDZ. Review the model and rescan areas with missing surfaces or color.", icon: "cube"),
+]
+
 // MARK: - Screen (size-class dispatcher)
 
 struct BriefingScreen: View {
@@ -57,6 +73,8 @@ struct BriefingScreen: View {
 private struct PhoneBriefingBody: View {
     @Environment(\.theme) private var theme
     @EnvironmentObject private var model: StudioModel
+    private var checklist: [CheckItem] { model.selectedCaptureModeID == "space" ? SPACE_CHECKLIST : CHECKLIST }
+    private var guides: [GuideItem] { model.selectedCaptureModeID == "space" ? SPACE_GUIDES : GUIDES }
 
     var body: some View {
         ZStack {
@@ -82,7 +100,9 @@ private struct PhoneBriefingBody: View {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text("A few simple steps")
                                     .font(.sf(15, .bold)).tracking(0).foregroundStyle(theme.ink)
-                                Text("Good light, a still subject, and slow movement make a stronger photo set.")
+                                Text(model.selectedCaptureModeID == "space"
+                                     ? "LiDAR captures the surfaces. Slow movement and even light make clearer textures."
+                                     : "Good light, a still subject, and slow movement make a stronger photo set.")
                                     .font(.sf(12.5)).foregroundStyle(theme.text2).lineSpacing(4)
                             }
                             Spacer(minLength: 0)
@@ -93,7 +113,7 @@ private struct PhoneBriefingBody: View {
                     // checklist (phone shows the first four rows only)
                     StCard(radius: 20, pad: 0) {
                         VStack(spacing: 0) {
-                            ForEach(Array(CHECKLIST.prefix(4).enumerated()), id: \.element.id) { i, c in
+                            ForEach(Array(checklist.prefix(4).enumerated()), id: \.element.id) { i, c in
                                 CheckRow(item: c)
                                 if i < 3 { StRule() }
                             }
@@ -108,7 +128,7 @@ private struct PhoneBriefingBody: View {
 
                     // pro-tip guides (phone shows the first two only)
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                        ForEach(Array(GUIDES.prefix(2)), id: \.id) { g in GuideCard(guide: g) }
+                        ForEach(Array(guides.prefix(2)), id: \.id) { g in GuideCard(guide: g) }
                     }
                 }
                 .padding(.horizontal, 20)
@@ -128,6 +148,9 @@ private struct PhoneBriefingBody: View {
 private struct PadBriefingBody: View {
     @Environment(\.theme) private var theme
     @EnvironmentObject private var model: StudioModel
+    private var checklist: [CheckItem] { model.selectedCaptureModeID == "space" ? SPACE_CHECKLIST : CHECKLIST }
+    private var guides: [GuideItem] { model.selectedCaptureModeID == "space" ? SPACE_GUIDES : GUIDES }
+
     var body: some View {
         ZStack {
             theme.bg.ignoresSafeArea()
@@ -171,7 +194,7 @@ private struct PadBriefingBody: View {
                 columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible())],
                 spacing: 10
             ) {
-                ForEach(GUIDES, id: \.id) { g in
+                ForEach(guides, id: \.id) { g in
                     GuideCard(guide: g).frame(maxWidth: .infinity)
                 }
             }
@@ -182,7 +205,9 @@ private struct PadBriefingBody: View {
         Stage(radius: 22) {
             VStack(alignment: .leading, spacing: 12) {
                 StIcon(name: "camera", size: 34, color: theme.accent)
-                Text("Capture starts after detail selection.")
+                Text(model.selectedCaptureModeID == "space"
+                     ? "Surface capture starts when you continue."
+                     : "Capture starts after detail selection.")
                     .font(.sf(22, .bold))
                     .foregroundStyle(theme.ink)
                 Text("No live camera is active on this screen. The capture flow will request camera access when you continue.")
@@ -219,7 +244,9 @@ private struct PadBriefingBody: View {
                     Text("Use this as a setup guide")
                         .font(.sf(22, .bold)).tracking(0).foregroundStyle(theme.ink)
                         .padding(.top, 6)
-                    Text("3DSeen checks the captured image archive after collection. This screen does not report live scene measurements.")
+                    Text(model.selectedCaptureModeID == "space"
+                         ? "LiDAR measures the surfaces during capture. Camera photos record their textures. This screen is a preparation guide."
+                         : "3DSeen checks the captured image archive after collection. This screen does not report live scene measurements.")
                         .font(.sf(13)).foregroundStyle(theme.text2).lineSpacing(5.2)
                         .padding(.top, 6)
                 }
@@ -231,9 +258,9 @@ private struct PadBriefingBody: View {
     private var checklistCard: some View {
         StCard(radius: 20, pad: 0) {
             VStack(spacing: 0) {
-                ForEach(Array(CHECKLIST.enumerated()), id: \.element.id) { i, c in
+                ForEach(Array(checklist.enumerated()), id: \.element.id) { i, c in
                     CheckRow(item: c)
-                    if i < CHECKLIST.count - 1 { StRule() }
+                    if i < checklist.count - 1 { StRule() }
                 }
                 Spacer(minLength: 0)
             }

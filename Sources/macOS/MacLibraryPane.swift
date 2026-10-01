@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The desktop scan library. Its contents are durable results retained by `ComputeCoordinator`;
 /// there are no sample scans, fabricated category counts, or placeholder storage totals here.
@@ -9,6 +10,9 @@ struct MacLibraryPane: View {
     @ObservedObject var compute: ComputeCoordinator
     @Binding var modeFilter: String
     @State private var searchText = ""
+    @State private var showingImport = false
+    @State private var importingModel = false
+    @State private var importError: String?
 
     private var gridList: Binding<String> {
         Binding(get: { settings.gridIsList ? "list" : "grid" },
@@ -36,6 +40,19 @@ struct MacLibraryPane: View {
             content
         }
         .onAppear { compute.reloadLibrary() }
+        .fileImporter(isPresented: $showingImport, allowedContentTypes: [.usdz]) { result in
+            switch result {
+            case .success(let url): importRoomModel(url)
+            case .failure(let error): importError = error.localizedDescription
+            }
+        }
+        .alert("Could not import room model", isPresented: Binding(
+            get: { importError != nil }, set: { if !$0 { importError = nil } }
+        )) {
+            Button("OK", role: .cancel) { importError = nil }
+        } message: {
+            Text(importError ?? "")
+        }
     }
 
     private var toolbar: some View {
@@ -62,6 +79,10 @@ struct MacLibraryPane: View {
             .help("Library layout")
             StButton(title: "Open", kind: .accent, size: .sm, icon: "cube") { openSelectedOrFirst() }
                 .disabled(selectedScan == nil)
+            StButton(title: importingModel ? "Importing…" : "Import room model", size: .sm, icon: "plus") {
+                showingImport = true
+            }
+            .disabled(importingModel || compute.isProcessing)
         }
     }
 
@@ -137,6 +158,25 @@ struct MacLibraryPane: View {
     private func open(_ scan: MacComputedScan) {
         compute.selectScan(scan.id)
         section = .viewer
+    }
+
+    private func importRoomModel(_ url: URL) {
+        importingModel = true
+        Task { @MainActor in
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer {
+                if scoped { url.stopAccessingSecurityScopedResource() }
+                importingModel = false
+            }
+            let scanID = UUID()
+            await compute.process(archive: url, captureMode: .space,
+                                  detailTier: "LiDAR surface", sourceScanID: scanID)
+            if let scan = compute.libraryScans.first(where: { $0.id == scanID }) {
+                open(scan)
+            } else {
+                importError = compute.log.last?.message ?? "The file could not be opened as a 3D model."
+            }
+        }
     }
 
     private func openSelectedOrFirst() {

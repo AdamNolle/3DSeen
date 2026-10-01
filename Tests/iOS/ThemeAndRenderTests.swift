@@ -97,7 +97,7 @@ final class StudioScreenTests: XCTestCase {
     }
 
     func testModePickerUsesBeginnerNamesAndSemanticIcons() {
-        XCTAssertEqual(STUDIO_MODES.map(\.name), ["Choose for Me", "Object", "Room", "Outdoor Scene"])
+        XCTAssertEqual(STUDIO_MODES.map(\.name), ["Choose for Me", "Object", "Rooms & Spaces", "Outdoor Scene"])
         XCTAssertEqual(STUDIO_MODES.map(\.icon), ["autoMode", "objectMode", "roomMode", "outdoorMode"])
     }
 

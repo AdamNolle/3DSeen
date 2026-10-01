@@ -6,6 +6,8 @@ struct LiveCaptureHUD: View {
     let status: LiveCaptureStatus
     var onPrimaryAction: (() -> Void)?
     var onFinish: (() -> Void)?
+    var onTextureCapture: (() -> Void)?
+    var textureSnapshotCount = 0
 
     var body: some View {
         GeometryReader { proxy in
@@ -24,39 +26,53 @@ struct LiveCaptureHUD: View {
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
+        ViewThatFits(in: .horizontal) {
             HStack(spacing: 10) {
-                Image(systemName: symbolName)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(status.title).font(.sf(15, .bold)).foregroundStyle(.white)
-                    Text(status.phaseLabel.uppercased())
-                        .font(.mono(9.5, .semibold)).tracking(1)
-                        .foregroundStyle(.white.opacity(0.62))
+                titlePill
+                Spacer(minLength: 8)
+                factsPill
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                titlePill
+                factsPill
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var titlePill: some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbolName)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(status.title).font(.sf(15, .bold)).foregroundStyle(.white)
+                Text(status.phaseLabel.uppercased())
+                    .font(.mono(9.5, .semibold)).tracking(1)
+                    .foregroundStyle(.white.opacity(0.62))
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .liquidGlass(radius: 15, tone: .dark)
+    }
+
+    @ViewBuilder
+    private var factsPill: some View {
+        if !status.primaryFacts.isEmpty {
+            HStack(spacing: 0) {
+                ForEach(Array(status.primaryFacts.enumerated()), id: \.offset) { index, fact in
+                    Text(fact.uppercased())
+                        .font(.mono(10.5, .semibold))
+                        .foregroundStyle(.white.opacity(0.9))
+                        .padding(.horizontal, 12)
+                        .overlay(alignment: .leading) {
+                            if index > 0 { Rectangle().fill(.white.opacity(0.18)).frame(width: 0.5, height: 16) }
+                        }
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
+            .padding(.vertical, 13)
             .liquidGlass(radius: 15, tone: .dark)
-
-            Spacer(minLength: 8)
-
-            if !status.primaryFacts.isEmpty {
-                HStack(spacing: 0) {
-                    ForEach(Array(status.primaryFacts.enumerated()), id: \.offset) { index, fact in
-                        Text(fact.uppercased())
-                            .font(.mono(10.5, .semibold))
-                            .foregroundStyle(.white.opacity(0.9))
-                            .padding(.horizontal, 12)
-                            .overlay(alignment: .leading) {
-                                if index > 0 { Rectangle().fill(.white.opacity(0.18)).frame(width: 0.5, height: 16) }
-                            }
-                    }
-                }
-                .padding(.vertical, 13)
-                .liquidGlass(radius: 15, tone: .dark)
-            }
         }
     }
 
@@ -83,6 +99,19 @@ struct LiveCaptureHUD: View {
                 }
                 .buttonStyle(StPressStyle())
                 .accessibilityLabel(primaryActionTitle)
+            }
+
+            if let onTextureCapture {
+                Button(action: onTextureCapture) {
+                    Label("Save texture · \(textureSnapshotCount) saved", systemImage: "viewfinder")
+                        .font(.sf(15, .semibold))
+                        .foregroundStyle(.white)
+                        .frame(minWidth: 220, minHeight: 44)
+                        .background(Capsule().fill(.white.opacity(0.16)))
+                }
+                .buttonStyle(StPressStyle())
+                .accessibilityLabel("Save surface texture")
+                .accessibilityHint("Saves a square crop of the center of the camera image as a reusable PNG.")
             }
 
             if let finishActionTitle = status.finishActionTitle, let onFinish {

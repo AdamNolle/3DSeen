@@ -150,6 +150,31 @@ final class WizardFlowUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Export"].exists)
     }
 
+    func testRoomsAndSpacesExplainMeasuredGeometryAndTextures() {
+        app.buttons["New Scan"].firstMatch.tap()
+        assertScreen("mode")
+        let room = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Rooms & Spaces'")).firstMatch
+        XCTAssertTrue(room.waitForExistence(timeout: 3))
+        room.tap()
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Continue with Rooms'")).firstMatch.tap()
+        assertScreen("briefing")
+        app.buttons["Choose Result"].tap()
+        assertScreen("quality")
+        XCTAssertTrue(app.staticTexts["Textured surface model"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Save reusable texture snapshots during capture"].exists)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Rooms and Spaces result setup"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Maximum.'")).firstMatch.exists)
+        app.buttons["Start Capture"].tap()
+        let alert = app.alerts["3DSeen needs attention"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        XCTAssertTrue(alert.staticTexts.element(boundBy: 1).label.contains("LiDAR"))
+        alert.buttons["Back"].tap()
+        assertScreen("quality")
+    }
+
     private func assertScreen(_ name: String, file: StaticString = #filePath, line: UInt = #line) {
         let screen = app.descendants(matching: .any)["studio.screen.\(name)"]
         XCTAssertTrue(screen.waitForExistence(timeout: 3), "Expected Studio screen \(name)", file: file, line: line)

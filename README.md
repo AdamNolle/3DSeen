@@ -19,7 +19,7 @@ A Hub-and-Spoke capture architecture with a dual-option compute pipeline, driven
 
 ### Capture (iOS)
 - **Object** — custom guided Vision + ARKit capture with foreground lock, real LiDAR/feature-point guidance, and quality-gated automatic photos.
-- **Space** — Apple `RoomPlan` → parametric USDZ.
+- **Rooms & Spaces** — actual ARKit LiDAR surface meshes with depth-checked camera textures, embedded in a portable USDZ. Save reusable surface texture snapshots during capture; import shared room models into the Mac library. [Capture guide](docs/LIDAR-ROOM-CAPTURE.md).
 - **Landscape** — ARKit VIO world tracking (no LiDAR) with automatic frame capture for outdoor scenes.
 - **Auto-Pilot** — Vision scene classification recommends the optimal mode from the live feed.
 
@@ -33,7 +33,7 @@ A native SwiftUI design system (`Sources/Shared/DesignSystem/`) — warm-paper l
 ## Requirements
 - **iOS / iPadOS** 17.0+ (LiDAR required for Room and recommended for denser Object guidance; Object truthfully falls back to ARKit tracked feature points).
 - **macOS** 14.0+ (Apple silicon recommended).
-- **Xcode** 26.3+ (CI pins 26.3; the Metal Toolchain component may need to be installed separately).
+- **Xcode** 26.3+ (CI pins 26.6; the Metal Toolchain component may need to be installed separately).
 
 > **Mac local-training note:** the Mac build is intended for direct distribution, not the Mac App
 > Store sandbox. Its optional local splat trainer launches user-installed COLMAP and Nerfstudio

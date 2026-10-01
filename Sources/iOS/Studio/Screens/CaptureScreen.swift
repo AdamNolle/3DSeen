@@ -152,8 +152,23 @@ struct CaptureScreen: View {
             try Task.checkCancellation()
             let resolvedStore = try ScanAssetStore()
             store = resolvedStore
-            let persistedURL = try resolvedStore.importCapture(from: scanDataURL, for: session.id)
-            session.sizeMB = Self.sizeMB(for: persistedURL)
+            let persistedURL: URL
+            var surfaceModelURL: URL?
+            if capturedMode == .space,
+               FileManager.default.fileExists(atPath: scanDataURL.appendingPathComponent(LiDARCaptureBundle.reportName).path) {
+                let scanID = session.id
+                let imported = try await Task.detached(priority: .userInitiated) {
+                    try LiDARCaptureBundle.importCapture(from: scanDataURL, scanID: scanID, store: resolvedStore)
+                }.value
+                try Task.checkCancellation()
+                persistedURL = imported.archiveURL
+                surfaceModelURL = imported.modelURL
+                session.rawArchiveURL = imported.archiveURL
+                session.frameCount = imported.report.textureFrameCount
+            } else {
+                persistedURL = try resolvedStore.importCapture(from: scanDataURL, for: session.id)
+            }
+            session.sizeMB = Self.sizeMB(for: surfaceModelURL?.deletingLastPathComponent() ?? persistedURL)
             if let capturedFrame = CaptureArchiveInspector.firstDecodableImageFrame(in: persistedURL) {
                 session.thumbnailURL = try resolvedStore.importThumbnail(from: capturedFrame, for: session.id)
             }
@@ -164,9 +179,10 @@ struct CaptureScreen: View {
                 try Task.checkCancellation()
             }
 
-            if capturedMode == .space, persistedURL.pathExtension.lowercased() == "usdz" {
-                session.markComputed(modelURL: persistedURL, usdzURL: persistedURL)
-                session.triangles = ModelGeometryInspector.inspect(modelURL: persistedURL)?.formattedTriangleCount
+            if capturedMode == .space, let modelURL = surfaceModelURL
+                ?? (persistedURL.pathExtension.lowercased() == "usdz" ? persistedURL : nil) {
+                session.markComputed(modelURL: modelURL, usdzURL: modelURL)
+                session.triangles = ModelGeometryInspector.inspect(modelURL: modelURL)?.formattedTriangleCount
                     ?? "Unavailable"
                 session.captureStatusRaw = ScanCaptureStatus.captured.rawValue
             } else {
@@ -213,7 +229,8 @@ struct CaptureScreen: View {
     private static func sizeMB(for url: URL?) -> Int {
         guard let url else { return 0 }
         let fileManager = FileManager.default
-        if let attributes = try? fileManager.attributesOfItem(atPath: url.path),
+        if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) != true,
+           let attributes = try? fileManager.attributesOfItem(atPath: url.path),
            let size = attributes[.size] as? NSNumber {
             return max(1, Int((size.doubleValue / 1_000_000).rounded()))
         }

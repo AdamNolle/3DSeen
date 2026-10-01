@@ -5,7 +5,6 @@
 import SwiftUI
 import AVFoundation
 import ARKit
-import RoomPlan
 
 // MARK: - Data
 
@@ -35,9 +34,9 @@ let STUDIO_MODES: [CaptureModeInfo] = [
     .init(id: "object", name: "Object", icon: "objectMode", tag: "Guided ARKit image capture",
           sub: "Scan one movable item with automatic photos and real tracked points.",
           specs: ["Foreground mask", "LiDAR or AR points", "Photo archive"], tint: Color(hex: "#5B7E84")),
-    .init(id: "space", name: "Room", icon: "roomMode", tag: "RoomPlan parametric capture",
-          sub: "Map walls, doors, openings, and furniture in an indoor space.",
-          specs: ["LiDAR required", "USDZ", "Structural geometry"], tint: Color(hex: "#7A6244")),
+    .init(id: "space", name: "Rooms & Spaces", icon: "roomMode", tag: "Textured LiDAR surface capture",
+          sub: "Capture actual walls, floors, furniture, and irregular surfaces with their camera textures.",
+          specs: ["LiDAR required", "Textured USDZ", "Texture snapshots"], tint: Color(hex: "#7A6244")),
     .init(id: "landscape", name: "Outdoor Scene", icon: "outdoorMode", tag: "ARKit visual-inertial capture",
           sub: "Collect well-spaced photos of larger outdoor subjects and places.",
           specs: ["World tracking", "Photo archive", "No LiDAR promise"], tint: Color(hex: "#4C5A60")),
@@ -60,7 +59,7 @@ enum CaptureAvailability {
         }
 
         switch mode {
-        case .space where !RoomCaptureSession.isSupported:
+        case .space where !ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh):
             return Status(isAvailable: false, message: hardwareRequirement(for: mode))
         case .landscape where !ARWorldTrackingConfiguration.isSupported:
             return Status(isAvailable: false, message: hardwareRequirement(for: mode))

@@ -1,7 +1,6 @@
 import SwiftUI
 import AVFoundation
 import ARKit
-import RoomPlan
 
 /// Hosts the selected live capture engine. Auto-Pilot begins with a camera-only Vision pass,
 /// then swaps into the concrete engine it selected without fabricating a scene decision.
@@ -69,7 +68,7 @@ struct CaptureCoordinatorView: View {
                 recommendedFrameCount: recommendedObjectFrameCount
             )
         case .space:
-            RoomCaptureEngine(attemptID: attemptID)
+            RoomCaptureEngine(attemptID: attemptID).id(attemptID)
         case .landscape:
             LandscapeCaptureEngine(attemptID: attemptID)
         case .autoPilot:
@@ -238,7 +237,7 @@ private final class AutoPilotCaptureController: NSObject, ObservableObject, AVCa
 
     private var supportedModes: Set<CaptureMode> {
         var modes: Set<CaptureMode> = [.object]
-        if RoomCaptureSession.isSupported { modes.insert(.space) }
+        if ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) { modes.insert(.space) }
         if ARWorldTrackingConfiguration.isSupported { modes.insert(.landscape) }
         return modes
     }
