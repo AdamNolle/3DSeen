@@ -31,11 +31,11 @@ jobs:
     needs: quality
     permissions:
       contents: write
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Select pinned Xcode
-        run: tools/ci/select-xcode.sh 26.3
+        run: tools/ci/select-xcode.sh 26.6
       - name: Install pinned build tools
         run: tools/ci/install-tools.sh
       - name: Generate project
@@ -103,11 +103,11 @@ jobs:
     name: Signed iOS archive and TestFlight upload
     if: github.event_name == 'push' && vars.ENABLE_SIGNED_IOS_RELEASE == 'true'
     needs: quality
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Select pinned Xcode
-        run: tools/ci/select-xcode.sh 26.3
+        run: tools/ci/select-xcode.sh 26.6
       - name: Install pinned build tools
         run: tools/ci/install-tools.sh
       - name: Generate project and version
@@ -148,11 +148,11 @@ jobs:
     name: Developer ID, notarization, and Gatekeeper
     if: github.event_name == 'push' && vars.ENABLE_SIGNED_MACOS_RELEASE == 'true'
     needs: quality
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Select pinned Xcode
-        run: tools/ci/select-xcode.sh 26.3
+        run: tools/ci/select-xcode.sh 26.6
       - name: Install pinned build tools
         run: tools/ci/install-tools.sh
       - name: Generate project and version

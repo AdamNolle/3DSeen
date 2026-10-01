@@ -14,7 +14,7 @@ concurrency:
 jobs:
   lint:
     name: SwiftLint
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Install pinned build tools
@@ -28,7 +28,7 @@ jobs:
 
   test-ios:
     name: Build & Test (${{ matrix.device }})
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -37,7 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Select pinned Xcode
-        run: tools/ci/select-xcode.sh 26.3
+        run: tools/ci/select-xcode.sh 26.6
       - name: Install pinned build tools
         run: tools/ci/install-tools.sh
       - name: Generate project
@@ -88,12 +88,12 @@ jobs:
 
   test-macos:
     name: Build & Test (macOS)
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Select pinned Xcode
-        run: tools/ci/select-xcode.sh 26.3
+        run: tools/ci/select-xcode.sh 26.6
       - name: Install pinned build tools
         run: tools/ci/install-tools.sh
       - name: Generate project
