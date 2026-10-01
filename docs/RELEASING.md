@@ -54,6 +54,10 @@ For a local release with an installed Developer ID certificate, `NOTARYTOOL_KEYC
 
 The Codex Run action uses `script/build_and_run.sh` with ad hoc Debug signing. Use `--verify` for a launch check, `--logs` or `--telemetry` for runtime output, and `--debug` for LLDB. Debug signing does not establish release signing or notarization.
 
+## Local Xcode notarization
+
+When an Apple account is already signed in to Xcode, open the Developer ID archive in Organizer, select **Distribute App → Direct Distribution**, wait for **Notarization succeeded**, then export. Verify the exported app independently with `codesign --verify --deep --strict --all-architectures`, `xcrun stapler validate`, and `spctl --assess --type execute --verbose=4`; Gatekeeper must report `Notarized Developer ID`. The October 1 archive completed this path. Keep credentials in Xcode/Keychain; this local flow does not configure GitHub’s signed release secrets.
+
 ## External gates
 
 Repository scaffolding and unsigned builds do not prove signing, TestFlight acceptance, notarization, Gatekeeper behavior on another Mac, or App Review acceptance. Record those results in `VERIFICATION-STATUS.md` only after credential-backed execution.

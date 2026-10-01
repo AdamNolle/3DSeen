@@ -210,7 +210,7 @@ private struct PadReview: View {
                 CircleIconButton(icon: "back", size: 38) { model.go(.mode) }
                 VStack(alignment: .leading, spacing: 2) {
                     StLabel(text: "Post-capture · \(facts.mode)", color: facts.scan == nil ? theme.text3 : theme.good)
-                    Text("Review saved scan").font(.sf(17, .bold)).foregroundStyle(theme.ink)
+                    Text("Your scan is saved").font(.sf(17, .bold)).foregroundStyle(theme.ink)
                 }
             }
             Spacer()

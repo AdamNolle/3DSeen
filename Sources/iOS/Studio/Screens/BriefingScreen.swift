@@ -158,7 +158,7 @@ private struct PadBriefingBody: View {
             Spacer(minLength: 12)
             StStepTabs(current: 1)
             Spacer(minLength: 12)
-            StButton(title: "Choose Result", kind: .ghost, size: .sm) { model.go(.quality) }
+            CircleIconButton(icon: "close", size: 38) { model.go(.library) }
         }
     }
 

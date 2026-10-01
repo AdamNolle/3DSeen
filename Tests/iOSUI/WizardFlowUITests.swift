@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 final class WizardFlowUITests: XCTestCase {
@@ -42,7 +43,7 @@ final class WizardFlowUITests: XCTestCase {
         app.terminate()
         app.launchArguments = [
             "-UIPreferredContentSizeCategoryName",
-            "UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge",
+            UIContentSizeCategory.accessibilityExtraExtraExtraLarge.rawValue,
         ]
         app.launchEnvironment["THREEDSEEN_UI_AUDIT_SCREEN"] = "quality"
         app.launch()
@@ -70,7 +71,7 @@ final class WizardFlowUITests: XCTestCase {
         app.terminate()
         app.launchArguments = [
             "-UIPreferredContentSizeCategoryName",
-            "UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge",
+            UIContentSizeCategory.accessibilityExtraExtraExtraLarge.rawValue,
         ]
         app.launchEnvironment["THREEDSEEN_UI_AUDIT_SCREEN"] = "briefing"
         app.launch()
@@ -119,7 +120,7 @@ final class WizardFlowUITests: XCTestCase {
         app.terminate()
         app.launchArguments = [
             "-UIPreferredContentSizeCategoryName",
-            "UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge",
+            UIContentSizeCategory.accessibilityExtraExtraExtraLarge.rawValue,
         ]
         app.launchEnvironment["THREEDSEEN_UI_AUDIT_SCREEN"] = "settings"
         app.launch()
