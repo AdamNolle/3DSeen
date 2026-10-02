@@ -302,14 +302,33 @@ private struct SurfaceTextureSummary: View {
     @Environment(\.theme) private var theme
     let report: LiDARCaptureReport
 
+    private var textureCoveragePercent: Int {
+        guard report.triangleCount > 0 else { return 0 }
+        return min(100, Int((Double(report.texturedTriangleCount) / Double(report.triangleCount) * 100).rounded()))
+    }
+
+    private var classifiedFaceSummary: String? {
+        let counts = report.surfaceCounts?.filter { $0.key != "Unclassified" && $0.value > 0 } ?? [:]
+        let labels = counts.sorted { lhs, rhs in
+            lhs.value == rhs.value ? lhs.key < rhs.key : lhs.value > rhs.value
+        }.prefix(5).map { "\($0.key) \($0.value.formatted())" }
+        return labels.isEmpty ? nil : labels.joined(separator: " · ")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Measured surfaces with captured textures").font(.sf(17, .bold)).foregroundStyle(theme.ink)
-            Text("\(report.texturedTriangleCount.formatted()) of \(report.triangleCount.formatted()) mesh faces have a depth-matched camera texture.")
+            Text("Mesh and texture quality").font(.sf(17, .bold)).foregroundStyle(theme.ink)
+            Text("\(textureCoveragePercent)% of measured faces matched a depth-checked camera texture (\(report.texturedTriangleCount.formatted()) of \(report.triangleCount.formatted()) faces).")
                 .font(.sf(13.5)).foregroundStyle(theme.text2)
             Text("\(report.textureFrameCount) camera frames and \(report.textureSnapshotCount) reusable texture snapshots retained.")
                 .font(.sf(13)).foregroundStyle(theme.text2)
-            Text("Inspect the whole space for holes and gray, untextured surfaces. Another viewpoint can capture areas that were hidden.")
+            if let classifiedFaceSummary {
+                Text("ARKit face labels · \(classifiedFaceSummary)")
+                    .font(.sf(13)).foregroundStyle(theme.text2)
+                Text("Face labels are approximate categories, not separate object identities.")
+                    .font(.sf(12.5)).foregroundStyle(theme.text3)
+            }
+            Text("Inspect the model for holes and gray, untextured surfaces. A second scan angle may improve hidden areas.")
                 .font(.sf(12.5)).foregroundStyle(theme.text3)
         }
     }

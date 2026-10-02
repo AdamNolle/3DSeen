@@ -544,8 +544,6 @@ private struct ScanThumbButton: View {
 
 private struct EmptyLibraryState: View {
     @Environment(\.theme) private var theme
-    @EnvironmentObject private var model: StudioModel
-    @EnvironmentObject private var settings: SettingsStore
     var big: Bool = false
 
     var body: some View {
@@ -563,9 +561,6 @@ private struct EmptyLibraryState: View {
                     .foregroundStyle(theme.text2)
             }
 
-            StButton(title: "New Scan", kind: .accent, size: big ? .lg : .sm, icon: "scan") {
-                model.beginNewScan(using: settings)
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(big ? 26 : 18)

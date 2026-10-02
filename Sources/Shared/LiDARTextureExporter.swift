@@ -9,6 +9,12 @@ enum LiDARTextureExporter {
     struct Result: Sendable {
         let triangleCount: Int
         let texturedTriangleCount: Int
+        let surfaceCounts: [String: Int]
+    }
+
+    private struct BatchKey: Hashable {
+        let frameIndex: Int
+        let classification: UInt8
     }
 
     private struct Batch {
@@ -22,7 +28,8 @@ enum LiDARTextureExporter {
         isCancelled: @escaping () -> Bool = { false }
     ) throws -> Result {
         try validate(meshes: meshes, frames: frames)
-        var batches: [Int: Batch] = [:]
+        var batches: [BatchKey: Batch] = [:]
+        var surfaceCounts: [String: Int] = [:]
         var total = 0
         var textured = 0
         let cameraPositions = frames.map { $0.camera.position }
@@ -40,6 +47,8 @@ enum LiDARTextureExporter {
                 let triangle = (0..<3).map { mesh.vertices[Int(mesh.indices[offset + $0])] }
                 let cross = simd_cross(triangle[1] - triangle[0], triangle[2] - triangle[0])
                 guard simd_length_squared(cross) > 0.0000000001 else { continue }
+                let faceIndex = offset / 3
+                let classification = mesh.classifications.isEmpty ? 0 : mesh.classifications[faceIndex]
                 var bestIndex = -1
                 var bestScore: Float = 0
                 var coordinates = [SIMD2<Float>](repeating: .zero, count: 3)
@@ -52,11 +61,16 @@ enum LiDARTextureExporter {
                     coordinates = projection.coordinates
                 }
                 let normal = SCNVector3(simd_normalize(cross))
-                batches[bestIndex, default: Batch()].positions.append(contentsOf: triangle.map(SCNVector3.init))
-                batches[bestIndex, default: Batch()].normals.append(contentsOf: [normal, normal, normal])
-                batches[bestIndex, default: Batch()].coordinates.append(contentsOf: coordinates.map {
+                let key = BatchKey(frameIndex: bestIndex, classification: classification)
+                var batch = batches[key, default: Batch()]
+                batch.positions.append(contentsOf: triangle.map(SCNVector3.init))
+                batch.normals.append(contentsOf: [normal, normal, normal])
+                batch.coordinates.append(contentsOf: coordinates.map {
                     CGPoint(x: CGFloat($0.x), y: CGFloat($0.y))
                 })
+                batches[key] = batch
+                let label = LiDARSurfaceClassification.label(for: classification)
+                surfaceCounts[label, default: 0] += 1
                 total += 1
                 if bestIndex >= 0 { textured += 1 }
             }
@@ -64,20 +78,25 @@ enum LiDARTextureExporter {
         guard total > 0 else { throw LiDARSurfaceError.noSurface }
         guard textured > 0 else { throw LiDARSurfaceError.noTextures }
         let scene = SCNScene()
-        for index in batches.keys.sorted() {
-            guard let batch = batches[index] else { continue }
+        for key in batches.keys.sorted(by: {
+            ($0.classification, $0.frameIndex) < ($1.classification, $1.frameIndex)
+        }) {
+            guard let batch = batches[key] else { continue }
+            let category = LiDARSurfaceClassification.label(for: key.classification)
             let sources = [SCNGeometrySource(vertices: batch.positions),
                            SCNGeometrySource(normals: batch.normals),
                            SCNGeometrySource(textureCoordinates: batch.coordinates)]
             let element = SCNGeometryElement(indices: (0..<batch.positions.count).map(UInt32.init), primitiveType: .triangles)
             let geometry = SCNGeometry(sources: sources, elements: [element])
             let material = SCNMaterial()
-            material.name = index >= 0 ? "CapturedTexture_\(index)" : "UnobservedSurface"
+            material.name = key.frameIndex >= 0
+                ? "CapturedTexture_\(key.frameIndex)_\(category)"
+                : "UnobservedSurface_\(category)"
             material.lightingModel = .physicallyBased
             material.isDoubleSided = true
             material.roughness.contents = 0.85
-            if index >= 0 {
-                material.diffuse.contents = frames[index].imageURL
+            if key.frameIndex >= 0 {
+                material.diffuse.contents = frames[key.frameIndex].imageURL
                 material.diffuse.wrapS = .clamp
                 material.diffuse.wrapT = .clamp
             } else {
@@ -86,7 +105,7 @@ enum LiDARTextureExporter {
             }
             geometry.materials = [material]
             let node = SCNNode(geometry: geometry)
-            node.name = index >= 0 ? "TexturedSurface_\(index)" : "UntexturedSurface"
+            node.name = "\(category) Surface" + (key.frameIndex >= 0 ? " · View \(key.frameIndex + 1)" : "")
             scene.rootNode.addChildNode(node)
         }
         if isCancelled() { throw CancellationError() }
@@ -100,7 +119,7 @@ enum LiDARTextureExporter {
             throw LiDARSurfaceError.exportFailed
         }
         try FileManager.default.moveItem(at: staging, to: outputURL)
-        return Result(triangleCount: total, texturedTriangleCount: textured)
+        return Result(triangleCount: total, texturedTriangleCount: textured, surfaceCounts: surfaceCounts)
     }
 
     private static func validate(meshes: [LiDARSurfaceMesh], frames: [LiDARTextureFrame]) throws {

@@ -1,6 +1,6 @@
 # Verification Status
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 ## October 2 export sharing regression
 
@@ -11,6 +11,14 @@ Inspection showed the iOS share sheet omitted OBJ material sidecars. A native te
 A reproduced exporter bug limited every surface to the 32 nearest camera positions. If these views faced away or were occluded, a usable farther view was ignored and the scan could fail with `noTextures` or retain avoidable gray faces. The exporter now searches farther views for each face when nearby projections fail, while retaining the nearby-view fast path. Camera positions are computed once instead of repeatedly inverted during sorting. Regression fixtures cover both an entirely rejected scan and a separately occluded face. The first fixture failed with `noTextures` before the fix; all 62 local Mac tests pass after the fix, including ten surface/export/import tests. Strict lint and deterministic project generation also pass.
 
 The prior notarized Mac installation was missing from `/Applications` at the start of the October 2 check. Its October 1 release ZIP and archive remain available; current deployment evidence must be verified independently after the new build. Older duplicate project/plist files were preserved outside the source tree in `~/Library/Developer/Xcode/SourceBackups/3DSeen-duplicates-20261002` so regeneration does not accidentally include stale metadata.
+
+## October 2 classified live room mesh and UI audit
+
+Space capture now requests ARKit's classified mesh when the device supports it and falls back to ordinary LiDAR mesh otherwise. Per-face labels flow into USDZ node/material names and the durable capture report. The live HUD reports texture coverage only for its bounded preview sample; Review reports depth-matched texture coverage over the complete exported mesh and displays approximate face categories without implying unique object segmentation. Version-one LiDAR reports remain importable. The empty Library card no longer repeats New Scan beside the persistent phone dock or iPad page action; the updated iPhone simulator screenshot shows the single-action state.
+
+Local verification on Xcode 27.0: iPhone 16 Pro/iOS 18.5 suite passed 160 tests with 1 expected skip and no failures; macOS 27.0.1 passed 66 tests; iPad Pro 13-inch M5/iPadOS 27.0 accessibility suite passed 2 tests. The macOS offscreen SwiftUI render test emitted one non-failing QoS priority-inversion runtime warning; the remaining test results have no runtime warnings. Strict SwiftLint, XcodeGen drift, icon validation, Release dry run, and `git diff --check` passed. Artifacts are under `/tmp/3dseen-active-goal-final2/` and `/tmp/3dseen-active-goal-derived2/`.
+
+The simulator cannot validate live LiDAR capture, texture alignment, sustained thermal behavior, or physical-device installation. This source revision is not yet notarized: the local Developer ID certificate exists, but Xcode has no signed-in account for the configured iOS team and no `notarytool` Keychain profile is available. The credential-free Release dry run produces unsigned builds; the October 1 notarized artifact predates these changes.
 
 ## Textured LiDAR room capture — October 1
 

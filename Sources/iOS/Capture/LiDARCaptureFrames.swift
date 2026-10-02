@@ -95,7 +95,22 @@ enum LiDARCaptureFrames {
             }
             return faces.buffer.contents().loadUnaligned(fromByteOffset: offset, as: UInt32.self)
         }
-        let mesh = LiDARSurfaceMesh(vertices: vertices, indices: indices)
+        let classifications: [UInt8]
+        if let source = anchor.geometry.classification,
+           source.count == faces.count,
+           source.format == .uchar,
+           source.componentsPerVector == 1,
+           source.offset >= 0,
+           source.stride >= 1,
+           source.offset + (source.count - 1) * source.stride + 1 <= source.buffer.length {
+            let classificationBase = source.buffer.contents()
+            classifications = (0..<source.count).map { index in
+                classificationBase.load(fromByteOffset: source.offset + index * source.stride, as: UInt8.self)
+            }
+        } else {
+            classifications = []
+        }
+        let mesh = LiDARSurfaceMesh(vertices: vertices, indices: indices, classifications: classifications)
         try mesh.validate()
         return mesh
     }

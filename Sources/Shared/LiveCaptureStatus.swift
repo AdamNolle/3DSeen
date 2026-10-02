@@ -17,15 +17,20 @@ public struct LiveCaptureStatus: Equatable, Sendable {
     public let trackingStatus: String?
     public let surfaceTriangleCount: Int?
     public let texturedTriangleCount: Int?
+    public let textureCoveragePercent: Int?
+    public let surfaceClassificationSummary: String?
 
     public init(mode: CaptureMode, phase: Phase, frameCount: Int? = nil, trackingStatus: String? = nil,
-                surfaceTriangleCount: Int? = nil, texturedTriangleCount: Int? = nil) {
+                surfaceTriangleCount: Int? = nil, texturedTriangleCount: Int? = nil,
+                textureCoveragePercent: Int? = nil, surfaceClassificationSummary: String? = nil) {
         self.mode = mode
         self.phase = phase
         self.frameCount = frameCount.map { max(0, $0) }
         self.trackingStatus = trackingStatus?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.surfaceTriangleCount = surfaceTriangleCount.map { max(0, $0) }
         self.texturedTriangleCount = texturedTriangleCount.map { max(0, $0) }
+        self.textureCoveragePercent = textureCoveragePercent.map { min(100, max(0, $0)) }
+        self.surfaceClassificationSummary = surfaceClassificationSummary?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     public var title: String {
@@ -53,7 +58,9 @@ public struct LiveCaptureStatus: Equatable, Sendable {
         if let surfaceTriangleCount {
             facts.append("\(ModelGeometryFacts(vertexCount: 0, triangleCount: surfaceTriangleCount).formattedTriangleCount) faces")
         }
-        if let texturedTriangleCount {
+        if let textureCoveragePercent {
+            facts.append("\(textureCoveragePercent)% preview textured")
+        } else if let texturedTriangleCount {
             facts.append("\(ModelGeometryFacts(vertexCount: 0, triangleCount: texturedTriangleCount).formattedTriangleCount) textured")
         }
         if let trackingStatus, !trackingStatus.isEmpty { facts.append(trackingStatus.capitalized) }

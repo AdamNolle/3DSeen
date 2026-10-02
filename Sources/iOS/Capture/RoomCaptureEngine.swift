@@ -17,7 +17,9 @@ struct RoomCaptureEngine: View {
                 status: LiveCaptureStatus(mode: .space, phase: controller.isProcessing ? .processing : .capturing,
                                           frameCount: controller.frameCount, trackingStatus: controller.status,
                                           surfaceTriangleCount: controller.triangleCount,
-                                          texturedTriangleCount: controller.texturedTriangleCount),
+                                          texturedTriangleCount: controller.texturedTriangleCount,
+                                          textureCoveragePercent: controller.textureCoveragePercent,
+                                          surfaceClassificationSummary: controller.surfaceClassificationSummary),
                 onFinish: controller.isProcessing ? nil : controller.finish,
                 onTextureCapture: controller.isProcessing ? nil : controller.captureTexture,
                 textureSnapshotCount: controller.textureCount
@@ -45,9 +47,15 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
     @Published private(set) var frameCount = 0
     @Published private(set) var textureCount = 0
     @Published private(set) var triangleCount = 0
+    @Published private(set) var previewTriangleCount = 0
     @Published private(set) var texturedTriangleCount = 0
+    @Published private(set) var surfaceClassificationSummary: String?
     @Published private(set) var isProcessing = false
     @Published private(set) var status = "Starting LiDAR"
+    var textureCoveragePercent: Int? {
+        guard previewTriangleCount > 0 else { return nil }
+        return Int((Double(texturedTriangleCount) / Double(previewTriangleCount) * 100).rounded())
+    }
     var onExported: ((URL) -> Void)?
     var onFailure: ((String) -> Void)?
 
@@ -103,7 +111,8 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
                 folder = root
                 accepting = true
                 let config = ARWorldTrackingConfiguration()
-                config.sceneReconstruction = .mesh
+                let classificationSupported = ARWorldTrackingConfiguration.supportsSceneReconstruction(.meshWithClassification)
+                config.sceneReconstruction = classificationSupported ? .meshWithClassification : .mesh
                 // Preserve irregular walls, furniture and surface detail rather than fitting planes.
                 config.planeDetection = []
                 config.frameSemantics = ARWorldTrackingConfiguration.supportsFrameSemantics(.smoothedSceneDepth)
@@ -132,9 +141,10 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
                     to: folder.appendingPathComponent(LiDARCaptureBundle.modelName),
                     isCancelled: { self.isCancelled }
                 )
-                let report = LiDARCaptureReport(schemaVersion: 1, triangleCount: result.triangleCount,
+                let report = LiDARCaptureReport(schemaVersion: 2, triangleCount: result.triangleCount,
                                                 texturedTriangleCount: result.texturedTriangleCount,
-                                                textureFrameCount: frames.count, textureSnapshotCount: snapshotCount)
+                                                textureFrameCount: frames.count, textureSnapshotCount: snapshotCount,
+                                                surfaceCounts: result.surfaceCounts)
                 try JSONEncoder().encode(report).write(to: folder.appendingPathComponent(LiDARCaptureBundle.reportName), options: .atomic)
                 try saveCameraMetadata(in: folder)
                 frames.removeAll()
@@ -165,6 +175,19 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
 
     private var isCancelled: Bool { lock.withLock { cancelled } }
 
+    private static func classificationSummary(for meshes: Dictionary<UUID, LiDARSurfaceMesh>.Values) -> String? {
+        var counts: [String: Int] = [:]
+        for mesh in meshes where !mesh.classifications.isEmpty {
+            for rawValue in mesh.classifications where rawValue != 0 {
+                counts[LiDARSurfaceClassification.label(for: rawValue), default: 0] += 1
+            }
+        }
+        let labels = counts.sorted { lhs, rhs in
+            lhs.value == rhs.value ? lhs.key < rhs.key : lhs.value > rhs.value
+        }.prefix(3).map(\.key)
+        return labels.isEmpty ? nil : labels.joined(separator: " · ")
+    }
+
     private func fail(_ error: Error) {
         accepting = false
         session.pause()
@@ -194,7 +217,11 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
             }
             guard meshes.values.reduce(0, { $0 + $1.triangleCount }) <= 500_000 else { throw LiDARSurfaceError.tooLarge }
             let count = meshes.values.reduce(0, { $0 + $1.triangleCount })
-            publish { $0.triangleCount = count }
+            let classificationSummary = Self.classificationSummary(for: meshes.values)
+            publish {
+                $0.triangleCount = count
+                $0.surfaceClassificationSummary = classificationSummary
+            }
             scheduleLivePreview()
         } catch { fail(error) }
     }
@@ -288,6 +315,7 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
                 guard let self else { return }
                 if let preview, !self.isCancelled {
                     self.installLivePreview(preview)
+                    self.previewTriangleCount = preview.sampledTriangleCount
                     self.texturedTriangleCount = preview.texturedTriangleCount
                 }
                 self.queue.async {
@@ -356,6 +384,7 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
         if let previewAnchor, let previewView { previewView.scene.anchors.remove(previewAnchor) }
         previewAnchor = nil
         texturedTriangleCount = 0
+        previewTriangleCount = 0
     }
 
     private static func blueprintMeshMaterial() -> PhysicallyBasedMaterial {
@@ -421,6 +450,7 @@ private struct LiveMeshPreview: Sendable {
     let revision: UInt64
     let batches: [Batch]
     let textureURLs: Set<URL>
+    let sampledTriangleCount: Int
     let texturedTriangleCount: Int
 }
 
@@ -453,6 +483,7 @@ private enum LiveMeshPreviewBuilder {
         guard !previewMeshes.isEmpty else { return nil }
         let selectedFrameIndices = spatiallyDistributedFrameIndices(count: frames.count)
         var batches: [Int: MutableBatch] = [:]
+        var sampledTriangles = 0
         var textured = 0
         var remainingTriangles = maximumPreviewTriangles
         var remainingMeshes = previewMeshes.count
@@ -479,6 +510,7 @@ private enum LiveMeshPreviewBuilder {
                 guard triangle.allSatisfy({ $0.x.isFinite && $0.y.isFinite && $0.z.isFinite }) else { continue }
                 let cross = simd_cross(triangle[1] - triangle[0], triangle[2] - triangle[0])
                 guard simd_length_squared(cross) > 0.0000000001 else { continue }
+                sampledTriangles += 1
                 let normal = simd_normalize(cross)
                 var bestIndex = -1
                 var bestScore: Float = 0
@@ -512,6 +544,7 @@ private enum LiveMeshPreviewBuilder {
         }
         return LiveMeshPreview(revision: revision, batches: output,
                                textureURLs: Set(output.compactMap(\.textureURL)),
+                               sampledTriangleCount: sampledTriangles,
                                texturedTriangleCount: textured)
     }
 

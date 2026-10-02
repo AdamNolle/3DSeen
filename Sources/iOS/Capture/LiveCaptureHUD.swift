@@ -26,17 +26,30 @@ struct LiveCaptureHUD: View {
     }
 
     private var header: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) {
-                titlePill
-                Spacer(minLength: 8)
-                factsPill
+        VStack(alignment: .leading, spacing: 8) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    titlePill
+                    Spacer(minLength: 8)
+                    factsPill
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    titlePill
+                    factsPill
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            VStack(alignment: .leading, spacing: 8) {
-                titlePill
-                factsPill
+
+            if let summary = status.surfaceClassificationSummary {
+                Label("FACE TYPES · \(summary.uppercased())", systemImage: "square.3.layers.3d")
+                    .font(.mono(9.5, .semibold))
+                    .tracking(0.45)
+                    .foregroundStyle(.white.opacity(0.9))
+                    .lineLimit(1)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .liquidGlass(radius: 13, tone: .dark)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

@@ -5,15 +5,55 @@ import simd
 struct LiDARSurfaceMesh: Sendable {
     let vertices: [SIMD3<Float>]
     let indices: [UInt32]
+    /// ARKit's per-face category raw values. Empty means this device only supplied geometry.
+    let classifications: [UInt8]
+
+    init(vertices: [SIMD3<Float>], indices: [UInt32], classifications: [UInt8] = []) {
+        self.vertices = vertices
+        self.indices = indices
+        self.classifications = classifications
+    }
 
     var triangleCount: Int { indices.count / 3 }
 
     func validate() throws {
         guard !vertices.isEmpty, !indices.isEmpty, indices.count.isMultiple(of: 3),
+              classifications.isEmpty || classifications.count == triangleCount,
               vertices.allSatisfy({ $0.x.isFinite && $0.y.isFinite && $0.z.isFinite }),
               indices.allSatisfy({ Int($0) < vertices.count }) else {
             throw LiDARSurfaceError.invalidGeometry
         }
+    }
+}
+
+/// ARMeshClassification values are deliberately mirrored here so shared mesh/export
+/// code stays independent of ARKit and can inspect captures on macOS.
+enum LiDARSurfaceClassification: Int, CaseIterable, Sendable {
+    case none = 0
+    case wall = 1
+    case floor = 2
+    case ceiling = 3
+    case table = 4
+    case seat = 5
+    case window = 6
+    case door = 7
+
+    var label: String {
+        switch self {
+        case .none: return "Unclassified"
+        case .wall: return "Wall"
+        case .floor: return "Floor"
+        case .ceiling: return "Ceiling"
+        case .table: return "Table"
+        case .seat: return "Seat"
+        case .window: return "Window"
+        case .door: return "Door"
+        }
+    }
+
+    static func label(for rawValue: UInt8) -> String {
+        guard let value = Self(rawValue: Int(rawValue)) else { return "Other" }
+        return value.label
     }
 }
 

@@ -6,6 +6,17 @@ struct LiDARCaptureReport: Codable, Sendable {
     let texturedTriangleCount: Int
     let textureFrameCount: Int
     let textureSnapshotCount: Int
+    let surfaceCounts: [String: Int]?
+
+    init(schemaVersion: Int, triangleCount: Int, texturedTriangleCount: Int,
+         textureFrameCount: Int, textureSnapshotCount: Int, surfaceCounts: [String: Int]? = nil) {
+        self.schemaVersion = schemaVersion
+        self.triangleCount = triangleCount
+        self.texturedTriangleCount = texturedTriangleCount
+        self.textureFrameCount = textureFrameCount
+        self.textureSnapshotCount = textureSnapshotCount
+        self.surfaceCounts = surfaceCounts
+    }
 }
 
 /// Keep reusable textures and the finished model outside the removable source-photo archive.
@@ -25,9 +36,12 @@ enum LiDARCaptureBundle {
         let report = try JSONDecoder().decode(LiDARCaptureReport.self, from: Data(contentsOf: source.appendingPathComponent(reportName)))
         let model = source.appendingPathComponent(modelName)
         let frames = source.appendingPathComponent(framesName)
-        guard report.schemaVersion == 1, report.triangleCount > 0,
+        guard (1...2).contains(report.schemaVersion), report.triangleCount > 0,
               report.texturedTriangleCount > 0, report.texturedTriangleCount <= report.triangleCount,
               report.textureFrameCount > 0, report.textureSnapshotCount >= 0,
+              report.surfaceCounts.map({ counts in
+                  counts.values.allSatisfy { $0 >= 0 } && counts.values.reduce(0, +) == report.triangleCount
+              }) ?? (report.schemaVersion == 1),
               ModelGeometryInspector.inspect(modelURL: model)?.triangleCount == report.triangleCount,
               CaptureArchiveInspector.containsImageFrames(in: frames) else {
             throw LiDARSurfaceError.invalidGeometry
