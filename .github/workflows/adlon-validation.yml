@@ -1,0 +1,30 @@
+name: Adlon project validation
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  xcode-metadata:
+    name: Validate Xcode metadata on Adlon
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","Linux","X64","personal-ci"]') || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check project and plist structure
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import plistlib
+          root = Path('.')
+          projects = [p / 'project.pbxproj' for p in root.rglob('*.xcodeproj') if (p / 'project.pbxproj').is_file()]
+          sources = list(root.rglob('*.swift'))
+          assert projects, 'No Xcode project file was found'
+          assert sources, 'No Swift source files were found'
+          for path in root.rglob('*.plist'):
+              plistlib.loads(path.read_bytes())
+          print(f'Validated {len(projects)} Xcode project(s), {len(sources)} Swift source(s), and all plist files')
+          PY
