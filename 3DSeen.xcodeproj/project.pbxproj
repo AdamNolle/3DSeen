@@ -48,6 +48,7 @@
 		3F8832F31EF44497117BAE69 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = B8A7E315EAB4A35CDE7FAF4A /* ZIPFoundation */; };
 		407EA983A31F9A0DB6B26D63 /* ModelExportSharePackage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5890050AC3403EB4697B582 /* ModelExportSharePackage.swift */; };
 		4095D1BC6D04B6BDC2CF1CD0 /* CompactSplatFileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09C9FD9CDF8F18FC70EF9B3E /* CompactSplatFileTests.swift */; };
+		4350F7CF047027DABFC717C5 /* BoundedArchiveExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E52B90F96A523A0F7D4B0459 /* BoundedArchiveExtractor.swift */; };
 		4467A3C868558569446D39A1 /* CaptureScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07651B3FCF956B10B87C371 /* CaptureScreen.swift */; };
 		45B8B960150491FC7CE47919 /* GuidedObjectCaptureController+Writing.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC14915AF3AE9245DB86A3D8 /* GuidedObjectCaptureController+Writing.swift */; };
 		46E00297C81CB0885ACD6EBA /* GuidedScannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A28D2A5101900B49581CE0 /* GuidedScannerTests.swift */; };
@@ -124,6 +125,7 @@
 		B774D582846E74BF958BFB78 /* CaptureQualityAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E98F370212A0EB3C878F8F5D /* CaptureQualityAnalyzer.swift */; };
 		B796705BCBA29BDB14A9363D /* LandscapeCaptureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = D699E59014BAC0A8CD7BF80F /* LandscapeCaptureEngine.swift */; };
 		B801D9F976BB29CD59A42B23 /* ModelGeometryInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94267FF59D408E2A692E43BB /* ModelGeometryInspector.swift */; };
+		B9340D0F69D546EC67585CF3 /* BoundedArchiveExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E52B90F96A523A0F7D4B0459 /* BoundedArchiveExtractor.swift */; };
 		B9F6034ED39489AE835575C6 /* Primitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = 191E7FBB3A8060C3A0D4F62D /* Primitives.swift */; };
 		BE04D46EC3CAA5E7B8533BE8 /* GuidedCaptureTemporarySource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CBF9733CFA99C004E8AAAF6 /* GuidedCaptureTemporarySource.swift */; };
 		BE93A07A3166F0E37B767E95 /* VisionForegroundSubjectDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B652434F37ABC86A66913D4 /* VisionForegroundSubjectDetector.swift */; };
@@ -280,6 +282,7 @@
 		E07651B3FCF956B10B87C371 /* CaptureScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureScreen.swift; sourceTree = "<group>"; };
 		E146E7937333AE7D7FFFDA36 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		E2D63C1AF9F8FD5E2C6AFC43 /* CaptureTelemetryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureTelemetryTests.swift; sourceTree = "<group>"; };
+		E52B90F96A523A0F7D4B0459 /* BoundedArchiveExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundedArchiveExtractor.swift; sourceTree = "<group>"; };
 		E5390766A930F48BB649338F /* GaussianSplat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GaussianSplat.swift; sourceTree = "<group>"; };
 		E98F370212A0EB3C878F8F5D /* CaptureQualityAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureQualityAnalyzer.swift; sourceTree = "<group>"; };
 		ECFEBEDA5D72BCD7B00A41D8 /* GuidedObjectCaptureController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidedObjectCaptureController.swift; sourceTree = "<group>"; };
@@ -447,6 +450,7 @@
 		96A52C2A8700B792644B0BED /* Export */ = {
 			isa = PBXGroup;
 			children = (
+				E52B90F96A523A0F7D4B0459 /* BoundedArchiveExtractor.swift */,
 				E047A386A69A590077D0400E /* ModelExporter.swift */,
 				F5890050AC3403EB4697B582 /* ModelExportSharePackage.swift */,
 			);
@@ -804,6 +808,7 @@
 				8A52477CCC65BB076A63E066 /* AIPBRMaterialEstimator.swift in Sources */,
 				55143D9E4B912C225EB8EA4A /* AutoPilotVisionManager.swift in Sources */,
 				960E76F119F182BF6D68E553 /* BlenderModelConverter.swift in Sources */,
+				B9340D0F69D546EC67585CF3 /* BoundedArchiveExtractor.swift in Sources */,
 				B774D582846E74BF958BFB78 /* CaptureQualityAnalyzer.swift in Sources */,
 				01800A10263E9F68CB1972E3 /* CompactSplatFile.swift in Sources */,
 				AF5998B414E507B278960DEA /* ComputeCoordinator.swift in Sources */,
@@ -865,6 +870,7 @@
 				A31D2D59339DF68E73EBDCEE /* 3DSeenApp.swift in Sources */,
 				043DE1418392692AAA10B8CC /* AIPBRMaterialEstimator.swift in Sources */,
 				4996E9BB3BA317180388D3D0 /* AutoPilotVisionManager.swift in Sources */,
+				4350F7CF047027DABFC717C5 /* BoundedArchiveExtractor.swift in Sources */,
 				963C111EC42D504BC96AB7DE /* BriefingScreen.swift in Sources */,
 				115B1546366E464ABE2A4F77 /* CaptureCoordinatorView.swift in Sources */,
 				ACB180BF6FB8355B721C6C8A /* CaptureQualityAnalyzer.swift in Sources */,

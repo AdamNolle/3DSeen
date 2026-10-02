@@ -16,14 +16,16 @@ public struct LiveCaptureStatus: Equatable, Sendable {
     public let frameCount: Int?
     public let trackingStatus: String?
     public let surfaceTriangleCount: Int?
+    public let texturedTriangleCount: Int?
 
     public init(mode: CaptureMode, phase: Phase, frameCount: Int? = nil, trackingStatus: String? = nil,
-                surfaceTriangleCount: Int? = nil) {
+                surfaceTriangleCount: Int? = nil, texturedTriangleCount: Int? = nil) {
         self.mode = mode
         self.phase = phase
         self.frameCount = frameCount.map { max(0, $0) }
         self.trackingStatus = trackingStatus?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.surfaceTriangleCount = surfaceTriangleCount.map { max(0, $0) }
+        self.texturedTriangleCount = texturedTriangleCount.map { max(0, $0) }
     }
 
     public var title: String {
@@ -51,6 +53,9 @@ public struct LiveCaptureStatus: Equatable, Sendable {
         if let surfaceTriangleCount {
             facts.append("\(ModelGeometryFacts(vertexCount: 0, triangleCount: surfaceTriangleCount).formattedTriangleCount) faces")
         }
+        if let texturedTriangleCount {
+            facts.append("\(ModelGeometryFacts(vertexCount: 0, triangleCount: texturedTriangleCount).formattedTriangleCount) textured")
+        }
         if let trackingStatus, !trackingStatus.isEmpty { facts.append(trackingStatus.capitalized) }
         return facts
     }
@@ -70,7 +75,9 @@ public struct LiveCaptureStatus: Equatable, Sendable {
         case (.space, .processing):
             return "Building the measured LiDAR surface and embedding captured camera textures in your model."
         case (.space, _):
-            return "Move slowly around the room. Scan walls, floors, furniture, and corners from several angles. Aim at a material and save a texture snapshot when needed."
+            return "Move slowly around walls, floors, furniture, and corners. " +
+                "The live preview samples measured faces to stay responsive; the saved model uses all captured geometry and camera textures. " +
+                "Only visible, well-tracked surfaces can be captured."
         case (.landscape, .capturing):
             return "Walk a smooth arc while frames are captured automatically."
         case (.landscape, .finalizing):

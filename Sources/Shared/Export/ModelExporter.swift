@@ -106,7 +106,7 @@ public struct ScanResultPackage {
     public func unpack(_ packageURL: URL, to destination: URL) throws -> Contents {
         let fm = FileManager.default
         try fm.createDirectory(at: destination, withIntermediateDirectories: true)
-        try fm.unzipItem(at: packageURL, to: destination)
+        try BoundedArchiveExtractor.extract(packageURL, to: destination)
         let files = try fm.contentsOfDirectory(at: destination, includingPropertiesForKeys: nil)
         guard let manifestURL = files.first(where: { $0.lastPathComponent == "manifest.json" }) else {
             throw CocoaError(.fileReadNoSuchFile)

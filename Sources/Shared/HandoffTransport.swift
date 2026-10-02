@@ -22,6 +22,8 @@ public protocol ScanHandoffTransport: AnyObject {
     var onSendError: ((Error) -> Void)? { get set }
 
     func installationID(for peerID: MCPeerID) -> HandoffInstallationID?
+    func peerID(for installationID: HandoffInstallationID) -> MCPeerID?
+    func updateIncomingResourceAuthorizedPeers(_ peers: [MCPeerID])
     func invite(peerID: HandoffInstallationID)
     func respond(to invitationID: UUID, accept: Bool)
 
@@ -36,4 +38,9 @@ public protocol ScanHandoffTransport: AnyObject {
     ) -> Bool
 
     func removeReceivedResource(_ url: URL)
+}
+
+public extension ScanHandoffTransport {
+    func peerID(for installationID: HandoffInstallationID) -> MCPeerID? { nil }
+    func updateIncomingResourceAuthorizedPeers(_ peers: [MCPeerID]) {}
 }

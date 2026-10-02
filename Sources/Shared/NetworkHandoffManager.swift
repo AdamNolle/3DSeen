@@ -98,6 +98,11 @@ public enum ScanHandoffArchive {
 
 /// Manages sending raw scan archives from iOS to macOS using MultipeerConnectivity.
 public final class NetworkHandoffManager: NSObject, ObservableObject {
+    private struct IncomingTransferKey: Hashable {
+        let peerID: MCPeerID
+        let resourceName: String
+    }
+
     private struct PendingInvitationRecord {
         let invitation: HandoffInvitation
         let handler: (Bool, MCSession?) -> Void
@@ -122,13 +127,30 @@ public final class NetworkHandoffManager: NSObject, ObservableObject {
     @Published public var transferProgress: Double = 0
     /// Called on the main queue when a scan archive finishes arriving. The optional mode is
     /// carried in the resource name so a Mac can preserve RoomPlan versus image-scan behavior.
-    public var onReceiveScan: ((URL, MCPeerID, ScanHandoffMetadata) -> Void)?
-    public var onReceiveResultPackage: ((URL, MCPeerID, ScanHandoffMetadata) -> Void)?
+    public var onReceiveScan: ((URL, MCPeerID, ScanHandoffMetadata) -> Void)? {
+        didSet {
+            progressLock.lock()
+            hasScanResourceReceiver = onReceiveScan != nil
+            progressLock.unlock()
+        }
+    }
+    public var onReceiveResultPackage: ((URL, MCPeerID, ScanHandoffMetadata) -> Void)? {
+        didSet {
+            progressLock.lock()
+            hasResultResourceReceiver = onReceiveResultPackage != nil
+            progressLock.unlock()
+        }
+    }
     public var onSendError: ((Error) -> Void)?
     private let progressLock = NSLock()
     private var activeProgress: [UUID: Progress] = [:]
-    private var progressObservations: [UUID: NSKeyValueObservation] = [:]
-    private var incomingTransferIDs: [String: [UUID]] = [:]
+    private var progressObservations: [UUID: [NSKeyValueObservation]] = [:]
+    private var incomingTransferIDs: [IncomingTransferKey: [UUID]] = [:]
+    private var incomingTransferAdmission: [UUID: Bool] = [:]
+    private var admittedIncomingTransferIDs: Set<UUID> = []
+    private var incomingResourceAuthorizedPeers: [MCPeerID] = []
+    private var hasScanResourceReceiver = false
+    private var hasResultResourceReceiver = false
     private var peerIDsByInstallationID: [HandoffInstallationID: MCPeerID] = [:]
     private var invitationRecords: [UUID: PendingInvitationRecord] = [:]
     private let controlEvents = PassthroughSubject<HandoffControlEvent, Never>()
@@ -195,6 +217,12 @@ public final class NetworkHandoffManager: NSObject, ObservableObject {
         peerIDsByInstallationID[installationID]
     }
 
+    public func updateIncomingResourceAuthorizedPeers(_ peers: [MCPeerID]) {
+        progressLock.lock()
+        incomingResourceAuthorizedPeers = peers
+        progressLock.unlock()
+    }
+
     public func invite(peerID: HandoffInstallationID) {
         guard let peerIDValue = peerIDsByInstallationID[peerID],
               let peer = discoveredPeers.first(where: { $0.installationID == peerID }) else { return }
@@ -213,9 +241,12 @@ public final class NetworkHandoffManager: NSObject, ObservableObject {
     public func send(_ message: HandoffMessageEnvelope, to peerID: HandoffInstallationID) -> Bool {
         guard message.senderInstallationID == localInstallationID,
               let destination = peerIDsByInstallationID[peerID],
-              session.connectedPeers.contains(destination) else { return false }
+        session.connectedPeers.contains(destination) else { return false }
         do {
             let data = try JSONEncoder().encode(message)
+            guard HandoffControlMessageAdmissionPolicy.accepts(byteCount: data.count) else {
+                return false
+            }
             try session.send(data, toPeers: [destination], with: .reliable)
             return true
         } catch {
@@ -343,6 +374,9 @@ extension NetworkHandoffManager: MCSessionDelegate {
     }
 
     public func session(_ session: MCSession, didReceive data: Data, fromPeer peerID: MCPeerID) {
+        guard HandoffControlMessageAdmissionPolicy.accepts(byteCount: data.count) else {
+            return
+        }
         guard let message = try? JSONDecoder().decode(HandoffMessageEnvelope.self, from: data) else {
             logger.warning("Ignoring malformed handoff control data.")
             return
@@ -375,20 +409,61 @@ extension NetworkHandoffManager: MCSessionDelegate {
         logger.debug("Started receiving \(resourceName) from \(peerID.displayName)")
         let transferID = UUID()
         let key = incomingTransferKey(resourceName: resourceName, peerID: peerID)
+        let hasReceiver = hasIncomingResourceReceiver(for: resourceName)
         progressLock.lock()
+        let isAuthorized = incomingResourceAuthorizedPeers.contains(peerID)
+        let existingIDs = incomingTransferIDs[key] ?? []
+        let hasNameCollision = !existingIDs.isEmpty
+        if hasNameCollision {
+            for existingID in existingIDs {
+                incomingTransferAdmission[existingID] = false
+                activeProgress[existingID]?.cancel()
+            }
+        }
+        let policyAllowsAdmission = HandoffResourceAdmissionPolicy.admits(
+            isAuthenticated: isAuthorized,
+            hasRegisteredReceiver: hasReceiver,
+            activeResourceCount: admittedIncomingTransferIDs.count,
+            advertisedByteCount: progress.totalUnitCount
+        )
+        let isAdmitted = policyAllowsAdmission && !hasNameCollision
         incomingTransferIDs[key, default: []].append(transferID)
+        incomingTransferAdmission[transferID] = isAdmitted
+        if isAdmitted {
+            admittedIncomingTransferIDs.insert(transferID)
+        }
         progressLock.unlock()
+        guard isAdmitted else {
+            progress.cancel()
+            logger.warning("Rejected incoming resource before admission")
+            return
+        }
         observe(progress, id: transferID)
     }
 
     public func session(_ session: MCSession, didFinishReceivingResourceWithName resourceName: String, fromPeer peerID: MCPeerID, at localURL: URL?, withError error: Error?) {
-        let transferID = popIncomingTransferID(resourceName: resourceName, peerID: peerID)
-        if let transferID { finishProgress(id: transferID, succeeded: error == nil) }
-        if let error = error {
-            logger.error("Failed to receive \(resourceName): \(error.localizedDescription)")
+        let transfer = popIncomingTransferID(resourceName: resourceName, peerID: peerID)
+        guard let transfer else {
+            if let localURL { try? FileManager.default.removeItem(at: localURL) }
             return
         }
-        guard let localURL else { return }
+        guard transfer.isAdmitted else {
+            finishProgress(id: transfer.id, succeeded: false)
+            releaseIncomingAdmission(id: transfer.id)
+            if let localURL { try? FileManager.default.removeItem(at: localURL) }
+            return
+        }
+        finishProgress(id: transfer.id, succeeded: error == nil)
+        if let error = error {
+            logger.error("Failed to receive \(resourceName): \(error.localizedDescription)")
+            if let localURL { try? FileManager.default.removeItem(at: localURL) }
+            releaseIncomingAdmission(id: transfer.id)
+            return
+        }
+        guard let localURL else {
+            releaseIncomingAdmission(id: transfer.id)
+            return
+        }
         let fileManager = FileManager.default
         let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? fileManager.temporaryDirectory
@@ -399,21 +474,32 @@ extension NetworkHandoffManager: MCSessionDelegate {
         let metadata = Self.handoffMetadata(from: resourceName)
         let destinationName = URL(fileURLWithPath: Self.handoffOriginalResourceName(from: resourceName)).lastPathComponent
         let destination = transferDirectory.appendingPathComponent(destinationName)
-        do {
-            try fileManager.createDirectory(at: transferDirectory, withIntermediateDirectories: true)
-            try fileManager.moveItem(at: localURL, to: destination)
-            logger.info("Received \(resourceName) → \(destination.path)")
-            DispatchQueue.main.async {
+        DispatchQueue.main.async {
+            defer { self.releaseIncomingAdmission(id: transfer.id) }
+            let isResultPackage = destinationName.hasSuffix(ScanResultPackage.fileSuffix)
+            let hasReceiver = isResultPackage
+                ? self.onReceiveResultPackage != nil
+                : self.onReceiveScan != nil
+            guard self.isIncomingResourceAuthorized(peerID), hasReceiver else {
+                try? fileManager.removeItem(at: localURL)
+                self.logger.warning("Discarded incoming resource without an authenticated receiver")
+                return
+            }
+            do {
+                try fileManager.createDirectory(at: transferDirectory, withIntermediateDirectories: true)
+                try fileManager.moveItem(at: localURL, to: destination)
+                self.logger.info("Received \(resourceName) → \(destination.path)")
                 self.transferProgress = 1
-                self.lastReceivedScan = destination
-                if destinationName.hasSuffix(ScanResultPackage.fileSuffix) {
+                if isResultPackage {
                     self.onReceiveResultPackage?(destination, peerID, metadata)
                 } else {
+                    self.lastReceivedScan = destination
                     self.onReceiveScan?(destination, peerID, metadata)
                 }
+            } catch {
+                try? fileManager.removeItem(at: localURL)
+                self.logger.error("Could not stage received resource: \(error.localizedDescription)")
             }
-        } catch {
-            logger.error("Could not move received resource: \(error.localizedDescription)")
         }
     }
 }
@@ -568,27 +654,70 @@ extension NetworkHandoffManager {
         return (.init(captureMode: mode, detailTier: tier), originalName)
     }
 
-    private func incomingTransferKey(resourceName: String, peerID: MCPeerID) -> String {
-        "\(peerID.displayName)|\(resourceName)"
+    private func incomingTransferKey(resourceName: String, peerID: MCPeerID) -> IncomingTransferKey {
+        IncomingTransferKey(peerID: peerID, resourceName: resourceName)
     }
 
-    private func popIncomingTransferID(resourceName: String, peerID: MCPeerID) -> UUID? {
+    private func isIncomingResourceAuthorized(_ peerID: MCPeerID) -> Bool {
+        progressLock.lock()
+        defer { progressLock.unlock() }
+        return incomingResourceAuthorizedPeers.contains(peerID)
+    }
+
+    private func hasIncomingResourceReceiver(for resourceName: String) -> Bool {
+        let originalName = Self.handoffOriginalResourceName(from: resourceName)
+        let isResultPackage = originalName.hasSuffix(ScanResultPackage.fileSuffix)
+        let fileExtension = URL(fileURLWithPath: originalName).pathExtension.lowercased()
+        progressLock.lock()
+        defer { progressLock.unlock() }
+        if isResultPackage { return hasResultResourceReceiver }
+        return ["zip", "usdz"].contains(fileExtension) && hasScanResourceReceiver
+    }
+
+    private func releaseIncomingAdmission(id: UUID) {
+        progressLock.lock()
+        admittedIncomingTransferIDs.remove(id)
+        progressLock.unlock()
+    }
+
+    private func popIncomingTransferID(
+        resourceName: String,
+        peerID: MCPeerID
+    ) -> (id: UUID, isAdmitted: Bool)? {
         let key = incomingTransferKey(resourceName: resourceName, peerID: peerID)
         progressLock.lock()
         defer { progressLock.unlock() }
         guard var ids = incomingTransferIDs[key], !ids.isEmpty else { return nil }
         let id = ids.removeFirst()
-        if ids.isEmpty { incomingTransferIDs.removeValue(forKey: key) } else { incomingTransferIDs[key] = ids }
-        return id
+        if ids.isEmpty {
+            incomingTransferIDs.removeValue(forKey: key)
+        } else {
+            incomingTransferIDs[key] = ids
+        }
+        let isAdmitted = incomingTransferAdmission.removeValue(forKey: id) ?? false
+        return (id, isAdmitted)
     }
 
     private func observe(_ progress: Progress, id: UUID) {
-        let observation = progress.observe(\.fractionCompleted, options: [.initial, .new]) { [weak self] _, _ in
+        let enforceSizeLimit: (Progress) -> Void = { observedProgress in
+            if HandoffResourceAdmissionPolicy.exceedsSizeLimit(observedProgress.totalUnitCount)
+                || HandoffResourceAdmissionPolicy.exceedsSizeLimit(observedProgress.completedUnitCount) {
+                observedProgress.cancel()
+            }
+        }
+        let completedObservation = progress.observe(\.completedUnitCount, options: [.initial, .new]) { observedProgress, _ in
+            enforceSizeLimit(observedProgress)
+        }
+        let totalObservation = progress.observe(\.totalUnitCount, options: [.initial, .new]) { observedProgress, _ in
+            enforceSizeLimit(observedProgress)
+        }
+        let fractionObservation = progress.observe(\.fractionCompleted, options: [.initial, .new]) { [weak self] observedProgress, _ in
+            enforceSizeLimit(observedProgress)
             self?.publishAggregateProgress()
         }
         progressLock.lock()
         activeProgress[id] = progress
-        progressObservations[id] = observation
+        progressObservations[id] = [completedObservation, totalObservation, fractionObservation]
         progressLock.unlock()
         publishAggregateProgress()
     }

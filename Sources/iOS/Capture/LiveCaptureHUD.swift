@@ -103,15 +103,15 @@ struct LiveCaptureHUD: View {
 
             if let onTextureCapture {
                 Button(action: onTextureCapture) {
-                    Label("Save texture · \(textureSnapshotCount) saved", systemImage: "viewfinder")
+                    Label("Save material swatch · \(textureSnapshotCount)", systemImage: "viewfinder")
                         .font(.sf(15, .semibold))
                         .foregroundStyle(.white)
                         .frame(minWidth: 220, minHeight: 44)
                         .background(Capsule().fill(.white.opacity(0.16)))
                 }
                 .buttonStyle(StPressStyle())
-                .accessibilityLabel("Save surface texture")
-                .accessibilityHint("Saves a square crop of the center of the camera image as a reusable PNG.")
+                .accessibilityLabel("Save material swatch")
+                .accessibilityHint("Saves a center camera crop as a reusable reference image. Live surface textures are projected automatically onto measured mesh faces.")
             }
 
             if let finishActionTitle = status.finishActionTitle, let onFinish {

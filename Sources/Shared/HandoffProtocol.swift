@@ -145,16 +145,58 @@ public struct HandoffResourceDescriptor: Codable, Equatable, Sendable {
 
     public static func inspect(_ url: URL) throws -> HandoffResourceDescriptor {
         let values = try url.resourceValues(forKeys: [.fileSizeKey])
+        guard let fileSize = values.fileSize,
+              fileSize > 0,
+              !HandoffResourceAdmissionPolicy.exceedsSizeLimit(Int64(fileSize)) else {
+            throw CocoaError(.fileReadTooLarge)
+        }
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
         var digest = SHA256()
+        var bytesRead: Int64 = 0
         while let chunk = try handle.read(upToCount: 1_048_576), !chunk.isEmpty {
+            let (updatedByteCount, overflow) = bytesRead.addingReportingOverflow(Int64(chunk.count))
+            guard !overflow,
+                  !HandoffResourceAdmissionPolicy.exceedsSizeLimit(updatedByteCount) else {
+                throw CocoaError(.fileReadTooLarge)
+            }
+            bytesRead = updatedByteCount
             digest.update(data: chunk)
         }
+        guard bytesRead == Int64(fileSize) else { throw CocoaError(.fileReadUnknown) }
         return HandoffResourceDescriptor(
-            byteCount: Int64(values.fileSize ?? 0),
+            byteCount: bytesRead,
             sha256: digest.finalize().map { String(format: "%02x", $0) }.joined()
         )
+    }
+}
+
+public enum HandoffResourceAdmissionPolicy {
+    public static let maximumResourceBytes: Int64 = 4 * 1_024 * 1_024 * 1_024
+    public static let maximumConcurrentResources = 2
+
+    public static func admits(
+        isAuthenticated: Bool,
+        hasRegisteredReceiver: Bool,
+        activeResourceCount: Int,
+        advertisedByteCount: Int64
+    ) -> Bool {
+        isAuthenticated
+            && hasRegisteredReceiver
+            && activeResourceCount < maximumConcurrentResources
+            && !exceedsSizeLimit(advertisedByteCount)
+    }
+
+    public static func exceedsSizeLimit(_ byteCount: Int64) -> Bool {
+        byteCount > maximumResourceBytes
+    }
+}
+
+public enum HandoffControlMessageAdmissionPolicy {
+    public static let maximumMessageBytes = 64 * 1_024
+
+    public static func accepts(byteCount: Int) -> Bool {
+        byteCount > 0 && byteCount <= maximumMessageBytes
     }
 }
 

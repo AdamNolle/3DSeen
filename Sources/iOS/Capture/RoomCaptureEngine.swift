@@ -1,6 +1,8 @@
 import SwiftUI
 import ARKit
 import RealityKit
+import Combine
+import UIKit
 
 /// LiDAR captures measured surface topology while the camera supplies its appearance.
 struct RoomCaptureEngine: View {
@@ -14,7 +16,8 @@ struct RoomCaptureEngine: View {
             LiveCaptureHUD(
                 status: LiveCaptureStatus(mode: .space, phase: controller.isProcessing ? .processing : .capturing,
                                           frameCount: controller.frameCount, trackingStatus: controller.status,
-                                          surfaceTriangleCount: controller.triangleCount),
+                                          surfaceTriangleCount: controller.triangleCount,
+                                          texturedTriangleCount: controller.texturedTriangleCount),
                 onFinish: controller.isProcessing ? nil : controller.finish,
                 onTextureCapture: controller.isProcessing ? nil : controller.captureTexture,
                 textureSnapshotCount: controller.textureCount
@@ -42,12 +45,14 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
     @Published private(set) var frameCount = 0
     @Published private(set) var textureCount = 0
     @Published private(set) var triangleCount = 0
+    @Published private(set) var texturedTriangleCount = 0
     @Published private(set) var isProcessing = false
     @Published private(set) var status = "Starting LiDAR"
     var onExported: ((URL) -> Void)?
     var onFailure: ((String) -> Void)?
 
     private let queue = DispatchQueue(label: "com.adamnolle.3DSeen.surface-capture", qos: .userInitiated)
+    private let previewQueue = DispatchQueue(label: "com.adamnolle.3DSeen.surface-preview", qos: .utility)
     private let lock = NSLock()
     private let context = CIContext()
     private var cancelled = false
@@ -61,6 +66,17 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
     private var snapshotCount = 0
     private var lastFrameTime: TimeInterval = 0
     private var lastCameraTransform: simd_float4x4?
+    // These preview scheduling values are confined to the AR session delegate queue.
+    private var previewBuildInFlight = false
+    private var previewDirty = false
+    private var lastPreviewBuildTime: TimeInterval = 0
+    private var previewRevision: UInt64 = 0
+    // RealityKit view and resource state are only accessed on the main queue.
+    private weak var previewView: ARView?
+    private var previewAnchor: AnchorEntity?
+    private var previewRequests = Set<AnyCancellable>()
+    private var previewTextures: [URL: TextureResource] = [:]
+    private var installedPreviewRevision: UInt64 = 0
 
     override init() {
         super.init()
@@ -136,6 +152,7 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
     func cancel() {
         lock.withLock { cancelled = true }
         session.pause()
+        DispatchQueue.main.async { [weak self] in self?.clearLivePreview() }
         let keep = sealed
         queue.async { [self] in
             accepting = false
@@ -166,6 +183,7 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
     func session(_ session: ARSession, didRemove anchors: [ARAnchor]) {
         guard accepting, !isCancelled else { return }
         for anchor in anchors { meshes[anchor.identifier] = nil }
+        scheduleLivePreview()
     }
 
     private func update(_ anchors: [ARAnchor]) {
@@ -177,6 +195,7 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
             guard meshes.values.reduce(0, { $0 + $1.triangleCount }) <= 500_000 else { throw LiDARSurfaceError.tooLarge }
             let count = meshes.values.reduce(0, { $0 + $1.triangleCount })
             publish { $0.triangleCount = count }
+            scheduleLivePreview()
         } catch { fail(error) }
     }
 
@@ -232,7 +251,128 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
                 $0.frameCount = count
                 if count == 256 { $0.status = "Photo limit reached · finish this section" }
             }
+            scheduleLivePreview()
         } catch { fail(error) }
+    }
+
+    @MainActor
+    func attachPreview(_ view: ARView) {
+        previewView = view
+        session.delegateQueue = queue
+        session.delegate = self
+    }
+
+    /// Builds the RealityKit mesh away from the session and UI queues. Coalescing keeps
+    /// fast ARMeshAnchor updates from creating a queue of stale, expensive previews.
+    private func scheduleLivePreview() {
+        guard accepting, !isCancelled else { return }
+        previewDirty = true
+        guard !previewBuildInFlight, !meshes.isEmpty else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now - lastPreviewBuildTime >= 1.25 else { return }
+        previewBuildInFlight = true
+        previewDirty = false
+        lastPreviewBuildTime = now
+        previewRevision &+= 1
+        let revision = previewRevision
+        let meshSnapshot = Array(meshes.values)
+        let frameSnapshot = frames
+        previewQueue.async { [weak self] in
+            let preview = LiveMeshPreviewBuilder.build(
+                meshes: meshSnapshot,
+                frames: frameSnapshot,
+                revision: revision,
+                isCancelled: { self?.isCancelled ?? true }
+            )
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                if let preview, !self.isCancelled {
+                    self.installLivePreview(preview)
+                    self.texturedTriangleCount = preview.texturedTriangleCount
+                }
+                self.queue.async {
+                    self.previewBuildInFlight = false
+                    if self.previewDirty { self.scheduleLivePreview() }
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func installLivePreview(_ preview: LiveMeshPreview) {
+        guard preview.revision >= installedPreviewRevision, !isCancelled, let previewView else { return }
+        installedPreviewRevision = preview.revision
+        previewRequests.removeAll()
+        previewTextures = previewTextures.filter { preview.textureURLs.contains($0.key) }
+        if let previewAnchor { previewView.scene.anchors.remove(previewAnchor) }
+        let anchor = AnchorEntity(world: .zero)
+        previewView.scene.anchors.append(anchor)
+        previewAnchor = anchor
+
+        for batch in preview.batches {
+            var descriptor = MeshDescriptor(name: "LiveSurface")
+            descriptor.positions = MeshBuffers.Positions(batch.positions)
+            descriptor.normals = MeshBuffers.Normals(batch.normals)
+            descriptor.textureCoordinates = MeshBuffers.TextureCoordinates(batch.textureCoordinates)
+            descriptor.primitives = .triangles(batch.indices)
+            MeshResource.generateAsync(from: [descriptor])
+                .receive(on: DispatchQueue.main)
+                .sink(
+                    receiveCompletion: { _ in },
+                    receiveValue: { [weak self, weak anchor] mesh in
+                        guard let self, let anchor, self.installedPreviewRevision == preview.revision,
+                              !self.isCancelled else { return }
+                        let entity = ModelEntity(mesh: mesh, materials: [Self.blueprintMeshMaterial()])
+                        anchor.addChild(entity)
+                        guard let textureURL = batch.textureURL else { return }
+                        if let cached = self.previewTextures[textureURL] {
+                            entity.model?.materials = [Self.texturedMeshMaterial(cached)]
+                            return
+                        }
+                        TextureResource.loadAsync(contentsOf: textureURL, withName: "surface-\(preview.revision)-\(textureURL.lastPathComponent)")
+                            .receive(on: DispatchQueue.main)
+                            .sink(
+                                receiveCompletion: { _ in },
+                                receiveValue: { [weak self, weak entity] texture in
+                                    guard let self, let entity,
+                                          self.installedPreviewRevision == preview.revision,
+                                          !self.isCancelled else { return }
+                                    self.previewTextures[textureURL] = texture
+                                    entity.model?.materials = [Self.texturedMeshMaterial(texture)]
+                                }
+                            )
+                            .store(in: &self.previewRequests)
+                    }
+                )
+                .store(in: &previewRequests)
+        }
+    }
+
+    @MainActor
+    private func clearLivePreview() {
+        previewRequests.removeAll()
+        previewTextures.removeAll()
+        installedPreviewRevision &+= 1
+        if let previewAnchor, let previewView { previewView.scene.anchors.remove(previewAnchor) }
+        previewAnchor = nil
+        texturedTriangleCount = 0
+    }
+
+    private static func blueprintMeshMaterial() -> PhysicallyBasedMaterial {
+        var material = PhysicallyBasedMaterial()
+        material.baseColor = .init(tint: UIColor(red: 0.09, green: 0.31, blue: 0.92, alpha: 1), texture: nil)
+        material.roughness = 0.85
+        material.faceCulling = .none
+        material.blending = .transparent(opacity: 0.42)
+        return material
+    }
+
+    private static func texturedMeshMaterial(_ texture: TextureResource) -> PhysicallyBasedMaterial {
+        var material = PhysicallyBasedMaterial()
+        material.baseColor = .init(tint: .white, texture: .init(texture))
+        material.roughness = 0.85
+        material.faceCulling = .none
+        return material
     }
 
     private func publish(_ update: @escaping (RoomCaptureController) -> Void) {
@@ -263,7 +403,123 @@ struct RoomSurfaceARView: UIViewRepresentable {
     func makeUIView(context: Context) -> ARView {
         let view = ARView(frame: .zero, cameraMode: .ar, automaticallyConfigureSession: false)
         view.session = controller.session
+        controller.attachPreview(view)
         return view
     }
     func updateUIView(_ uiView: ARView, context: Context) {}
+}
+
+private struct LiveMeshPreview: Sendable {
+    struct Batch: Sendable {
+        let positions: [SIMD3<Float>]
+        let normals: [SIMD3<Float>]
+        let textureCoordinates: [SIMD2<Float>]
+        let indices: [UInt32]
+        let textureURL: URL?
+    }
+
+    let revision: UInt64
+    let batches: [Batch]
+    let textureURLs: Set<URL>
+    let texturedTriangleCount: Int
+}
+
+/// Projects only a small, spatially distributed set of captured views for the live overlay.
+/// The final USDZ exporter still considers the complete frame set for higher texture coverage.
+private enum LiveMeshPreviewBuilder {
+    private struct MutableBatch {
+        var positions: [SIMD3<Float>] = []
+        var normals: [SIMD3<Float>] = []
+        var textureCoordinates: [SIMD2<Float>] = []
+        var indices: [UInt32] = []
+        var textureURL: URL?
+    }
+
+    private static let maximumTextureViews = 8
+    private static let maximumProjectionCandidates = 6
+    // Keep the interactive preview bounded even when a room approaches the full
+    // 500k-triangle capture limit. The final USDZ export still uses every face.
+    private static let maximumPreviewTriangles = 60_000
+
+    static func build(
+        meshes: [LiDARSurfaceMesh],
+        frames: [LiDARTextureFrame],
+        revision: UInt64,
+        isCancelled: () -> Bool
+    ) -> LiveMeshPreview? {
+        let previewMeshes = meshes.filter {
+            !$0.vertices.isEmpty && $0.indices.count.isMultiple(of: 3) && $0.triangleCount > 0
+        }
+        guard !previewMeshes.isEmpty else { return nil }
+        let selectedFrameIndices = spatiallyDistributedFrameIndices(count: frames.count)
+        var batches: [Int: MutableBatch] = [:]
+        var textured = 0
+        var remainingTriangles = maximumPreviewTriangles
+        var remainingMeshes = previewMeshes.count
+
+        for mesh in previewMeshes {
+            if isCancelled() { return nil }
+            guard remainingTriangles > 0 else { break }
+            let meshTriangleCount = mesh.triangleCount
+            let meshBudget = min(meshTriangleCount, max(1, remainingTriangles / remainingMeshes))
+            remainingTriangles -= meshBudget
+            remainingMeshes -= 1
+            let sampleStride = Double(meshTriangleCount) / Double(meshBudget)
+            let center = mesh.vertices.reduce(SIMD3<Float>.zero, +) / Float(mesh.vertices.count)
+            let candidates = selectedFrameIndices.sorted {
+                simd_distance_squared(frames[$0].camera.position, center)
+                    < simd_distance_squared(frames[$1].camera.position, center)
+            }.prefix(maximumProjectionCandidates)
+
+            for sample in 0..<meshBudget {
+                if sample.isMultiple(of: 1_536), isCancelled() { return nil }
+                let triangleIndex = min(meshTriangleCount - 1, Int((Double(sample) + 0.5) * sampleStride))
+                let offset = triangleIndex * 3
+                let triangle = (0..<3).map { mesh.vertices[Int(mesh.indices[offset + $0])] }
+                guard triangle.allSatisfy({ $0.x.isFinite && $0.y.isFinite && $0.z.isFinite }) else { continue }
+                let cross = simd_cross(triangle[1] - triangle[0], triangle[2] - triangle[0])
+                guard simd_length_squared(cross) > 0.0000000001 else { continue }
+                let normal = simd_normalize(cross)
+                var bestIndex = -1
+                var bestScore: Float = 0
+                var coordinates = [SIMD2<Float>](repeating: .zero, count: 3)
+                for index in candidates {
+                    guard let projection = frames[index].camera.projection(of: triangle),
+                          projection.score > bestScore else { continue }
+                    bestIndex = index
+                    bestScore = projection.score
+                    coordinates = projection.coordinates
+                }
+
+                var batch = batches[bestIndex, default: MutableBatch()]
+                if bestIndex >= 0 { batch.textureURL = frames[bestIndex].imageURL }
+                let base = UInt32(batch.positions.count)
+                batch.positions.append(contentsOf: triangle)
+                batch.normals.append(contentsOf: [normal, normal, normal])
+                batch.textureCoordinates.append(contentsOf: coordinates)
+                batch.indices.append(contentsOf: [base, base + 1, base + 2])
+                batches[bestIndex] = batch
+                if bestIndex >= 0 { textured += 1 }
+            }
+        }
+
+        let output = batches.keys.sorted().compactMap { index -> LiveMeshPreview.Batch? in
+            guard let batch = batches[index], !batch.indices.isEmpty else { return nil }
+            return LiveMeshPreview.Batch(positions: batch.positions, normals: batch.normals,
+                                         textureCoordinates: batch.textureCoordinates,
+                                         indices: batch.indices,
+                                         textureURL: index >= 0 ? batch.textureURL : nil)
+        }
+        return LiveMeshPreview(revision: revision, batches: output,
+                               textureURLs: Set(output.compactMap(\.textureURL)),
+                               texturedTriangleCount: textured)
+    }
+
+    private static func spatiallyDistributedFrameIndices(count: Int) -> [Int] {
+        guard count > maximumTextureViews else { return Array(0..<count) }
+        let denominator = Double(maximumTextureViews - 1)
+        return (0..<maximumTextureViews).map { slot in
+            Int((Double(slot) * Double(count - 1) / denominator).rounded())
+        }
+    }
 }

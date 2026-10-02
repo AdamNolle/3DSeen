@@ -131,7 +131,12 @@ public final class ComputeCoordinator: ObservableObject {
             .sink { [weak self] in self?.pendingPairingRequests = $0 }
             .store(in: &cancellables)
         pairing.$authenticatedPeerIDs
-            .sink { [weak self] in self?.authenticatedPeerIDs = $0 }
+            .sink { [weak self] peerIDs in
+                guard let self else { return }
+                let peers = peerIDs.compactMap { self.network.peerID(for: $0) }
+                self.network.updateIncomingResourceAuthorizedPeers(peers)
+                self.authenticatedPeerIDs = peerIDs
+            }
             .store(in: &cancellables)
         pairing.$trustedPeerIDs
             .sink { [weak self] in self?.trustedPeerIDs = $0 }
@@ -444,7 +449,7 @@ public final class ComputeCoordinator: ObservableObject {
             guard rawArchiveURL.pathExtension.lowercased() == "zip" else {
                 throw ScanLocalComputeError.captureArchiveHasNoImages(rawArchiveURL)
             }
-            try FileManager.default.unzipItem(at: rawArchiveURL, to: images)
+            try BoundedArchiveExtractor.extract(rawArchiveURL, to: images)
             captureQualityReport = ScanHandoffArchive.captureQualityReport(in: images)
             receivedFrames = CaptureArchiveInspector.decodableImageFrameCount(in: images)
             guard receivedFrames > 0 else {

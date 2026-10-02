@@ -8,6 +8,8 @@ public enum PLYPayloadKind: Sendable {
 /// Structural validation for PLY files crossing the device trust boundary. Geometry previews may
 /// be ASCII or binary little-endian; trained splats must use finite float32 Gaussian properties.
 public enum PLYValidator {
+    private static let maximumASCIIVertexRowBytes = 1_048_576
+
     private struct Property {
         let type: String
         let name: String
@@ -95,20 +97,25 @@ public enum PLYValidator {
         header: Header
     ) -> Bool {
         if header.format == "ascii" {
-            guard let payload = String(data: data[header.payloadOffset...], encoding: .ascii) else { return false }
-            let rows = payload.split(whereSeparator: \.isNewline)
-            guard rows.count >= header.vertexCount else { return false }
             let indices = Dictionary(uniqueKeysWithValues: header.properties.enumerated().map { ($0.element.name, $0.offset) })
             guard let x = indices["x"], let y = indices["y"], let z = indices["z"] else { return false }
-            return (0..<header.vertexCount).allSatisfy { index in
-                let values = rows[index].split(whereSeparator: \.isWhitespace)
+            var cursor = header.payloadOffset
+            for _ in 0..<header.vertexCount {
+                while cursor < data.count, data[cursor] == 10 || data[cursor] == 13 { cursor += 1 }
+                guard cursor < data.count else { return false }
+                let rowStart = cursor
+                while cursor < data.count, data[cursor] != 10, data[cursor] != 13 { cursor += 1 }
+                guard cursor - rowStart <= maximumASCIIVertexRowBytes,
+                      let row = String(data: data[rowStart..<cursor], encoding: .ascii) else { return false }
+                let values = row.split(whereSeparator: \.isWhitespace)
                 guard values.count == header.properties.count, max(x, y, z) < values.count,
                       let vx = Double(values[x]), let vy = Double(values[y]), let vz = Double(values[z]) else {
                     return false
                 }
-                return vx.isFinite && vy.isFinite && vz.isFinite
-                    && values.allSatisfy { Double($0)?.isFinite == true }
+                guard vx.isFinite, vy.isFinite, vz.isFinite,
+                      values.allSatisfy({ Double($0)?.isFinite == true }) else { return false }
             }
+            return true
         }
         guard header.vertexStride > 0,
               header.vertexCount <= (data.count - header.payloadOffset) / header.vertexStride else { return false }

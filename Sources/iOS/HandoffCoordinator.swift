@@ -113,7 +113,12 @@ final class IOSHandoffCoordinator: ObservableObject {
             .sink { [weak self] in self?.pendingPairingRequests = $0 }
             .store(in: &cancellables)
         selectedPairing.$authenticatedPeerIDs
-            .sink { [weak self] in self?.reconcileAuthenticatedPeerIDs($0) }
+            .sink { [weak self] peerIDs in
+                guard let self else { return }
+                let peers = peerIDs.compactMap { self.transport.peerID(for: $0) }
+                self.transport.updateIncomingResourceAuthorizedPeers(peers)
+                self.reconcileAuthenticatedPeerIDs(peerIDs)
+            }
             .store(in: &cancellables)
         selectedPairing.$trustedPeerIDs
             .sink { [weak self] in self?.trustedPeerIDs = $0 }
