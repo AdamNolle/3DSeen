@@ -242,6 +242,7 @@ public final class ModelExporter {
         outputDirectory: URL? = nil
     ) throws -> URL {
         let directory = outputDirectory ?? ScanExportLocation.directory(for: request.scanID)
+            .appendingPathComponent(format.fileExtension, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let outputURL = directory
             .appendingPathComponent(request.fileBaseName)
@@ -300,6 +301,7 @@ public final class ModelExporter {
         guard MDLAsset.canExportFileExtension(format.fileExtension) else {
             throw ExportError.unsupportedByModelIO(format.fileExtension)
         }
+        asset.loadTextures()
         let fm = FileManager.default
         let stagingDirectory = outputURL.deletingLastPathComponent()
             .appendingPathComponent(".pending-export-\(UUID().uuidString)", isDirectory: true)

@@ -38,7 +38,7 @@ This document is the canonical repository-level definition of production behavio
 - Persisted models, measurements, and Library thumbnails survive relaunch and sandbox relocation through scan-relative manifests. Photo captures derive a bounded thumbnail from a validated real frame outside the raw archive; no-photo modes use a semantic mode/status fallback rather than fabricated geometry.
 - Geometry previews are labeled separately from trained Gaussian splats.
 - iOS/iPadOS support USDZ pass-through and ModelIO USD, OBJ, STL, and PLY export. macOS additionally supports GLB and FBX through an installed Blender runtime.
-- Export replacement is staged and transactional. Formats unavailable on a platform must not be advertised there.
+- Export replacement is staged and transactional. Native conversions load texture resources before writing. App-managed exports isolate each format in its own directory; iOS/iPadOS sharing packages models with companion materials/images into ZIP so relative references survive transfer. Self-contained exports retain direct sharing. Formats unavailable on a platform must not be advertised there.
 - Measurements are saved to both the database and portable manifest with rollback on failure. Scan display names must never become unvalidated filesystem paths.
 
 ## Persistence and integrity

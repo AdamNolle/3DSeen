@@ -8,7 +8,7 @@ Finish pauses capture and projects camera images onto the captured triangles, us
 
 Review shows the actual triangle and textured-triangle counts. Inspect the model in Viewer using Original Texture, then share USDZ from Export. The optional captured surface texture section shares PNG snapshots separately. Deleting source capture frames leaves the model and saved snapshots intact.
 
-To view a completed room on Mac, transfer the USDZ through Files or AirDrop and choose **Import room model** in the Mac library. The import preserves embedded geometry and textures, retains its own copy, and leaves the selected source file intact. Separate snapshots can be transferred as PNG files.
+To view a completed room on Mac, transfer the USDZ through Files or AirDrop and choose **Import room model** in the Mac library. The import preserves embedded geometry and textures, retains its own copy, and leaves the selected source file intact. Separate snapshots can be transferred as PNG files. For OBJ/OpenUSD exports with companion material or image files, Share package sends a ZIP containing the model and its dependencies; unzip it together before opening the model.
 
 Capture is bounded to 256 texture camera keyframes and 500,000 mesh triangles to limit memory and export cost. Large spaces should be captured in sections. These limits do not guarantee complete coverage or a particular performance level; check the result before discarding source data.
 

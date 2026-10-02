@@ -2,6 +2,10 @@
 
 Last updated: 2026-10-01
 
+## October 2 export sharing regression
+
+Inspection showed the iOS share sheet omitted OBJ material sidecars. A native textured LiDAR fixture additionally reproduced missing image files in ModelIO OBJ output before texture resources were loaded. Native conversions now load these resources before writing, app-managed exports isolate format directories, and exports with companion files share a ZIP containing the model, materials, images, and any measurement CSV. Direct self-contained sharing remains available. All 66 local Mac tests pass. The portability fixture unpacks OBJ/material/image files, deletes all original source assets, and successfully loads a nonempty texture from the shared copy. Additional package tests cover repeated sharing, omission of obsolete measurements, and exclusion of other formats/source frames.
+
 ## October 2 texture-selection regression
 
 A reproduced exporter bug limited every surface to the 32 nearest camera positions. If these views faced away or were occluded, a usable farther view was ignored and the scan could fail with `noTextures` or retain avoidable gray faces. The exporter now searches farther views for each face when nearby projections fail, while retaining the nearby-view fast path. Camera positions are computed once instead of repeatedly inverted during sorting. Regression fixtures cover both an entirely rejected scan and a separately occluded face. The first fixture failed with `noTextures` before the fix; all 62 local Mac tests pass after the fix, including ten surface/export/import tests. Strict lint and deterministic project generation also pass.

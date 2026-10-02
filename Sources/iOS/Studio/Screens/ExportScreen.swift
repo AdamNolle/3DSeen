@@ -14,6 +14,7 @@ struct ExportScreen: View {
     @State private var isExporting = false
     @State private var exportedURL: URL?
     @State private var exportedMeasurementURL: URL?
+    @State private var exportedSharePackageURL: URL?
     @State private var errorMessage: String?
     @State private var showShareSheet = false
     @State private var showTextureShareSheet = false
@@ -144,7 +145,8 @@ struct ExportScreen: View {
                       : "Wrote model and measurements CSV", systemImage: "checkmark.circle")
                     .font(.sf(13)).foregroundStyle(theme.good)
                 Spacer()
-                StButton(title: "Share", kind: .secondary, size: .sm, icon: "share") { showShareSheet = true }
+                StButton(title: exportedSharePackageURL == nil ? "Share" : "Share package",
+                         kind: .secondary, size: .sm, icon: "share") { showShareSheet = true }
             }
         } else if activeScan?.hasRenderableAsset != true {
             Text("Compute the selected scan before exporting.").font(.sf(13)).foregroundStyle(theme.warn)
@@ -167,6 +169,7 @@ struct ExportScreen: View {
         isExporting = true
         exportedURL = nil
         exportedMeasurementURL = nil
+        exportedSharePackageURL = nil
         errorMessage = nil
         let selectedFormat = format
         let request = ModelExportRequest(
@@ -190,7 +193,8 @@ struct ExportScreen: View {
                             named: request.fileBaseName,
                             to: output.deletingLastPathComponent()
                         )
-                    return (output, measurementOutput)
+                    let sharePackage = try ModelExportSharePackage.prepare(for: output, measurementURL: measurementOutput)
+                return (output, measurementOutput, sharePackage)
                 }.value
                 try Task.checkCancellation()
                 let assetStore = try ScanAssetStore()
@@ -203,6 +207,7 @@ struct ExportScreen: View {
                 }
                 exportedURL = result.0
                 exportedMeasurementURL = result.1
+            exportedSharePackageURL = result.2
             } catch is CancellationError {
                 errorMessage = "Export cancelled."
             } catch {
@@ -212,6 +217,7 @@ struct ExportScreen: View {
     }
 
     private func shareItems(for modelURL: URL) -> [Any] {
+        if let exportedSharePackageURL { return [exportedSharePackageURL] }
         var items: [Any] = [modelURL]
         if let exportedMeasurementURL { items.append(exportedMeasurementURL) }
         return items

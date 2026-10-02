@@ -175,6 +175,42 @@ final class LiDARSurfaceTests: XCTestCase {
     }
     #endif
 
+    func testOBJSharePackageIncludesNativeMaterialAndTextureDependencies() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let image = try texture(in: directory)
+        let model = directory.appendingPathComponent("room.usdz")
+        _ = try LiDARTextureExporter.export(
+            meshes: [meshIncludingUnobservedFace()],
+            frames: [LiDARTextureFrame(imageURL: image, camera: camera(depth: 2))], to: model)
+        let exportDirectory = directory.appendingPathComponent("exports/obj", isDirectory: true)
+        try FileManager.default.createDirectory(at: exportDirectory, withIntermediateDirectories: true)
+        let output = exportDirectory.appendingPathComponent("room.obj")
+        try ModelExporter().export(sourceModel: model, to: .obj, outputURL: output)
+        let package = try XCTUnwrap(ModelExportSharePackage.prepare(for: output, measurementURL: nil))
+        let archive = try Archive(url: package, accessMode: .read)
+        XCTAssertTrue(archive.contains { $0.path == "room.obj" })
+        XCTAssertTrue(archive.contains { $0.path == "room.mtl" })
+        XCTAssertTrue(archive.contains { ["png", "jpg", "jpeg"].contains(URL(fileURLWithPath: $0.path).pathExtension) },
+                      "Shared OBJ must include its exported texture image.")
+        XCTAssertFalse(archive.contains { $0.path == "room.usdz" || $0.path.contains("SharePackages") })
+        let relocated = directory.appendingPathComponent("relocated")
+        try FileManager.default.unzipItem(at: package, to: relocated)
+        try FileManager.default.removeItem(at: exportDirectory)
+        try FileManager.default.removeItem(at: model)
+        try FileManager.default.removeItem(at: image)
+        let asset = MDLAsset(url: relocated.appendingPathComponent("room.obj"))
+        asset.loadTextures()
+        let meshes = asset.childObjects(of: MDLMesh.self) as? [MDLMesh] ?? []
+        let textures = meshes.flatMap { mesh in
+            (mesh.submeshes as? [MDLSubmesh] ?? []).compactMap {
+                $0.material?.property(with: .baseColor)?.textureSamplerValue?.texture
+            }
+        }
+        XCTAssertFalse(textures.isEmpty, "Shared OBJ must resolve its captured texture after all source assets are removed.")
+        XCTAssertTrue(textures.contains { $0.dimensions.x > 0 && $0.dimensions.y > 0 })
+    }
+
     private func camera(depth: Float, worldToCamera: simd_float4x4 = matrix_identity_float4x4) -> LiDARTextureCamera {
         LiDARTextureCamera(worldToCamera: worldToCamera,
                            intrinsics: simd_float3x3(columns: (SIMD3(100, 0, 0), SIMD3(0, 100, 0), SIMD3(100, 100, 1))),

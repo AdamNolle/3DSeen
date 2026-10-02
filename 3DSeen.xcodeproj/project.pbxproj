@@ -46,6 +46,7 @@
 		3AEE80DA890B13896C22D33B /* ProcessingStateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69735CC14F7457670ECBD7C6 /* ProcessingStateMachine.swift */; };
 		3B1475DB7A4A31A8A491AC70 /* LiveCaptureHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = F85DDBDD6E873DC5AAF7C124 /* LiveCaptureHUD.swift */; };
 		3F8832F31EF44497117BAE69 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = B8A7E315EAB4A35CDE7FAF4A /* ZIPFoundation */; };
+		407EA983A31F9A0DB6B26D63 /* ModelExportSharePackage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5890050AC3403EB4697B582 /* ModelExportSharePackage.swift */; };
 		4095D1BC6D04B6BDC2CF1CD0 /* CompactSplatFileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09C9FD9CDF8F18FC70EF9B3E /* CompactSplatFileTests.swift */; };
 		4467A3C868558569446D39A1 /* CaptureScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07651B3FCF956B10B87C371 /* CaptureScreen.swift */; };
 		45B8B960150491FC7CE47919 /* GuidedObjectCaptureController+Writing.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC14915AF3AE9245DB86A3D8 /* GuidedObjectCaptureController+Writing.swift */; };
@@ -99,6 +100,7 @@
 		8E700DABEC216E751BB48DA2 /* NetworkHandoffManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF6140FFD36ADB270491891B /* NetworkHandoffManager.swift */; };
 		8FD1DFD6480E1451FA3A84AF /* ProcessingStateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69735CC14F7457670ECBD7C6 /* ProcessingStateMachine.swift */; };
 		960E76F119F182BF6D68E553 /* BlenderModelConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB80CB2523BFE5E9C74BBFBB /* BlenderModelConverter.swift */; };
+		963BA531C1E777C45A47EAE4 /* ModelExportSharePackageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAFF5950B8FF0B71FAB5CC2D /* ModelExportSharePackageTests.swift */; };
 		963C111EC42D504BC96AB7DE /* BriefingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BEF257A4B59A9E6793F948E /* BriefingScreen.swift */; };
 		96C455519E0804F71F460900 /* StudioRender.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B53953E0069367BFBAF55D /* StudioRender.swift */; };
 		99193E0272843C4E65F36BCE /* StateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5D2EB4650ACC4A0FB016D7 /* StateMachineTests.swift */; };
@@ -114,6 +116,7 @@
 		ACB180BF6FB8355B721C6C8A /* CaptureQualityAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E98F370212A0EB3C878F8F5D /* CaptureQualityAnalyzer.swift */; };
 		AE8F535CD9B1D83E75355533 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFCC585299A17E4BD48468C3 /* ContentView.swift */; };
 		AF5998B414E507B278960DEA /* ComputeCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D83DD0DC72326B02DADE40A /* ComputeCoordinator.swift */; };
+		B3CEF8F359F33CB80B9FA481 /* ModelExportSharePackageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAFF5950B8FF0B71FAB5CC2D /* ModelExportSharePackageTests.swift */; };
 		B3D3A2377AD8011EF0B4475E /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FF65174650149D9D9FAAADD /* Haptics.swift */; };
 		B459ACDE49C342F74DC8341C /* LiDARCaptureBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AF02043379E12BBD1AE8BA7 /* LiDARCaptureBundle.swift */; };
 		B6C39E0C36A28846E3B5A9BD /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E146E7937333AE7D7FFFDA36 /* SettingsStore.swift */; };
@@ -132,6 +135,7 @@
 		C417A5ED67ABE1893B9627B4 /* GuidedScanCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44807A4146F6D3C1EE584B6D /* GuidedScanCore.swift */; };
 		C7EE7BF07BBF072BCF3950FD /* HandoffTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E9069508A6BB2A6AF3157E7 /* HandoffTransport.swift */; };
 		C9AD59FF6F58547E4021D6B9 /* ObjectCaptureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE453E975B978103D45FAD /* ObjectCaptureEngine.swift */; };
+		CE3394A7355DFEBA52A71ED7 /* ModelExportSharePackage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5890050AC3403EB4697B582 /* ModelExportSharePackage.swift */; };
 		CFD0500359BA71DF96DAA76B /* 3DSeenIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = CA8798C371C22F3700560089 /* 3DSeenIcon.icon */; };
 		D0CBA0375333C13FC38AFBFF /* ComputeOption.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70A9B012C4A9D6C001FE697B /* ComputeOption.swift */; };
 		D352A51421B97389F39FD80A /* HandoffProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60DF3F918AC67A5FC851F598 /* HandoffProtocol.swift */; };
@@ -255,6 +259,7 @@
 		B10EE64B5BAD71B2E728E7B9 /* 3DSeen-iOSUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "3DSeen-iOSUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		B290292242D89550970068F4 /* ScanLifecycleManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanLifecycleManagerTests.swift; sourceTree = "<group>"; };
 		B31CB2BDB4AAA6266CA396D7 /* PhotogrammetryRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotogrammetryRunner.swift; sourceTree = "<group>"; };
+		BAFF5950B8FF0B71FAB5CC2D /* ModelExportSharePackageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelExportSharePackageTests.swift; sourceTree = "<group>"; };
 		BB84204109758F633BF5CD3E /* LiDARSurfaceMesh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiDARSurfaceMesh.swift; sourceTree = "<group>"; };
 		BBC667D7ECC9E10091C643D0 /* StudioChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioChrome.swift; sourceTree = "<group>"; };
 		C06A568A740BADD32AF158C7 /* MacComputedScan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacComputedScan.swift; sourceTree = "<group>"; };
@@ -283,6 +288,7 @@
 		F211D1F95F1137E6ED3888EC /* 3DSeenApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = 3DSeenApp.swift; sourceTree = "<group>"; };
 		F2AC060B0BE18A703CEF83F1 /* AIPBRMaterialEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIPBRMaterialEstimator.swift; sourceTree = "<group>"; };
 		F4B53953E0069367BFBAF55D /* StudioRender.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioRender.swift; sourceTree = "<group>"; };
+		F5890050AC3403EB4697B582 /* ModelExportSharePackage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelExportSharePackage.swift; sourceTree = "<group>"; };
 		F5CD56748A9DBC6EEF36004D /* ExportScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportScreen.swift; sourceTree = "<group>"; };
 		F61C5D857D6ED1840F11ADA5 /* 3DSeen-macOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "3DSeen-macOS.entitlements"; sourceTree = "<group>"; };
 		F7F1EBB08D5A1806B90E8DB7 /* SplatGeneratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplatGeneratorTests.swift; sourceTree = "<group>"; };
@@ -442,6 +448,7 @@
 			isa = PBXGroup;
 			children = (
 				E047A386A69A590077D0400E /* ModelExporter.swift */,
+				F5890050AC3403EB4697B582 /* ModelExportSharePackage.swift */,
 			);
 			path = Export;
 			sourceTree = "<group>";
@@ -465,6 +472,7 @@
 				09C9FD9CDF8F18FC70EF9B3E /* CompactSplatFileTests.swift */,
 				4DC3BC3C83E93C06B3ECD3AA /* LiDARSurfaceTests.swift */,
 				140DFCB52913AB99BFE9BF97 /* MeasurementExporterTests.swift */,
+				BAFF5950B8FF0B71FAB5CC2D /* ModelExportSharePackageTests.swift */,
 				995DF836E3753EF01920B344 /* PLYValidatorTests.swift */,
 			);
 			name = Shared;
@@ -753,6 +761,7 @@
 				A04ED326F276D501FEEE32FC /* ComputeStageTests.swift in Sources */,
 				72E22D3B6EDC55E670C46DB5 /* LiDARSurfaceTests.swift in Sources */,
 				7469DDB0A2A2D530D32E528A /* MeasurementExporterTests.swift in Sources */,
+				963BA531C1E777C45A47EAE4 /* ModelExportSharePackageTests.swift in Sources */,
 				73EBDAC4C609843473DF511A /* NerfstudioRuntimeInstallerTests.swift in Sources */,
 				79C086AFCCC18DB0BB51AA47 /* PLYValidatorTests.swift in Sources */,
 				A3FB31142EA340023CEFDDFC /* SettingsStoreTests.swift in Sources */,
@@ -774,6 +783,7 @@
 				8509104342481E9EFAD8E3BD /* HandoffTrustTests.swift in Sources */,
 				7CE111AEDEE1E36C83DE445B /* LiDARSurfaceTests.swift in Sources */,
 				84F5BF8D44C92AF360489817 /* MeasurementExporterTests.swift in Sources */,
+				B3CEF8F359F33CB80B9FA481 /* ModelExportSharePackageTests.swift in Sources */,
 				FBAC5E9911D678E6EAF604D1 /* ModelExporterTests.swift in Sources */,
 				AA464BDF86FCE76EDD5F882E /* PBRMaterialTests.swift in Sources */,
 				84B608326623E78177B205E4 /* PLYValidatorTests.swift in Sources */,
@@ -818,6 +828,7 @@
 				0EC4ACA3A3EB77203CEFBFB8 /* MacViewerPane.swift in Sources */,
 				B6C852D709841A274D0C717A /* MacWorkspaceSidebar.swift in Sources */,
 				AAF5D0F35FCEB5BB7F1AE0A8 /* MaterialOverrideLibrary.swift in Sources */,
+				CE3394A7355DFEBA52A71ED7 /* ModelExportSharePackage.swift in Sources */,
 				FD43883779E29AB156CF5093 /* ModelExporter.swift in Sources */,
 				B801D9F976BB29CD59A42B23 /* ModelGeometryInspector.swift in Sources */,
 				7E11C5520F3814ACCD8B2C35 /* NerfstudioRuntimeInstaller.swift in Sources */,
@@ -887,6 +898,7 @@
 				EB2C0D73EEDCA21A965BA071 /* LocalQueueManager.swift in Sources */,
 				383F4B63670447CFCD1B1E6C /* MaterialOverrideLibrary.swift in Sources */,
 				9E55AEFAD19B5B699CDB4281 /* ModePickerScreen.swift in Sources */,
+				407EA983A31F9A0DB6B26D63 /* ModelExportSharePackage.swift in Sources */,
 				7B5F4899EDD7F2DD18D1774A /* ModelExporter.swift in Sources */,
 				70DA98E80BA39694368960E9 /* ModelGeometryInspector.swift in Sources */,
 				8E700DABEC216E751BB48DA2 /* NetworkHandoffManager.swift in Sources */,
