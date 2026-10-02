@@ -2,6 +2,12 @@
 
 Last updated: 2026-10-01
 
+## October 2 texture-selection regression
+
+A reproduced exporter bug limited every surface to the 32 nearest camera positions. If these views faced away or were occluded, a usable farther view was ignored and the scan could fail with `noTextures` or retain avoidable gray faces. The exporter now searches farther views for each face when nearby projections fail, while retaining the nearby-view fast path. Camera positions are computed once instead of repeatedly inverted during sorting. Regression fixtures cover both an entirely rejected scan and a separately occluded face. The first fixture failed with `noTextures` before the fix; all 62 local Mac tests pass after the fix, including ten surface/export/import tests. Strict lint and deterministic project generation also pass.
+
+The prior notarized Mac installation was missing from `/Applications` at the start of the October 2 check. Its October 1 release ZIP and archive remain available; current deployment evidence must be verified independently after the new build. Older duplicate project/plist files were preserved outside the source tree in `~/Library/Developer/Xcode/SourceBackups/3DSeen-duplicates-20261002` so regeneration does not accidentally include stale metadata.
+
 ## Textured LiDAR room capture — October 1
 
 The new Rooms & Spaces engine replaces parametric RoomPlan boxes with real ARKit mesh triangles and depth-checked RGB textures. It adds reusable PNG surface snapshots, direct on-device USDZ completion, measured face counts, review guidance, texture sharing, and Mac room-model import. See [capture guide](LIDAR-ROOM-CAPTURE.md).

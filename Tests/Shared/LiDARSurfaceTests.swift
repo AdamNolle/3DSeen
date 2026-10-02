@@ -39,6 +39,39 @@ final class LiDARSurfaceTests: XCTestCase {
         XCTAssertNil(camera(depth: 2).project(SIMD3(8, 0, -2)))
     }
 
+    func testExportUsesFartherVisibleCameraWhenClosestViewsFaceAway() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let image = try texture(in: directory)
+        var backwards = matrix_identity_float4x4
+        backwards.columns.0.x = -1
+        backwards.columns.2.z = -1
+        var farther = matrix_identity_float4x4
+        farther.columns.3.z = 1
+        let nearFrame = LiDARTextureFrame(imageURL: image, camera: camera(depth: 2, worldToCamera: backwards))
+        let visibleFrame = LiDARTextureFrame(imageURL: image, camera: camera(depth: 3, worldToCamera: farther.inverse))
+        let frames = Array(repeating: nearFrame, count: 32) + [visibleFrame]
+        let result = try LiDARTextureExporter.export(
+            meshes: [meshIncludingUnobservedFace()], frames: frames, to: directory.appendingPathComponent("room.usdz"))
+        XCTAssertEqual(result.triangleCount, 2)
+        XCTAssertEqual(result.texturedTriangleCount, 1)
+    }
+
+    func testExportFindsAlternateViewForOnlyTheOccludedFace() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let image = try texture(in: directory)
+        var farther = matrix_identity_float4x4
+        farther.columns.3.z = 1
+        let nearFrame = LiDARTextureFrame(imageURL: image, camera: camera(depth: 2))
+        let alternate = LiDARTextureFrame(imageURL: image, camera: camera(depth: 5, worldToCamera: farther.inverse))
+        let result = try LiDARTextureExporter.export(
+            meshes: [meshIncludingUnobservedFace()], frames: Array(repeating: nearFrame, count: 32) + [alternate],
+            to: directory.appendingPathComponent("room.usdz"))
+        XCTAssertEqual(result.triangleCount, 2)
+        XCTAssertEqual(result.texturedTriangleCount, 2)
+    }
+
     func testExportEmbedsTextureAndPreservesIrregularAndUnobservedGeometry() throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

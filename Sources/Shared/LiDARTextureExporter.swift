@@ -25,15 +25,16 @@ enum LiDARTextureExporter {
         var batches: [Int: Batch] = [:]
         var total = 0
         var textured = 0
+        let cameraPositions = frames.map { $0.camera.position }
         for mesh in meshes {
             if isCancelled() { throw CancellationError() }
             try mesh.validate()
             let center = mesh.vertices.reduce(SIMD3<Float>.zero, +) / Float(mesh.vertices.count)
-            // Limit per-face search cost while considering viewpoints around this mesh chunk.
+            // Try nearby views first, but retain farther views when those cannot see a face.
             let candidates = frames.indices.sorted {
-                simd_distance_squared(frames[$0].camera.position, center)
-                    < simd_distance_squared(frames[$1].camera.position, center)
-            }.prefix(32)
+                simd_distance_squared(cameraPositions[$0], center)
+                    < simd_distance_squared(cameraPositions[$1], center)
+            }
             for offset in stride(from: 0, to: mesh.indices.count, by: 3) {
                 if offset.isMultiple(of: 192), isCancelled() { throw CancellationError() }
                 let triangle = (0..<3).map { mesh.vertices[Int(mesh.indices[offset + $0])] }
@@ -42,7 +43,8 @@ enum LiDARTextureExporter {
                 var bestIndex = -1
                 var bestScore: Float = 0
                 var coordinates = [SIMD2<Float>](repeating: .zero, count: 3)
-                for index in candidates {
+                for (rank, index) in candidates.enumerated() {
+                    if rank >= 32, bestIndex >= 0 { break }
                     guard let projection = frames[index].camera.projection(of: triangle),
                           projection.score > bestScore else { continue }
                     bestIndex = index
