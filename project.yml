@@ -47,11 +47,11 @@ targets:
         UIRequiresFullScreen: false
     settings:
       base:
-        DEVELOPMENT_TEAM: "" # Set in Xcode
+        DEVELOPMENT_TEAM: D4723G626P
         ENABLE_PREVIEWS: YES
         SWIFT_VERSION: 5.9
         MARKETING_VERSION: 1.0.0
-        CURRENT_PROJECT_VERSION: 1
+        CURRENT_PROJECT_VERSION: 2
         TARGETED_DEVICE_FAMILY: "1,2"
         PRODUCT_MODULE_NAME: ThreeDSeen
         ASSETCATALOG_COMPILER_APPICON_NAME: 3DSeenIcon
@@ -108,11 +108,11 @@ targets:
           - "_3dseen._udp"
     settings:
       base:
-        DEVELOPMENT_TEAM: "" # Set in Xcode
+        DEVELOPMENT_TEAM: RSDJXF7DXN
         ENABLE_PREVIEWS: YES
         SWIFT_VERSION: 5.9
         MARKETING_VERSION: 1.0.0
-        CURRENT_PROJECT_VERSION: 1
+        CURRENT_PROJECT_VERSION: 2
         ENABLE_HARDENED_RUNTIME: YES
         PRODUCT_MODULE_NAME: ThreeDSeenMac
         CODE_SIGN_ENTITLEMENTS: Sources/macOS/3DSeen-macOS.entitlements
