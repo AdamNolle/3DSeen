@@ -752,7 +752,7 @@
 						TestTargetID = A4887E1AD8B7BA1740FD76AD;
 					};
 					A4887E1AD8B7BA1740FD76AD = {
-						DevelopmentTeam = D4723G626P;
+						DevelopmentTeam = RSDJXF7DXN;
 					};
 					C8B195E2C4D9380B04FC7074 = {
 						DevelopmentTeam = RSDJXF7DXN;
