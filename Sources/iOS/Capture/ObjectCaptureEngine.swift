@@ -39,7 +39,7 @@ struct ObjectCaptureEngine: View {
         .background(Color.black)
         .sensoryFeedback(
             .impact(weight: .light, intensity: 0.55),
-            trigger: capture.snapshot.coverageHapticMilestone
+            trigger: capture.snapshot.coverageHapticPulseRevision
         )
         .onAppear { capture.start() }
         .onDisappear { capture.stop(discardUnsealedCapture: true) }
@@ -245,7 +245,7 @@ struct ObjectCaptureEngine: View {
         }
         switch capture.snapshot.pointSource {
         case .lidarDepth:
-            return "Dots stay pinned in 3D; light haptics mark new surface samples."
+            return "Dots stay pinned in 3D; a gentle tap marks newly mapped surface area."
         case .visualFeatures:
             return "Screen-space guidance only; LiDAR depth is unavailable."
         case nil:

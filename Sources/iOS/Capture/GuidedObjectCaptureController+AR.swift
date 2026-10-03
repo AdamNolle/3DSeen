@@ -111,6 +111,13 @@ extension GuidedObjectCaptureController {
         let coverageState = lock.withLock { () -> CoverageFramePublication in
             _ = surfaceCoverage.insert(pointResult.surfacePoints)
             let shouldPublish = snapshotPublicationGate.shouldPublish(at: frame.timestamp)
+            if shouldPublish,
+               hapticScheduler.nextPulse(
+                   at: frame.timestamp,
+                   coverageMilestone: surfaceCoverage.hapticMilestone
+               ) != nil {
+                coverageHapticPulseRevision &+= 1
+            }
             let shouldPublishPoints = shouldPublish
                 && surfaceCoverage.displayRevision != lastPublishedSurfaceRevision
                 && frame.timestamp - lastSurfacePublicationTime >= 0.25
@@ -122,7 +129,7 @@ extension GuidedObjectCaptureController {
             return CoverageFramePublication(
                 shouldPublish: shouldPublish,
                 count: surfaceCoverage.uniqueSurfaceCellCount,
-                hapticMilestone: surfaceCoverage.hapticMilestone,
+                hapticPulseRevision: coverageHapticPulseRevision,
                 isAtSampleLimit: surfaceCoverage.isAtSampleLimit,
                 points: points
             )
@@ -133,7 +140,7 @@ extension GuidedObjectCaptureController {
                 snapshot.points = pointResult.points
                 snapshot.pointSource = pointResult.source
                 snapshot.surfacePointCount = coverageState.count
-                snapshot.coverageHapticMilestone = coverageState.hapticMilestone
+                snapshot.coverageHapticPulseRevision = coverageState.hapticPulseRevision
                 snapshot.surfaceCoverageLimitReached = coverageState.isAtSampleLimit
                 if let surfacePoints = coverageState.points {
                     snapshot.surfacePoints = surfacePoints

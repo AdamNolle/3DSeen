@@ -8,7 +8,7 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
     struct CoverageFramePublication {
         let shouldPublish: Bool
         let count: Int
-        let hapticMilestone: Int
+        let hapticPulseRevision: Int
         let isAtSampleLimit: Bool
         let points: [SIMD3<Float>]?
     }
@@ -63,6 +63,8 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
     var lastDetectionTime: TimeInterval = -.infinity
     var detectionInFlight = false
     var surfaceCoverage = GuidedSurfaceCoverage()
+    var hapticScheduler = CaptureHapticScheduler()
+    var coverageHapticPulseRevision = 0
     var snapshotPublicationGate = GuidedSnapshotPublicationGate()
     var lastPublishedSurfaceRevision: UInt64 = 0
     var lastSurfacePublicationTime: TimeInterval = -.infinity
@@ -149,6 +151,8 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
             latestFrame = nil
             nextFrameIndex = 0
             surfaceCoverage.reset()
+            hapticScheduler = CaptureHapticScheduler()
+            coverageHapticPulseRevision = 0
             snapshotPublicationGate.reset()
             lastPublishedSurfaceRevision = 0
             lastSurfacePublicationTime = -.infinity
@@ -176,7 +180,7 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
             $0.surfacePoints = []
             $0.surfacePointRevision &+= 1
             $0.surfacePointCount = 0
-            $0.coverageHapticMilestone = 0
+            $0.coverageHapticPulseRevision = 0
             $0.surfaceCoverageLimitReached = false
             $0.isFinishing = false
         }

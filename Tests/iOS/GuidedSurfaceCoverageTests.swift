@@ -183,6 +183,15 @@ final class GuidedSurfaceCoverageTests: XCTestCase {
         XCTAssertEqual(coverage.hapticMilestone, 1)
     }
 
+    func testLiveCoverageHapticsCoalesceRapidSurfaceMilestones() {
+        var scheduler = CaptureHapticScheduler(minimumInterval: 1.1)
+
+        XCTAssertEqual(scheduler.nextPulse(at: 1, coverageMilestone: 1), .surfaceCoverage)
+        XCTAssertNil(scheduler.nextPulse(at: 1.2, coverageMilestone: 5))
+        XCTAssertEqual(scheduler.nextPulse(at: 2.11, coverageMilestone: 5), .surfaceCoverage)
+        XCTAssertNil(scheduler.nextPulse(at: 2.2, coverageMilestone: 5))
+    }
+
     func testCoverageCanUseRoomScaleHapticMilestones() {
         var coverage = GuidedSurfaceCoverage(firstHapticThreshold: 200, hapticInterval: 400)
         let points = (0..<600).map { index in
