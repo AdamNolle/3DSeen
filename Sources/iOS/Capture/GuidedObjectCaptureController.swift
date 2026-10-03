@@ -9,6 +9,7 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
         let shouldPublish: Bool
         let count: Int
         let hapticMilestone: Int
+        let isAtSampleLimit: Bool
         let points: [SIMD3<Float>]?
     }
 
@@ -63,7 +64,7 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
     var detectionInFlight = false
     var surfaceCoverage = GuidedSurfaceCoverage()
     var snapshotPublicationGate = GuidedSnapshotPublicationGate()
-    var lastPublishedSurfaceCount = 0
+    var lastPublishedSurfaceRevision: UInt64 = 0
     var lastSurfacePublicationTime: TimeInterval = -.infinity
     var writerBacklog = 0
     var nextFrameIndex = 0
@@ -149,7 +150,7 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
             nextFrameIndex = 0
             surfaceCoverage.reset()
             snapshotPublicationGate.reset()
-            lastPublishedSurfaceCount = 0
+            lastPublishedSurfaceRevision = 0
             lastSurfacePublicationTime = -.infinity
         }
         if !previousCapture.1 {
@@ -175,6 +176,7 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
             $0.surfacePoints = []
             $0.surfacePointCount = 0
             $0.coverageHapticMilestone = 0
+            $0.surfaceCoverageLimitReached = false
             $0.isFinishing = false
         }
         DispatchQueue.main.async { [weak self] in

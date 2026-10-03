@@ -112,17 +112,18 @@ extension GuidedObjectCaptureController {
             _ = surfaceCoverage.insert(pointResult.surfacePoints)
             let shouldPublish = snapshotPublicationGate.shouldPublish(at: frame.timestamp)
             let shouldPublishPoints = shouldPublish
-                && surfaceCoverage.points.count != lastPublishedSurfaceCount
+                && surfaceCoverage.displayRevision != lastPublishedSurfaceRevision
                 && frame.timestamp - lastSurfacePublicationTime >= 0.25
             let points = shouldPublishPoints ? surfaceCoverage.points : nil
             if shouldPublishPoints {
-                lastPublishedSurfaceCount = surfaceCoverage.points.count
+                lastPublishedSurfaceRevision = surfaceCoverage.displayRevision
                 lastSurfacePublicationTime = frame.timestamp
             }
             return CoverageFramePublication(
                 shouldPublish: shouldPublish,
-                count: surfaceCoverage.points.count,
+                count: surfaceCoverage.uniqueSurfaceCellCount,
                 hapticMilestone: surfaceCoverage.hapticMilestone,
+                isAtSampleLimit: surfaceCoverage.isAtSampleLimit,
                 points: points
             )
         }
@@ -133,11 +134,14 @@ extension GuidedObjectCaptureController {
                 snapshot.pointSource = pointResult.source
                 snapshot.surfacePointCount = coverageState.count
                 snapshot.coverageHapticMilestone = coverageState.hapticMilestone
+                snapshot.surfaceCoverageLimitReached = coverageState.isAtSampleLimit
                 if let surfacePoints = coverageState.points {
                     snapshot.surfacePoints = surfacePoints
                 }
                 snapshot.phase = subjectProjection == nil ? .seekingSubject : .capturing
-                if !candidate.trackingIsNormal {
+                if coverageState.isAtSampleLimit {
+                    snapshot.instruction = "Surface sample limit reached. Finish this scan."
+                } else if !candidate.trackingIsNormal {
                     snapshot.instruction = "Hold still while camera tracking recovers."
                 } else if subjectProjection == nil {
                     snapshot.instruction = "Center one object and hold still for detection."

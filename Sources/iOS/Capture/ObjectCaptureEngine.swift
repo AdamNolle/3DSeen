@@ -239,6 +239,9 @@ struct ObjectCaptureEngine: View {
     }
 
     private var surfacePointDetail: String {
+        if capture.snapshot.surfaceCoverageLimitReached {
+            return "Surface map is full. Finish this scan before capturing more."
+        }
         switch capture.snapshot.pointSource {
         case .lidarDepth:
             return "Dots stay pinned in 3D; light haptics mark new surface samples."
@@ -328,16 +331,20 @@ private struct GuidedObjectARView: UIViewRepresentable {
     @MainActor
     final class Coordinator {
         private let anchor = AnchorEntity(world: .zero)
-        private let dotMesh = MeshResource.generateSphere(radius: 0.0045)
+        private let dotEntity = ModelEntity()
         private let dotMaterial = UnlitMaterial(
             color: UIColor(red: 0.20, green: 0.72, blue: 1.0, alpha: 1)
         )
+        private let dotBuildQueue = DispatchQueue(label: "com.adamnolle.3DSeen.surface-dots", qos: .userInitiated)
         private weak var view: ARView?
         private var meshAnchor: AnchorEntity?
         private var meshRequests = Set<AnyCancellable>()
+        private var dotMeshRequests = Set<AnyCancellable>()
         private var meshTextures: [URL: TextureResource] = [:]
         private var installedMeshRevision: UInt64 = 0
-        private var dots: [ModelEntity] = []
+        private var dotRevision: UInt64 = 0
+        private var dotBuildInFlight = false
+        private var pendingDotPoints: [SIMD3<Float>]?
         private var previousPoints: [SIMD3<Float>] = []
 
         func attach(to view: ARView) {
@@ -348,27 +355,15 @@ private struct GuidedObjectARView: UIViewRepresentable {
             if !view.scene.anchors.contains(where: { $0 === anchor }) {
                 view.scene.addAnchor(anchor)
             }
+            if !anchor.children.contains(where: { $0 === dotEntity }) {
+                anchor.addChild(dotEntity)
+            }
         }
 
         func update(points: [SIMD3<Float>], preview: LiveMeshPreview?) {
             if points != previousPoints {
                 previousPoints = points
-
-                while dots.count < points.count {
-                    let dot = ModelEntity(mesh: dotMesh, materials: [dotMaterial])
-                    dot.isEnabled = false
-                    anchor.addChild(dot)
-                    dots.append(dot)
-                }
-
-                for (index, dot) in dots.enumerated() {
-                    guard index < points.count else {
-                        dot.isEnabled = false
-                        continue
-                    }
-                    dot.position = points[index]
-                    dot.isEnabled = true
-                }
+                rebuildDotMesh(with: points)
             }
             if let preview {
                 install(preview)
@@ -378,6 +373,58 @@ private struct GuidedObjectARView: UIViewRepresentable {
                 self.meshAnchor = nil
                 installedMeshRevision = 0
             }
+        }
+
+        private func rebuildDotMesh(with points: [SIMD3<Float>]) {
+            dotRevision &+= 1
+            guard !points.isEmpty else {
+                pendingDotPoints = nil
+                dotMeshRequests.removeAll()
+                dotEntity.model = nil
+                return
+            }
+            pendingDotPoints = points
+            scheduleDotMeshBuildIfNeeded()
+        }
+
+        private func scheduleDotMeshBuildIfNeeded() {
+            guard !dotBuildInFlight, let points = pendingDotPoints else { return }
+            pendingDotPoints = nil
+            dotBuildInFlight = true
+            let revision = dotRevision
+            dotBuildQueue.async { [weak self] in
+                let geometry = GuidedSurfaceDotMesh.build(points: points)
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.dotBuildInFlight = false
+                    if self.dotRevision == revision, self.view != nil {
+                        self.installDotMesh(geometry, revision: revision)
+                    }
+                    self.scheduleDotMeshBuildIfNeeded()
+                }
+            }
+        }
+
+        private func installDotMesh(_ geometry: GuidedSurfaceDotMesh, revision: UInt64) {
+            dotMeshRequests.removeAll()
+            guard !geometry.positions.isEmpty else {
+                dotEntity.model = nil
+                return
+            }
+            var descriptor = MeshDescriptor(name: "GuidedObjectSurfaceDots")
+            descriptor.positions = MeshBuffers.Positions(geometry.positions)
+            descriptor.normals = MeshBuffers.Normals(geometry.normals)
+            descriptor.primitives = .triangles(geometry.triangleIndices)
+            MeshResource.generateAsync(from: [descriptor])
+                .receive(on: DispatchQueue.main)
+                .sink(
+                    receiveCompletion: { _ in },
+                    receiveValue: { [weak self] mesh in
+                        guard let self, self.dotRevision == revision, self.view != nil else { return }
+                        self.dotEntity.model = ModelComponent(mesh: mesh, materials: [self.dotMaterial])
+                    }
+                )
+                .store(in: &dotMeshRequests)
         }
 
         private func install(_ preview: LiveMeshPreview) {
@@ -453,12 +500,15 @@ private struct GuidedObjectARView: UIViewRepresentable {
 
         func detach(from view: ARView) {
             meshRequests.removeAll()
+            dotRevision &+= 1
+            pendingDotPoints = nil
+            dotMeshRequests.removeAll()
+            dotEntity.model = nil
             meshTextures.removeAll()
             if let meshAnchor { view.scene.anchors.remove(meshAnchor) }
             self.meshAnchor = nil
             self.view = nil
             view.scene.removeAnchor(anchor)
-            dots.removeAll(keepingCapacity: false)
             previousPoints.removeAll(keepingCapacity: false)
         }
     }

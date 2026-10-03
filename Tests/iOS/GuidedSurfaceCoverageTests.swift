@@ -47,18 +47,61 @@ final class GuidedSurfaceCoverageTests: XCTestCase {
         XCTAssertEqual(coverage.hapticMilestone, 1)
     }
 
-    func testCoverageIsBoundedAndCanResetForAnotherScan() {
+    func testCoverageKeepsDiscoveringAndPinningSurfaceBeyond360Samples() {
+        var coverage = GuidedSurfaceCoverage()
+        let points = (0..<432).map { index in
+            SIMD3<Float>(Float(index) * GuidedSurfaceCoverage.cellSize, 0, 0)
+        }
+
+        _ = coverage.insert(Array(points.prefix(360)))
+        let firstSideMilestone = coverage.hapticMilestone
+        _ = coverage.insert(Array(points.dropFirst(360)))
+
+        XCTAssertEqual(coverage.points.count, 432)
+        XCTAssertEqual(coverage.points.last, points.last)
+        XCTAssertGreaterThan(coverage.hapticMilestone, firstSideMilestone)
+    }
+
+    func testCoverageCanResetForAnotherScan() {
         var coverage = GuidedSurfaceCoverage()
         let points = (0..<500).map { index in
             SIMD3<Float>(Float(index) * GuidedSurfaceCoverage.cellSize, 0, 0)
         }
 
         _ = coverage.insert(points)
-        XCTAssertEqual(coverage.points.count, GuidedSurfaceCoverage.maximumPointCount)
+        XCTAssertEqual(coverage.points.count, 500)
+        XCTAssertEqual(coverage.uniqueSurfaceCellCount, 500)
 
         coverage.reset()
         XCTAssertTrue(coverage.points.isEmpty)
+        XCTAssertEqual(coverage.uniqueSurfaceCellCount, 0)
         XCTAssertEqual(coverage.hapticMilestone, 0)
+    }
+
+    func testCoverageAdaptsDisplayDensityWithoutStoppingSurfaceDiscovery() {
+        var coverage = GuidedSurfaceCoverage()
+        let points = (0..<(GuidedSurfaceCoverage.maximumDisplayPointCount + 3_000)).map { index in
+            SIMD3<Float>(Float(index) * GuidedSurfaceCoverage.cellSize, 0, 0)
+        }
+
+        _ = coverage.insert(points)
+
+        XCTAssertEqual(coverage.uniqueSurfaceCellCount, points.count)
+        XCTAssertLessThanOrEqual(coverage.points.count, GuidedSurfaceCoverage.maximumDisplayPointCount)
+        let lastSample = SIMD3<Float>(Float(points.count - 1) * GuidedSurfaceCoverage.cellSize, 0, 0)
+        let distanceToLastSample = coverage.points.map { simd_distance($0, lastSample) }.min() ?? .infinity
+        XCTAssertLessThanOrEqual(distanceToLastSample, coverage.displayCellSize * 1.75)
+        XCTAssertGreaterThan(coverage.displayRevision, 0)
+        XCTAssertGreaterThan(coverage.hapticMilestone, 0)
+    }
+
+    func testBatchedSurfaceDotMeshUsesOneMarkerPerPoint() {
+        let mesh = GuidedSurfaceDotMesh.build(points: [.zero, SIMD3<Float>(1, 2, 3)])
+
+        XCTAssertEqual(mesh.positions.count, 12)
+        XCTAssertEqual(mesh.normals.count, 12)
+        XCTAssertEqual(mesh.triangleIndices.count, 48)
+        XCTAssertEqual(mesh.triangleIndices.max(), 11)
     }
 
     func testCoverageSkipsNonFiniteAndOutOfRangeWorldPoints() {
