@@ -165,11 +165,10 @@ final class WizardFlowUITests: XCTestCase {
         add(screenshot)
         XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Maximum.'")).firstMatch.exists)
         app.buttons["Start Capture"].tap()
-        let unavailableMessage = app.staticTexts["capture.preparation.error"]
-        XCTAssertTrue(unavailableMessage.waitForExistence(timeout: 5))
-        XCTAssertTrue(unavailableMessage.label.contains("LiDAR"))
-        XCTAssertFalse(app.alerts["3DSeen needs attention"].exists)
-        app.buttons["Back to Result"].tap()
+        let alert = app.alerts["3DSeen needs attention"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        XCTAssertTrue(alert.staticTexts.element(boundBy: 1).label.contains("LiDAR"))
+        alert.buttons["Back"].tap()
         assertScreen("quality")
     }
 
