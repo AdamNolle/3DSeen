@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" fill="#1E58DC"/>
+  <title>3DSeen blue wireframe cube</title>
+  <g fill="none" stroke="#FFFFFF" stroke-width="32">
+    <path d="M512 206V512 M251 653L512 512 M773 653L512 512" stroke-dasharray="66 34"/>
+    <path d="M512 206L773 359V653L512 806L251 653V359Z M251 359L512 512L773 359 M512 512V806" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
