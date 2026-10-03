@@ -12,6 +12,7 @@ struct CaptureScreen: View {
     @State private var isPreparing = false
     @State private var isReady = false
     @State private var didPersist = false
+    @State private var preparationErrorMessage: String?
     @State private var captureAttemptID = UUID()
     @State private var persistenceTask: Task<Void, Never>?
 
@@ -58,9 +59,20 @@ struct CaptureScreen: View {
                         .foregroundStyle(theme.ink)
                 } else {
                     StIcon(name: selectedInfo.icon, size: 34, color: theme.accentText)
-                    Text("The scanner is not running")
+                    Text(
+                        preparationErrorMessage == nil
+                            ? "The scanner isn't running"
+                            : "Capture isn't available yet"
+                    )
                         .font(.sf(20, .bold))
                         .foregroundStyle(theme.ink)
+                    if let preparationErrorMessage {
+                        Text(preparationErrorMessage)
+                            .font(.sf(15, .regular))
+                            .foregroundStyle(theme.text2)
+                            .multilineTextAlignment(.center)
+                            .accessibilityIdentifier("capture.preparation.error")
+                    }
                     StButton(title: "Back to Result", kind: .secondary, icon: "back") {
                         model.go(.quality)
                     }
@@ -76,6 +88,7 @@ struct CaptureScreen: View {
         isPreparing = true
         isReady = false
         didPersist = false
+        preparationErrorMessage = nil
         defer { isPreparing = false }
 
         let initialAvailability = CaptureAvailability.status(for: captureMode)
@@ -102,7 +115,8 @@ struct CaptureScreen: View {
 
     @MainActor
     private func failPreparation(_ message: String) {
-        stateMachine.send(.errorOccurred(message))
+        stateMachine.send(.reset)
+        preparationErrorMessage = message
     }
 
     private func requestCameraAccessIfNeeded() async -> Bool {

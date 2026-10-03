@@ -26,10 +26,11 @@ final class WizardFlowUITests: XCTestCase {
         app.buttons["Start Capture"].tap()
         assertScreen("capture")
 
-        let unavailableAlert = app.alerts["3DSeen needs attention"]
-        XCTAssertTrue(unavailableAlert.waitForExistence(timeout: 5))
-        XCTAssertTrue(unavailableAlert.staticTexts.element(boundBy: 1).label.contains("physical iPhone or iPad"))
-        unavailableAlert.buttons["Back"].tap()
+        let unavailableMessage = app.staticTexts["capture.preparation.error"]
+        XCTAssertTrue(unavailableMessage.waitForExistence(timeout: 5))
+        XCTAssertTrue(unavailableMessage.label.contains("physical iPhone or iPad"))
+        XCTAssertFalse(app.alerts["3DSeen needs attention"].exists)
+        app.buttons["Back to Result"].tap()
         assertScreen("quality")
 
         app.terminate()
