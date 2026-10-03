@@ -65,6 +65,7 @@
 		54D25C94C25438E2FA3AA3A0 /* 3DSeenIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = CA8798C371C22F3700560089 /* 3DSeenIcon.icon */; };
 		55143D9E4B912C225EB8EA4A /* AutoPilotVisionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A2A28C46F8496F999E0A552 /* AutoPilotVisionManager.swift */; };
 		5844F8C23A2E3B4237B58374 /* NerfstudioSplatTrainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A9AC885A17E5D03B3EB54B5 /* NerfstudioSplatTrainer.swift */; };
+		58873C98237C01EC4F4743F7 /* BoundedArchiveExtractorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F1114B29E7967606E9B6585 /* BoundedArchiveExtractorTests.swift */; };
 		59CC507288BCD9845C86EF8F /* NetworkHandoffManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF6140FFD36ADB270491891B /* NetworkHandoffManager.swift */; };
 		5F2822505ADF4377F0FCD1D6 /* MetalSplatter in Frameworks */ = {isa = PBXBuildFile; productRef = 7E26BBE8E8DA99F248F75E73 /* MetalSplatter */; };
 		600EB8544C23613C14495901 /* PLYValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8296EF932D5513800A12FEB /* PLYValidator.swift */; };
@@ -99,6 +100,7 @@
 		84B608326623E78177B205E4 /* PLYValidatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 995DF836E3753EF01920B344 /* PLYValidatorTests.swift */; };
 		84F5BF8D44C92AF360489817 /* MeasurementExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 140DFCB52913AB99BFE9BF97 /* MeasurementExporterTests.swift */; };
 		8509104342481E9EFAD8E3BD /* HandoffTrustTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 197D3A95570EDF2EBDC4AE03 /* HandoffTrustTests.swift */; };
+		85ED07ED30CA33BCBD0BE185 /* BoundedArchiveExtractorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F1114B29E7967606E9B6585 /* BoundedArchiveExtractorTests.swift */; };
 		89017EE14CAC361BE71CB61E /* GaussianSplat.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5390766A930F48BB649338F /* GaussianSplat.swift */; };
 		89145D5E5F34235F23FBA1E9 /* LiDARTextureExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90E6BBADDBB1776B919EF430 /* LiDARTextureExporter.swift */; };
 		8A52477CCC65BB076A63E066 /* AIPBRMaterialEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2AC060B0BE18A703CEF83F1 /* AIPBRMaterialEstimator.swift */; };
@@ -219,6 +221,7 @@
 		2D06C68200886D7865B4EC27 /* SampleData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleData.swift; sourceTree = "<group>"; };
 		2D535C6B22419107CA1BE97C /* StudioComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioComponents.swift; sourceTree = "<group>"; };
 		2ED5C71A1B4B5EFDF6665381 /* 3DSeen-macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "3DSeen-macOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		2F1114B29E7967606E9B6585 /* BoundedArchiveExtractorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundedArchiveExtractorTests.swift; sourceTree = "<group>"; };
 		37B0CBC2BEF43FF4A30B485D /* ScanLifecycleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanLifecycleManager.swift; sourceTree = "<group>"; };
 		3DA53940BBA8FCD5C9ED3794 /* ScanSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanSession.swift; sourceTree = "<group>"; };
 		3FD1D9DF0008E6C70E565D89 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -493,6 +496,7 @@
 		9E579C5FD79286FB60760160 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				2F1114B29E7967606E9B6585 /* BoundedArchiveExtractorTests.swift */,
 				09C9FD9CDF8F18FC70EF9B3E /* CompactSplatFileTests.swift */,
 				4DC3BC3C83E93C06B3ECD3AA /* LiDARSurfaceTests.swift */,
 				140DFCB52913AB99BFE9BF97 /* MeasurementExporterTests.swift */,
@@ -788,6 +792,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				FE3524954C6E05BF7C0355AE /* BlenderModelConverterTests.swift in Sources */,
+				85ED07ED30CA33BCBD0BE185 /* BoundedArchiveExtractorTests.swift in Sources */,
 				D69521135E4351DF56ABC3CA /* CompactSplatFileTests.swift in Sources */,
 				A04ED326F276D501FEEE32FC /* ComputeStageTests.swift in Sources */,
 				72E22D3B6EDC55E670C46DB5 /* LiDARSurfaceTests.swift in Sources */,
@@ -805,6 +810,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				0B98DA421C4EC7CFC7DA9F9A /* AutoPilotTests.swift in Sources */,
+				58873C98237C01EC4F4743F7 /* BoundedArchiveExtractorTests.swift in Sources */,
 				E5D1820F52E8DC53581193E6 /* CaptureTelemetryTests.swift in Sources */,
 				4095D1BC6D04B6BDC2CF1CD0 /* CompactSplatFileTests.swift in Sources */,
 				E1D81375B20049AEEEC86FF2 /* ComputeDetailCapabilityTests.swift in Sources */,
