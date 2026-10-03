@@ -40,6 +40,11 @@ struct LibraryScreen: View {
                 )
             }
         }
+        .onChange(of: saved.isEmpty, initial: true) { _, isEmpty in
+            guard isEmpty else { return }
+            filter = "All"
+            query = ""
+        }
         .alert("Rename scan", isPresented: renamePresented) {
             TextField("Scan name", text: $proposedName)
             Button("Cancel", role: .cancel) { renameScanID = nil }

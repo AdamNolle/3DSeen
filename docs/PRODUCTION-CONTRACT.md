@@ -6,7 +6,7 @@ This document is the canonical repository-level definition of production behavio
 
 ## Supported products
 
-- Empty phone and iPad libraries keep **New Scan** prominent and hide search and mode-filter controls until saved scans exist; iPad category navigation remains available.
+- Empty phone and iPad libraries keep **New Scan** prominent and hide search and mode-filter controls until saved scans exist; iPad category navigation remains available. Removing the last scan clears stale search and mode filters so newly created scans remain visible.
 - iPhone and iPad run the same persisted Studio workflow with adaptive layouts: Library → Mode → Briefing → Detail → Capture → Review → Compute → Viewer → Export.
 - macOS provides Library, Viewer, Compute, Export, and Settings panes and acts as an optional local reconstruction worker.
 - macOS uses a single Studio window with persistent navigation. Library grids adapt to available width; phone and iPad controls respect larger touch areas, Reduce Motion, and Reduce Transparency.
