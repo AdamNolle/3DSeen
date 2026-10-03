@@ -167,27 +167,38 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
             accepting = false
             session.pause()
             guard !isCancelled, let folder else { return }
-            do {
-                let result = try LiDARTextureExporter.export(
-                    meshes: Array(meshes.values), frames: frames,
-                    to: folder.appendingPathComponent(LiDARCaptureBundle.modelName),
-                    isCancelled: { self.isCancelled }
-                )
-                let report = LiDARCaptureReport(schemaVersion: 2, triangleCount: result.triangleCount,
-                                                texturedTriangleCount: result.texturedTriangleCount,
-                                                textureFrameCount: frames.count, textureSnapshotCount: snapshotCount,
-                                                surfaceCounts: result.surfaceCounts)
-                try JSONEncoder().encode(report).write(to: folder.appendingPathComponent(LiDARCaptureBundle.reportName), options: .atomic)
-                try saveCameraMetadata(in: folder)
-                frames.removeAll()
-                meshes.removeAll()
-                DispatchQueue.main.async { [self] in
+            // Drain the serial Vision queue so the last completed masks are attached before export.
+            objectAnalysisQueue.async { [self] in
+                queue.async { [self] in
                     guard !isCancelled else { return }
-                    sealed = true
-                    isProcessing = false
-                    onExported?(folder)
+                    do {
+                        let result = try LiDARTextureExporter.export(
+                            meshes: Array(meshes.values), frames: frames,
+                            to: folder.appendingPathComponent(LiDARCaptureBundle.modelName),
+                            isCancelled: { self.isCancelled }
+                        )
+                        let report = LiDARCaptureReport(
+                            schemaVersion: 3,
+                            triangleCount: result.triangleCount,
+                            texturedTriangleCount: result.texturedTriangleCount,
+                            textureFrameCount: frames.count,
+                            textureSnapshotCount: snapshotCount,
+                            surfaceCounts: result.surfaceCounts,
+                            trackedObjectCount: result.trackedObjectCount
+                        )
+                        try JSONEncoder().encode(report).write(to: folder.appendingPathComponent(LiDARCaptureBundle.reportName), options: .atomic)
+                        try saveCameraMetadata(in: folder)
+                        frames.removeAll()
+                        meshes.removeAll()
+                        DispatchQueue.main.async { [self] in
+                            guard !isCancelled else { return }
+                            sealed = true
+                            isProcessing = false
+                            onExported?(folder)
+                        }
+                    } catch { fail(error) }
                 }
-            } catch { fail(error) }
+            }
         }
     }
 
@@ -284,7 +295,6 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
         guard accepting, !isCancelled, let folder, case .normal = frame.camera.trackingState else { return }
         do {
             updateSurfaceCoverage(from: frame)
-            scheduleObjectAnalysis(from: frame)
             let takeTexture = lock.withLock { () -> Bool in
                 let value = requestedTexture
                 requestedTexture = false
@@ -307,6 +317,7 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
             let saved = try LiDARCaptureFrames.save(frame, index: frames.count,
                                                    folder: folder.appendingPathComponent(LiDARCaptureBundle.framesName), context: context)
             frames.append(saved)
+            scheduleObjectAnalysis(from: frame, textureFrame: saved)
             lastFrameTime = frame.timestamp
             lastCameraTransform = frame.camera.transform
             let count = frames.count
@@ -398,21 +409,31 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
         }
     }
 
-    private func scheduleObjectAnalysis(from frame: ARFrame) {
+    private func scheduleObjectAnalysis(from frame: ARFrame, textureFrame: LiDARTextureFrame) {
         guard !objectAnalysisInFlight, frame.timestamp - lastObjectAnalysisTime >= 0.9 else { return }
         objectAnalysisInFlight = true
         lastObjectAnalysisTime = frame.timestamp
         let timestamp = frame.timestamp
         objectAnalysisQueue.async { [weak self] in
             guard let self else { return }
-            let observations = (try? objectDetector.detect(in: frame)) ?? []
+            let detection = try? objectDetector.detect(in: frame)
+            let observations = detection?.observations ?? []
             let objects = objectTracks.update(observations: observations, timestamp: timestamp)
             let objectCount = objectTracks.count
             let points = objects.flatMap(\.points)
+            let identifiersByLabel = Dictionary(uniqueKeysWithValues: objects.map {
+                ($0.instanceLabel, $0.identifier)
+            })
+            let objectMask = detection?.instanceMask.mapping(identifiersByLabel)
             queue.async { [weak self] in
                 guard let self else { return }
                 objectAnalysisInFlight = false
-                guard accepting, !isCancelled else { return }
+                guard !isCancelled else { return }
+                if let objectMask, !identifiersByLabel.isEmpty,
+                   let index = frames.firstIndex(where: { $0.imageURL == textureFrame.imageURL }) {
+                    frames[index] = frames[index].attaching(objectMask)
+                }
+                guard accepting else { return }
                 publishObjectCoverage(points: points, objectCount: objectCount, timestamp: timestamp)
             }
         }

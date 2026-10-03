@@ -110,11 +110,22 @@ struct LiDARTextureFrame: Sendable {
     let imageURL: URL
     let camera: LiDARTextureCamera
     let surfaceMask: LiDARSurfaceMask?
+    let objectMask: LiDARTrackedInstanceMask?
 
-    init(imageURL: URL, camera: LiDARTextureCamera, surfaceMask: LiDARSurfaceMask? = nil) {
+    init(
+        imageURL: URL,
+        camera: LiDARTextureCamera,
+        surfaceMask: LiDARSurfaceMask? = nil,
+        objectMask: LiDARTrackedInstanceMask? = nil
+    ) {
         self.imageURL = imageURL
         self.camera = camera
         self.surfaceMask = surfaceMask
+        self.objectMask = objectMask
+    }
+
+    func attaching(_ objectMask: LiDARTrackedInstanceMask) -> Self {
+        Self(imageURL: imageURL, camera: camera, surfaceMask: surfaceMask, objectMask: objectMask)
     }
 }
 
@@ -164,6 +175,53 @@ struct LiDARSurfaceMask: Sendable {
         let center = (imagePoints[0] + imagePoints[1] + imagePoints[2]) / 3
         return imagePoints.filter(contains(rawNormalizedPoint:)).count >= 2
             && contains(rawNormalizedPoint: center)
+    }
+}
+
+/// A captured foreground-label image mapped to stable room-object tracks.
+struct LiDARTrackedInstanceMask: Sendable {
+    let labels: [UInt8]
+    let width: Int
+    let height: Int
+    let objectIdentifiersByLabel: [UInt8: Int]
+    let orientation: LiDARCaptureImageOrientation
+
+    func mapping(_ identifiers: [UInt8: Int]) -> Self {
+        Self(labels: labels, width: width, height: height,
+             objectIdentifiersByLabel: identifiers, orientation: orientation)
+    }
+
+    /// Assign a mesh face only when its center and most corners remain inside one tracked mask.
+    func objectIdentifier(containingProjectedTriangle coordinates: [SIMD2<Float>]) -> Int? {
+        guard coordinates.count == 3 else { return nil }
+        let imagePoints = coordinates.map { SIMD2($0.x, 1 - $0.y) }
+        let center = (imagePoints[0] + imagePoints[1] + imagePoints[2]) / 3
+        guard let instanceLabel = label(atRawNormalizedPoint: center),
+              let identifier = objectIdentifiersByLabel[instanceLabel] else { return nil }
+        let matchingCorners = imagePoints.filter { label(atRawNormalizedPoint: $0) == instanceLabel }.count
+        return matchingCorners >= 2 ? identifier : nil
+    }
+
+    private func label(atRawNormalizedPoint point: SIMD2<Float>) -> UInt8? {
+        let (pixelCount, didOverflow) = width.multipliedReportingOverflow(by: height)
+        guard width > 0, height > 0, !didOverflow, labels.count == pixelCount,
+              point.x.isFinite, point.y.isFinite,
+              point.x >= 0, point.x < 1, point.y >= 0, point.y < 1 else { return nil }
+        let oriented: SIMD2<Float>
+        switch orientation {
+        case .portrait:
+            oriented = SIMD2(1 - point.y, point.x)
+        case .portraitUpsideDown:
+            oriented = SIMD2(point.y, 1 - point.x)
+        case .landscapeLeft:
+            oriented = point
+        case .landscapeRight:
+            oriented = SIMD2(1 - point.x, 1 - point.y)
+        }
+        guard oriented.x >= 0, oriented.x < 1, oriented.y >= 0, oriented.y < 1 else { return nil }
+        let x = min(Int(oriented.x * Float(width)), width - 1)
+        let y = min(Int(oriented.y * Float(height)), height - 1)
+        return labels[y * width + x]
     }
 }
 

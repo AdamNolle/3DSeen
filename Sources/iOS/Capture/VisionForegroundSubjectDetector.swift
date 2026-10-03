@@ -86,12 +86,12 @@ final class VisionForegroundSubjectDetector: ForegroundSubjectDetecting {
 /// Samples Vision's instance labels against confidence-filtered ARKit depth. The resulting points
 /// are already in world coordinates, so the live overlay stays pinned to the measured objects.
 final class RoomForegroundObjectDetector {
-    func detect(in frame: ARFrame) throws -> [RoomObjectObservation] {
-        guard let depth = frame.smoothedSceneDepth ?? frame.sceneDepth else { return [] }
+    func detect(in frame: ARFrame) throws -> RoomObjectFrameDetection? {
+        guard let depth = frame.smoothedSceneDepth ?? frame.sceneDepth else { return nil }
         let request = VNGenerateForegroundInstanceMaskRequest()
         let handler = VNImageRequestHandler(cvPixelBuffer: frame.capturedImage, orientation: .up)
         try handler.perform([request])
-        guard let observation = request.results?.first, !observation.allInstances.isEmpty else { return [] }
+        guard let observation = request.results?.first, !observation.allInstances.isEmpty else { return nil }
 
         let mask = observation.instanceMask
         let depthMap = depth.depthMap
@@ -105,14 +105,14 @@ final class RoomForegroundObjectDetector {
               [kCVPixelFormatType_DepthFloat32, kCVPixelFormatType_OneComponent32Float]
                 .contains(CVPixelBufferGetPixelFormatType(depthMap)),
               maskWidth > 0, maskHeight > 0, depthWidth > 0, depthHeight > 0,
-              imageWidth > 0, imageHeight > 0 else { return [] }
+              imageWidth > 0, imageHeight > 0 else { return nil }
 
-        guard CVPixelBufferLockBaseAddress(mask, .readOnly) == kCVReturnSuccess else { return [] }
+        guard CVPixelBufferLockBaseAddress(mask, .readOnly) == kCVReturnSuccess else { return nil }
         defer { CVPixelBufferUnlockBaseAddress(mask, .readOnly) }
-        guard CVPixelBufferLockBaseAddress(depthMap, .readOnly) == kCVReturnSuccess else { return [] }
+        guard CVPixelBufferLockBaseAddress(depthMap, .readOnly) == kCVReturnSuccess else { return nil }
         defer { CVPixelBufferUnlockBaseAddress(depthMap, .readOnly) }
         guard let maskBase = CVPixelBufferGetBaseAddress(mask),
-              let depthBase = CVPixelBufferGetBaseAddress(depthMap) else { return [] }
+              let depthBase = CVPixelBufferGetBaseAddress(depthMap) else { return nil }
 
         let confidenceMap = depth.confidenceMap
         let confidenceIsUsable = confidenceMap.map {
@@ -122,7 +122,7 @@ final class RoomForegroundObjectDetector {
         } ?? false
         if confidenceIsUsable, let confidenceMap,
            CVPixelBufferLockBaseAddress(confidenceMap, .readOnly) != kCVReturnSuccess {
-            return []
+            return nil
         }
         defer { if confidenceIsUsable, let confidenceMap { CVPixelBufferUnlockBaseAddress(confidenceMap, .readOnly) } }
         let confidenceBase = confidenceIsUsable ? confidenceMap.flatMap(CVPixelBufferGetBaseAddress) : nil
@@ -164,10 +164,30 @@ final class RoomForegroundObjectDetector {
             }
         }
 
-        return pointsByLabel
+        let observations = pointsByLabel
             .filter { $0.value.count >= 12 }
             .sorted { $0.value.count > $1.value.count }
             .prefix(16)
             .map { RoomObjectObservation(instanceLabel: $0.key, points: $0.value) }
+        guard maskWidth <= Int.max / maskHeight else { return nil }
+        let downsampleFactor = max(1, (max(maskWidth, maskHeight) + 511) / 512)
+        let storedWidth = (maskWidth + downsampleFactor - 1) / downsampleFactor
+        let storedHeight = (maskHeight + downsampleFactor - 1) / downsampleFactor
+        var labels = [UInt8](repeating: 0, count: storedWidth * storedHeight)
+        for row in 0..<storedHeight {
+            let sourceRow = min(maskHeight - 1, row * downsampleFactor)
+            for column in 0..<storedWidth {
+                let sourceColumn = min(maskWidth - 1, column * downsampleFactor)
+                labels[row * storedWidth + column] = maskBytes[sourceRow * maskStride + sourceColumn]
+            }
+        }
+        let instanceMask = LiDARTrackedInstanceMask(
+            labels: labels,
+            width: storedWidth,
+            height: storedHeight,
+            objectIdentifiersByLabel: [:],
+            orientation: .landscapeLeft
+        )
+        return RoomObjectFrameDetection(observations: observations, instanceMask: instanceMask)
     }
 }

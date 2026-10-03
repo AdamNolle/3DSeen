@@ -101,6 +101,47 @@ final class LiDARSurfaceTests: XCTestCase {
         XCTAssertTrue(positions.contains { abs($0 + 4) < 0.001 })
     }
 
+    func testRoomExportSeparatesTrackedForegroundObjectsIntoEditableUSDZNodes() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let image = try texture(in: directory)
+        let labels = (0..<16).map { $0 % 4 < 2 ? UInt8(1) : UInt8(2) }
+        let objectMask = LiDARTrackedInstanceMask(
+            labels: labels,
+            width: 4,
+            height: 4,
+            objectIdentifiersByLabel: [1: 11, 2: 22],
+            orientation: .landscapeLeft
+        )
+        let mesh = LiDARSurfaceMesh(
+            vertices: [
+                SIMD3(-1.2, -0.5, -2), SIMD3(-0.6, -0.5, -2), SIMD3(-0.9, 0.5, -2),
+                SIMD3(0.6, -0.5, -2), SIMD3(1.2, -0.5, -2), SIMD3(0.9, 0.5, -2)
+            ],
+            indices: [0, 1, 2, 3, 4, 5]
+        )
+        let output = directory.appendingPathComponent("objects.usdz")
+
+        let result = try LiDARTextureExporter.export(
+            meshes: [mesh],
+            frames: [LiDARTextureFrame(imageURL: image, camera: camera(depth: 2), objectMask: objectMask)],
+            to: output
+        )
+
+        XCTAssertEqual(result.triangleCount, 2)
+        XCTAssertEqual(result.texturedTriangleCount, 2)
+        XCTAssertEqual(result.trackedObjectCount, 2)
+        let scene = try SCNScene(url: output, options: nil)
+        var objectNames: [String] = []
+        scene.rootNode.enumerateChildNodes { node, _ in
+            if let name = node.name, name.contains("Object ") { objectNames.append(name) }
+            if let name = node.geometry?.name, name.contains("Object ") { objectNames.append(name) }
+            objectNames.append(contentsOf: node.geometry?.materials.compactMap(\.name) ?? [])
+        }
+        XCTAssertTrue(objectNames.contains { $0.contains("Object 11") || $0.contains("Object_11_") }, "\(objectNames)")
+        XCTAssertTrue(objectNames.contains { $0.contains("Object 22") || $0.contains("Object_22_") }, "\(objectNames)")
+    }
+
     func testForegroundMaskMapsRawCameraPointsIntoCapturedOrientation() {
         let rawPoint = SIMD2<Float>(0.25, 0.25)
         let cases: [(LiDARCaptureImageOrientation, Int)] = [

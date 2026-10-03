@@ -8,10 +8,11 @@ struct LiDARCaptureReport: Codable, Sendable {
     let textureSnapshotCount: Int
     let surfaceCounts: [String: Int]?
     let modelFileName: String?
+    let trackedObjectCount: Int?
 
     init(schemaVersion: Int, triangleCount: Int, texturedTriangleCount: Int,
          textureFrameCount: Int, textureSnapshotCount: Int, surfaceCounts: [String: Int]? = nil,
-         modelFileName: String? = nil) {
+         modelFileName: String? = nil, trackedObjectCount: Int? = nil) {
         self.schemaVersion = schemaVersion
         self.triangleCount = triangleCount
         self.texturedTriangleCount = texturedTriangleCount
@@ -19,6 +20,7 @@ struct LiDARCaptureReport: Codable, Sendable {
         self.textureSnapshotCount = textureSnapshotCount
         self.surfaceCounts = surfaceCounts
         self.modelFileName = modelFileName
+        self.trackedObjectCount = trackedObjectCount
     }
 }
 
@@ -44,9 +46,10 @@ enum LiDARCaptureBundle {
         }
         let model = source.appendingPathComponent(modelName)
         let frames = source.appendingPathComponent(framesName)
-        guard (1...2).contains(report.schemaVersion), report.triangleCount > 0,
+        guard (1...3).contains(report.schemaVersion), report.triangleCount > 0,
               report.texturedTriangleCount > 0, report.texturedTriangleCount <= report.triangleCount,
               report.textureFrameCount > 0, report.textureSnapshotCount >= 0,
+              report.trackedObjectCount.map({ $0 >= 0 }) ?? (report.schemaVersion < 3),
               report.surfaceCounts.map({ counts in
                   counts.values.allSatisfy { $0 >= 0 } && counts.values.reduce(0, +) == report.triangleCount
               }) ?? (report.schemaVersion == 1),

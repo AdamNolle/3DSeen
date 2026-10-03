@@ -10,17 +10,25 @@ enum LiDARTextureExporter {
         let triangleCount: Int
         let texturedTriangleCount: Int
         let surfaceCounts: [String: Int]
+        let trackedObjectCount: Int
     }
 
     private struct BatchKey: Hashable {
         let frameIndex: Int
         let classification: UInt8
+        let objectIdentifier: Int?
     }
 
     private struct Batch {
         var positions: [SCNVector3] = []
         var normals: [SCNVector3] = []
         var coordinates: [CGPoint] = []
+    }
+
+    private struct TextureSelection {
+        let frameIndex: Int
+        let objectIdentifier: Int?
+        let coordinates: [SIMD2<Float>]
     }
 
     static func export(
@@ -50,42 +58,38 @@ enum LiDARTextureExporter {
                 guard simd_length_squared(cross) > 0.0000000001 else { continue }
                 let faceIndex = offset / 3
                 let classification = mesh.classifications.isEmpty ? 0 : mesh.classifications[faceIndex]
-                var bestIndex = -1
-                var bestScore: Float = 0
-                var coordinates = [SIMD2<Float>](repeating: .zero, count: 3)
-                for (rank, index) in candidates.enumerated() {
-                    if rank >= 32, bestIndex >= 0 { break }
-                    guard let projection = frames[index].camera.projection(of: triangle),
-                          projection.score > bestScore else { continue }
-                    if requireForegroundMask,
-                       frames[index].surfaceMask?.containsProjectedTriangle(projection.coordinates) != true {
-                        continue
-                    }
-                    bestIndex = index
-                    bestScore = projection.score
-                    coordinates = projection.coordinates
-                }
-                if requireForegroundMask, bestIndex < 0 { continue }
+                guard let selection = Self.bestTextureSelection(
+                    for: triangle,
+                    candidates: candidates,
+                    frames: frames,
+                    requireForegroundMask: requireForegroundMask
+                ) else { continue }
                 let normal = SCNVector3(simd_normalize(cross))
-                let key = BatchKey(frameIndex: bestIndex, classification: classification)
+                let key = BatchKey(
+                    frameIndex: selection.frameIndex,
+                    classification: classification,
+                    objectIdentifier: selection.objectIdentifier
+                )
                 var batch = batches[key, default: Batch()]
                 batch.positions.append(contentsOf: triangle.map(SCNVector3.init))
                 batch.normals.append(contentsOf: [normal, normal, normal])
-                batch.coordinates.append(contentsOf: coordinates.map {
+                batch.coordinates.append(contentsOf: selection.coordinates.map {
                     CGPoint(x: CGFloat($0.x), y: CGFloat($0.y))
                 })
                 batches[key] = batch
                 let label = LiDARSurfaceClassification.label(for: classification)
                 surfaceCounts[label, default: 0] += 1
                 total += 1
-                if bestIndex >= 0 { textured += 1 }
+                if selection.frameIndex >= 0 { textured += 1 }
             }
         }
         guard total > 0 else { throw LiDARSurfaceError.noSurface }
         guard textured > 0 else { throw LiDARSurfaceError.noTextures }
         let scene = SCNScene()
+        var objectNodes: [Int: SCNNode] = [:]
         for key in batches.keys.sorted(by: {
-            ($0.classification, $0.frameIndex) < ($1.classification, $1.frameIndex)
+            ($0.objectIdentifier ?? 0, $0.classification, $0.frameIndex)
+                < ($1.objectIdentifier ?? 0, $1.classification, $1.frameIndex)
         }) {
             guard let batch = batches[key] else { continue }
             let category = LiDARSurfaceClassification.label(for: key.classification)
@@ -95,9 +99,10 @@ enum LiDARTextureExporter {
             let element = SCNGeometryElement(indices: (0..<batch.positions.count).map(UInt32.init), primitiveType: .triangles)
             let geometry = SCNGeometry(sources: sources, elements: [element])
             let material = SCNMaterial()
+            let objectSuffix = key.objectIdentifier.map { "Object_\($0)_" } ?? ""
             material.name = key.frameIndex >= 0
-                ? "CapturedTexture_\(key.frameIndex)_\(category)"
-                : "UnobservedSurface_\(category)"
+                ? "CapturedTexture_\(key.frameIndex)_\(objectSuffix)\(category)"
+                : "UnobservedSurface_\(objectSuffix)\(category)"
             material.lightingModel = .physicallyBased
             material.isDoubleSided = true
             material.roughness.contents = 0.85
@@ -111,8 +116,25 @@ enum LiDARTextureExporter {
             }
             geometry.materials = [material]
             let node = SCNNode(geometry: geometry)
-            node.name = "\(category) Surface" + (key.frameIndex >= 0 ? " · View \(key.frameIndex + 1)" : "")
-            scene.rootNode.addChildNode(node)
+            let objectPrefix = key.objectIdentifier.map { "Object \($0) · " } ?? ""
+            let name = objectPrefix + "\(category) Surface"
+                + (key.frameIndex >= 0 ? " · View \(key.frameIndex + 1)" : "")
+            geometry.name = name
+            node.name = name
+            if let objectIdentifier = key.objectIdentifier {
+                let objectNode: SCNNode
+                if let existing = objectNodes[objectIdentifier] {
+                    objectNode = existing
+                } else {
+                    objectNode = SCNNode()
+                    objectNode.name = String(format: "Object %02d", objectIdentifier)
+                    scene.rootNode.addChildNode(objectNode)
+                    objectNodes[objectIdentifier] = objectNode
+                }
+                objectNode.addChildNode(node)
+            } else {
+                scene.rootNode.addChildNode(node)
+            }
         }
         if isCancelled() { throw CancellationError() }
         let staging = outputURL.deletingLastPathComponent().appendingPathComponent(".pending-\(UUID().uuidString).usdz")
@@ -125,7 +147,62 @@ enum LiDARTextureExporter {
             throw LiDARSurfaceError.exportFailed
         }
         try FileManager.default.moveItem(at: staging, to: outputURL)
-        return Result(triangleCount: total, texturedTriangleCount: textured, surfaceCounts: surfaceCounts)
+        return Result(
+            triangleCount: total,
+            texturedTriangleCount: textured,
+            surfaceCounts: surfaceCounts,
+            trackedObjectCount: objectNodes.count
+        )
+    }
+
+    private static func bestTextureSelection(
+        for triangle: [SIMD3<Float>],
+        candidates: [Int],
+        frames: [LiDARTextureFrame],
+        requireForegroundMask: Bool
+    ) -> TextureSelection? {
+        var bestObjectIndex = -1
+        var bestObjectIdentifier: Int?
+        var bestObjectScore: Float = 0
+        var objectCoordinates = [SIMD2<Float>](repeating: .zero, count: 3)
+        var bestRoomIndex = -1
+        var bestRoomScore: Float = 0
+        var roomCoordinates = [SIMD2<Float>](repeating: .zero, count: 3)
+
+        for (rank, index) in candidates.enumerated() {
+            if rank >= 32, bestRoomIndex >= 0 || bestObjectIndex >= 0 { break }
+            guard let projection = frames[index].camera.projection(of: triangle) else { continue }
+            if requireForegroundMask {
+                guard projection.score > bestRoomScore,
+                      frames[index].surfaceMask?.containsProjectedTriangle(projection.coordinates) == true
+                else { continue }
+                bestRoomIndex = index
+                bestRoomScore = projection.score
+                roomCoordinates = projection.coordinates
+            } else if let identifier = frames[index].objectMask?.objectIdentifier(
+                containingProjectedTriangle: projection.coordinates
+            ) {
+                guard projection.score > bestObjectScore else { continue }
+                bestObjectIndex = index
+                bestObjectIdentifier = identifier
+                bestObjectScore = projection.score
+                objectCoordinates = projection.coordinates
+            } else if projection.score > bestRoomScore {
+                bestRoomIndex = index
+                bestRoomScore = projection.score
+                roomCoordinates = projection.coordinates
+            }
+        }
+
+        if requireForegroundMask, bestRoomIndex < 0 { return nil }
+        if bestObjectIndex >= 0 {
+            return TextureSelection(
+                frameIndex: bestObjectIndex,
+                objectIdentifier: bestObjectIdentifier,
+                coordinates: objectCoordinates
+            )
+        }
+        return TextureSelection(frameIndex: bestRoomIndex, objectIdentifier: nil, coordinates: roomCoordinates)
     }
 
     private static func validate(meshes: [LiDARSurfaceMesh], frames: [LiDARTextureFrame]) throws {

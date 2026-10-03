@@ -209,8 +209,14 @@ struct RoomObjectObservation: Sendable {
     let points: [SIMD3<Float>]
 }
 
+struct RoomObjectFrameDetection: Sendable {
+    let observations: [RoomObjectObservation]
+    let instanceMask: LiDARTrackedInstanceMask
+}
+
 struct TrackedRoomObject: Sendable {
     let identifier: Int
+    let instanceLabel: UInt8
     let points: [SIMD3<Float>]
 }
 
@@ -235,7 +241,6 @@ struct RoomObjectTrackRegistry: Sendable {
         let identifier: Int
         var center: SIMD3<Float>
         var cells: Set<Cell>
-        var lastSeen: TimeInterval
     }
 
     private(set) var count = 0
@@ -251,7 +256,6 @@ struct RoomObjectTrackRegistry: Sendable {
         timestamp: TimeInterval
     ) -> [TrackedRoomObject] {
         guard timestamp.isFinite else { return [] }
-        tracks.removeAll { timestamp - $0.lastSeen > 20 }
         var matched = Set<Int>()
         var output: [TrackedRoomObject] = []
 
@@ -278,7 +282,6 @@ struct RoomObjectTrackRegistry: Sendable {
                 trackIndex = match
                 matched.insert(match)
                 tracks[match].center = tracks[match].center * 0.65 + center * 0.35
-                tracks[match].lastSeen = timestamp
                 for cell in observationCells where tracks[match].cells.count < Self.maximumCellsPerTrack {
                     tracks[match].cells.insert(cell)
                 }
@@ -290,12 +293,15 @@ struct RoomObjectTrackRegistry: Sendable {
                 tracks.append(Track(
                     identifier: identifier,
                     center: center,
-                    cells: Set(observationCells.prefix(Self.maximumCellsPerTrack)),
-                    lastSeen: timestamp
+                    cells: Set(observationCells.prefix(Self.maximumCellsPerTrack))
                 ))
                 matched.insert(trackIndex)
             }
-            output.append(TrackedRoomObject(identifier: tracks[trackIndex].identifier, points: points))
+            output.append(TrackedRoomObject(
+                identifier: tracks[trackIndex].identifier,
+                instanceLabel: observation.instanceLabel,
+                points: points
+            ))
         }
 
         count = tracks.count

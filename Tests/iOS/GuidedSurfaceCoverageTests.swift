@@ -29,6 +29,16 @@ final class GuidedSurfaceCoverageTests: XCTestCase {
         )
         XCTAssertEqual(Set(twoObjects.map(\.identifier)), [1, 2])
         XCTAssertEqual(tracker.count, 2)
+
+        let revisitedObjects = tracker.update(
+            observations: [
+                RoomObjectObservation(instanceLabel: 8, points: firstObject),
+                RoomObjectObservation(instanceLabel: 9, points: nearbyObject)
+            ],
+            timestamp: 30
+        )
+        XCTAssertEqual(Set(revisitedObjects.map(\.identifier)), [1, 2])
+        XCTAssertEqual(tracker.count, 2)
     }
 
     private func objectPoints(origin: SIMD3<Float>) -> [SIMD3<Float>] {
