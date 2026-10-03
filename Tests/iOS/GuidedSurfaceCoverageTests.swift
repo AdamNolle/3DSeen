@@ -3,6 +3,33 @@ import simd
 @testable import ThreeDSeen
 
 final class GuidedSurfaceCoverageTests: XCTestCase {
+    func testDepthGridSamplingProjectsValidSurfacePointsIntoWorldSpace() {
+        var depths = Array(repeating: Float(2), count: 16)
+        depths[7] = .nan
+        depths[13] = 0
+        depths[15] = 4
+        var confidence = Array(repeating: UInt8(2), count: 16)
+        confidence[15] = 0
+        var cameraTransform = matrix_identity_float4x4
+        cameraTransform.columns.3 = SIMD4<Float>(1, 0, 0, 1)
+
+        let points = GuidedDepthProjection.sampledWorldPositions(
+            depths: depths,
+            confidenceValues: confidence,
+            configuration: GuidedDepthProjection.GridConfiguration(
+                depthSize: SIMD2<Int>(4, 4),
+                imageSize: SIMD2<Int>(4, 4),
+                sampleStep: 2,
+                focalLength: SIMD2<Float>(2, 2),
+                principalPoint: SIMD2<Float>(2, 2),
+                cameraTransform: cameraTransform
+            )
+        )
+
+        XCTAssertEqual(points.count, 1)
+        XCTAssertEqual(points[0], SIMD3<Float>(0.5, 0.5, -2))
+    }
+
     func testDepthProjectionMapsPixelAndCameraOriginIntoWorldSpace() throws {
         var cameraTransform = matrix_identity_float4x4
         cameraTransform.columns.3 = SIMD4<Float>(1, 2, 3, 1)
@@ -45,6 +72,20 @@ final class GuidedSurfaceCoverageTests: XCTestCase {
         XCTAssertEqual(coverage.hapticMilestone, 1)
         XCTAssertFalse(coverage.insert(points))
         XCTAssertEqual(coverage.hapticMilestone, 1)
+    }
+
+    func testCoverageCanUseRoomScaleHapticMilestones() {
+        var coverage = GuidedSurfaceCoverage(firstHapticThreshold: 200, hapticInterval: 400)
+        let points = (0..<600).map { index in
+            SIMD3<Float>(Float(index) * GuidedSurfaceCoverage.cellSize + 0.01, 0, 0)
+        }
+
+        XCTAssertFalse(coverage.insert(Array(points.prefix(199))))
+        XCTAssertTrue(coverage.insert([points[199]]))
+        XCTAssertEqual(coverage.hapticMilestone, 1)
+        XCTAssertFalse(coverage.insert(Array(points[200..<599])))
+        XCTAssertTrue(coverage.insert([points[599]]))
+        XCTAssertEqual(coverage.hapticMilestone, 2)
     }
 
     func testCoverageKeepsDiscoveringAndPinningSurfaceBeyond360Samples() {

@@ -12,14 +12,16 @@ struct RoomCaptureEngine: View {
 
     var body: some View {
         ZStack {
-            RoomSurfaceARView(controller: controller).ignoresSafeArea()
+            RoomSurfaceARView(controller: controller, surfacePoints: controller.surfacePoints)
+                .ignoresSafeArea()
             LiveCaptureHUD(
                 status: LiveCaptureStatus(mode: .space, phase: controller.isProcessing ? .processing : .capturing,
                                           frameCount: controller.frameCount, trackingStatus: controller.status,
                                           surfaceTriangleCount: controller.triangleCount,
-                                          texturedTriangleCount: controller.texturedTriangleCount,
-                                          textureCoveragePercent: controller.textureCoveragePercent,
-                                          surfaceClassificationSummary: controller.surfaceClassificationSummary),
+                texturedTriangleCount: controller.texturedTriangleCount,
+                textureCoveragePercent: controller.textureCoveragePercent,
+                surfaceClassificationSummary: controller.surfaceClassificationSummary,
+                surfaceSampleCount: controller.surfaceSampleCount),
                 onFinish: controller.isProcessing ? nil : controller.finish,
                 onTextureCapture: controller.isProcessing ? nil : controller.captureTexture,
                 textureSnapshotCount: controller.textureCount
@@ -37,6 +39,10 @@ struct RoomCaptureEngine: View {
             controller.onFailure = nil
             controller.cancel()
         }
+        .sensoryFeedback(
+            .impact(weight: .light, intensity: 0.55),
+            trigger: controller.coverageHapticMilestone
+        )
     }
 }
 
@@ -50,6 +56,9 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
     @Published private(set) var previewTriangleCount = 0
     @Published private(set) var texturedTriangleCount = 0
     @Published private(set) var surfaceClassificationSummary: String?
+    @Published private(set) var surfaceSampleCount = 0
+    @Published private(set) var coverageHapticMilestone = 0
+    @Published private(set) var surfacePoints: [SIMD3<Float>] = []
     @Published private(set) var isProcessing = false
     @Published private(set) var status = "Starting LiDAR"
     var textureCoveragePercent: Int? {
@@ -61,6 +70,7 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
 
     private let queue = DispatchQueue(label: "com.adamnolle.3DSeen.surface-capture", qos: .userInitiated)
     private let previewQueue = DispatchQueue(label: "com.adamnolle.3DSeen.surface-preview", qos: .utility)
+    private var surfaceCoverage = GuidedSurfaceCoverage(firstHapticThreshold: 240, hapticInterval: 400)
     private let lock = NSLock()
     private let context = CIContext()
     private var cancelled = false
@@ -73,6 +83,11 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
     private var frames: [LiDARTextureFrame] = []
     private var snapshotCount = 0
     private var lastFrameTime: TimeInterval = 0
+    private var lastCoverageSampleTime: TimeInterval = 0
+    private var lastSurfacePublicationTime: TimeInterval = 0
+    private var lastSurfacePublicationRevision: UInt64 = 0
+    private var lastHapticTimestamp: TimeInterval = 0
+    private var lastPublishedHapticMilestone = 0
     private var lastCameraTransform: simd_float4x4?
     // These preview scheduling values are confined to the AR session delegate queue.
     private var previewBuildInFlight = false
@@ -249,6 +264,7 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
     func session(_ session: ARSession, didUpdate frame: ARFrame) {
         guard accepting, !isCancelled, let folder, case .normal = frame.camera.trackingState else { return }
         do {
+            updateSurfaceCoverage(from: frame)
             let takeTexture = lock.withLock { () -> Bool in
                 let value = requestedTexture
                 requestedTexture = false
@@ -280,6 +296,120 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
             }
             scheduleLivePreview()
         } catch { fail(error) }
+    }
+
+    private func updateSurfaceCoverage(from frame: ARFrame) {
+        guard let depthData = frame.smoothedSceneDepth ?? frame.sceneDepth else { return }
+        guard frame.timestamp - lastCoverageSampleTime >= 0.16,
+              CVPixelBufferGetPixelFormatType(depthData.depthMap) == kCVPixelFormatType_DepthFloat32
+        else { return }
+        let depthMap = depthData.depthMap
+        lastCoverageSampleTime = frame.timestamp
+
+        let depthWidth = CVPixelBufferGetWidth(depthMap)
+        let depthHeight = CVPixelBufferGetHeight(depthMap)
+        guard depthWidth > 0, depthHeight > 0, depthWidth <= Int.max / depthHeight else { return }
+        let depthCount = depthWidth * depthHeight
+        guard CVPixelBufferLockBaseAddress(depthMap, .readOnly) == kCVReturnSuccess else { return }
+        guard let baseAddress = CVPixelBufferGetBaseAddress(depthMap) else {
+            CVPixelBufferUnlockBaseAddress(depthMap, .readOnly)
+            return
+        }
+        defer { CVPixelBufferUnlockBaseAddress(depthMap, .readOnly) }
+
+        let rowBytes = CVPixelBufferGetBytesPerRow(depthMap)
+        let sourceRowLength = rowBytes / MemoryLayout<Float>.stride
+        var depths = [Float](repeating: 0, count: depthCount)
+        for row in 0..<depthHeight {
+            let source = baseAddress
+                .advanced(by: row * rowBytes)
+                .assumingMemoryBound(to: Float.self)
+            let destinationOffset = row * depthWidth
+            for column in 0..<depthWidth {
+                guard column < sourceRowLength else { break }
+                depths[destinationOffset + column] = source[column]
+            }
+        }
+
+        let intrinsics = frame.camera.intrinsics
+        let imageWidth = CVPixelBufferGetWidth(frame.capturedImage)
+        let imageHeight = CVPixelBufferGetHeight(frame.capturedImage)
+        let confidenceValues = Self.confidenceValues(
+            from: depthData.confidenceMap,
+            width: depthWidth,
+            height: depthHeight
+        )
+        let points = GuidedDepthProjection.sampledWorldPositions(
+            depths: depths,
+            confidenceValues: confidenceValues,
+            configuration: GuidedDepthProjection.GridConfiguration(
+                depthSize: SIMD2<Int>(depthWidth, depthHeight),
+                imageSize: SIMD2<Int>(imageWidth, imageHeight),
+                sampleStep: max(8, depthWidth / 24),
+                focalLength: SIMD2<Float>(intrinsics.columns.0.x, intrinsics.columns.1.y),
+                principalPoint: SIMD2<Float>(intrinsics.columns.2.x, intrinsics.columns.2.y),
+                cameraTransform: frame.camera.transform,
+                minimumConfidence: UInt8(ARConfidenceLevel.medium.rawValue)
+            )
+        )
+        guard !points.isEmpty else { return }
+
+        _ = surfaceCoverage.insert(points)
+        let shouldPublish = frame.timestamp - lastSurfacePublicationTime >= 0.35
+        let publishedPoints = shouldPublish
+            && surfaceCoverage.displayRevision != lastSurfacePublicationRevision
+            ? surfaceCoverage.points
+            : nil
+        let sampleCount = shouldPublish ? surfaceCoverage.uniqueSurfaceCellCount : nil
+        if shouldPublish {
+            lastSurfacePublicationTime = frame.timestamp
+            if publishedPoints != nil {
+                lastSurfacePublicationRevision = surfaceCoverage.displayRevision
+            }
+        }
+
+        let milestone: Int?
+        if surfaceCoverage.hapticMilestone > lastPublishedHapticMilestone,
+           frame.timestamp - lastHapticTimestamp >= 1.1 {
+            milestone = surfaceCoverage.hapticMilestone
+            lastPublishedHapticMilestone = surfaceCoverage.hapticMilestone
+            lastHapticTimestamp = frame.timestamp
+        } else {
+            milestone = nil
+        }
+        guard sampleCount != nil || publishedPoints != nil || milestone != nil else { return }
+
+        publish { controller in
+            if let sampleCount { controller.surfaceSampleCount = sampleCount }
+            if let publishedPoints { controller.surfacePoints = publishedPoints }
+            if let milestone { controller.coverageHapticMilestone = milestone }
+        }
+    }
+
+    private static func confidenceValues(from confidenceMap: CVPixelBuffer?, width: Int, height: Int) -> [UInt8]? {
+        guard let confidenceMap,
+              width > 0, height > 0, width <= Int.max / height,
+              CVPixelBufferGetPixelFormatType(confidenceMap) == kCVPixelFormatType_OneComponent8,
+              CVPixelBufferGetWidth(confidenceMap) == width,
+              CVPixelBufferGetHeight(confidenceMap) == height,
+              CVPixelBufferLockBaseAddress(confidenceMap, .readOnly) == kCVReturnSuccess
+        else { return nil }
+        guard let baseAddress = CVPixelBufferGetBaseAddress(confidenceMap) else {
+            CVPixelBufferUnlockBaseAddress(confidenceMap, .readOnly)
+            return nil
+        }
+        defer { CVPixelBufferUnlockBaseAddress(confidenceMap, .readOnly) }
+
+        let rowBytes = CVPixelBufferGetBytesPerRow(confidenceMap)
+        var values = [UInt8](repeating: 0, count: width * height)
+        for row in 0..<height {
+            let source = baseAddress.advanced(by: row * rowBytes).assumingMemoryBound(to: UInt8.self)
+            let destinationOffset = row * width
+            for column in 0..<width {
+                values[destinationOffset + column] = source[column]
+            }
+        }
+        return values
     }
 
     @MainActor
@@ -429,13 +559,116 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
 
 struct RoomSurfaceARView: UIViewRepresentable {
     let controller: RoomCaptureController
+    let surfacePoints: [SIMD3<Float>]
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
     func makeUIView(context: Context) -> ARView {
         let view = ARView(frame: .zero, cameraMode: .ar, automaticallyConfigureSession: false)
         view.session = controller.session
         controller.attachPreview(view)
+        context.coordinator.attach(to: view)
         return view
     }
-    func updateUIView(_ uiView: ARView, context: Context) {}
+
+    func updateUIView(_ uiView: ARView, context: Context) {
+        context.coordinator.update(points: surfacePoints)
+    }
+
+    static func dismantleUIView(_ uiView: ARView, coordinator: Coordinator) {
+        coordinator.detach(from: uiView)
+    }
+
+    @MainActor
+    final class Coordinator {
+        private let anchor = AnchorEntity(world: .zero)
+        private let dotEntity = ModelEntity()
+        private let dotMaterial = UnlitMaterial(color: UIColor(red: 0.20, green: 0.72, blue: 1, alpha: 1))
+        private let dotBuildQueue = DispatchQueue(label: "com.adamnolle.3DSeen.room-surface-dots", qos: .userInitiated)
+        private weak var view: ARView?
+        private var meshRequests = Set<AnyCancellable>()
+        private var revision: UInt64 = 0
+        private var previousPoints: [SIMD3<Float>] = []
+        private var pendingPoints: [SIMD3<Float>]?
+        private var buildInFlight = false
+
+        func attach(to view: ARView) {
+            self.view = view
+            if ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) {
+                view.environment.sceneUnderstanding.options.insert(.occlusion)
+            }
+            if !view.scene.anchors.contains(where: { $0 === anchor }) {
+                view.scene.addAnchor(anchor)
+            }
+            if !anchor.children.contains(where: { $0 === dotEntity }) {
+                anchor.addChild(dotEntity)
+            }
+        }
+
+        func update(points: [SIMD3<Float>]) {
+            guard points != previousPoints else { return }
+            previousPoints = points
+            revision &+= 1
+            guard !points.isEmpty else {
+                pendingPoints = nil
+                meshRequests.removeAll()
+                dotEntity.model = nil
+                return
+            }
+            pendingPoints = points
+            scheduleDotMeshBuildIfNeeded()
+        }
+
+        func detach(from view: ARView) {
+            meshRequests.removeAll()
+            pendingPoints = nil
+            revision &+= 1
+            view.scene.anchors.remove(anchor)
+            self.view = nil
+        }
+
+        private func scheduleDotMeshBuildIfNeeded() {
+            guard !buildInFlight, let points = pendingPoints else { return }
+            pendingPoints = nil
+            buildInFlight = true
+            let buildRevision = revision
+            dotBuildQueue.async { [weak self] in
+                let geometry = GuidedSurfaceDotMesh.build(points: points)
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.buildInFlight = false
+                    if self.revision == buildRevision, self.view != nil {
+                        self.installDotMesh(geometry, revision: buildRevision)
+                    }
+                    self.scheduleDotMeshBuildIfNeeded()
+                }
+            }
+        }
+
+        private func installDotMesh(_ geometry: GuidedSurfaceDotMesh, revision: UInt64) {
+            meshRequests.removeAll()
+            guard !geometry.positions.isEmpty else {
+                dotEntity.model = nil
+                return
+            }
+            var descriptor = MeshDescriptor(name: "GuidedRoomSurfaceDots")
+            descriptor.positions = MeshBuffers.Positions(geometry.positions)
+            descriptor.normals = MeshBuffers.Normals(geometry.normals)
+            descriptor.primitives = .triangles(geometry.triangleIndices)
+            MeshResource.generateAsync(from: [descriptor])
+                .receive(on: DispatchQueue.main)
+                .sink(
+                    receiveCompletion: { _ in },
+                    receiveValue: { [weak self] mesh in
+                        guard let self, self.revision == revision, self.view != nil else { return }
+                        self.dotEntity.model = ModelComponent(mesh: mesh, materials: [self.dotMaterial])
+                    }
+                )
+                .store(in: &meshRequests)
+        }
+    }
 }
 
 struct LiveMeshPreview: Sendable {

@@ -27,6 +27,70 @@ enum GuidedDepthProjection {
         guard worldPoint.x.isFinite, worldPoint.y.isFinite, worldPoint.z.isFinite else { return nil }
         return SIMD3<Float>(worldPoint.x, worldPoint.y, worldPoint.z)
     }
+
+    struct GridConfiguration: Sendable {
+        let depthSize: SIMD2<Int>
+        let imageSize: SIMD2<Int>
+        let sampleStep: Int
+        let focalLength: SIMD2<Float>
+        let principalPoint: SIMD2<Float>
+        let cameraTransform: simd_float4x4
+        var minimumConfidence: UInt8 = 1
+        var maximumDepth: Float = 8
+    }
+
+    /// Converts a regularly sampled depth grid into world-space surface points.
+    /// The captured-image dimensions keep intrinsics and depth pixels aligned.
+    static func sampledWorldPositions(
+        depths: [Float],
+        confidenceValues: [UInt8]? = nil,
+        configuration: GridConfiguration
+    ) -> [SIMD3<Float>] {
+        let depthWidth = configuration.depthSize.x
+        let depthHeight = configuration.depthSize.y
+        let imageWidth = configuration.imageSize.x
+        let imageHeight = configuration.imageSize.y
+        let sampleStep = configuration.sampleStep
+        let depthDimensionsAreSafe = depthWidth > 0
+            && depthHeight > 0
+            && depthWidth <= Int.max / depthHeight
+        let depthElementCount = depthDimensionsAreSafe ? depthWidth * depthHeight : 0
+        let hasValidConfidenceMap = confidenceValues.map { $0.count >= depthElementCount } ?? true
+        guard depthDimensionsAreSafe,
+              imageWidth > 0, imageHeight > 0,
+              sampleStep > 0,
+              depths.count >= depthElementCount,
+              hasValidConfidenceMap,
+              configuration.maximumDepth.isFinite, configuration.maximumDepth > 0 else { return [] }
+
+        var points: [SIMD3<Float>] = []
+        let start = sampleStep / 2
+        for y in stride(from: start, to: depthHeight, by: sampleStep) {
+            for x in stride(from: start, to: depthWidth, by: sampleStep) {
+                let sampleIndex = (y * depthWidth) + x
+                if let confidenceValues,
+                   confidenceValues[sampleIndex] < configuration.minimumConfidence {
+                    continue
+                }
+                let depth = depths[sampleIndex]
+                guard depth <= configuration.maximumDepth else { continue }
+                let pixel = SIMD2<Float>(
+                    (Float(x) + 0.5) * Float(imageWidth) / Float(depthWidth),
+                    (Float(y) + 0.5) * Float(imageHeight) / Float(depthHeight)
+                )
+                if let point = worldPosition(
+                    pixel: pixel,
+                    depth: depth,
+                    focalLength: configuration.focalLength,
+                    principalPoint: configuration.principalPoint,
+                    cameraTransform: configuration.cameraTransform
+                ) {
+                    points.append(point)
+                }
+            }
+        }
+        return points
+    }
 }
 
 /// Tracks spatial coverage at a useful surface resolution while keeping its
@@ -56,7 +120,15 @@ struct GuidedSurfaceCoverage: Sendable {
     private var occupiedCells = Set<Cell>()
     private var displayCells = Set<Cell>()
     private(set) var displayCellSize = Self.cellSize
-    private var nextHapticThreshold = 48
+    private let firstHapticThreshold: Int
+    private let hapticInterval: Int
+    private var nextHapticThreshold: Int
+
+    init(firstHapticThreshold: Int = 48, hapticInterval: Int = 72) {
+        self.firstHapticThreshold = max(1, firstHapticThreshold)
+        self.hapticInterval = max(1, hapticInterval)
+        nextHapticThreshold = max(1, firstHapticThreshold)
+    }
 
     /// Returns true once per new-surface milestone, even when one frame crosses
     /// several thresholds. Samples in previously covered space do not trigger it.
@@ -93,7 +165,7 @@ struct GuidedSurfaceCoverage: Sendable {
 
         while uniqueSurfaceCellCount >= nextHapticThreshold {
             hapticMilestone += 1
-            nextHapticThreshold += 72
+            nextHapticThreshold += hapticInterval
         }
         if displayChanged {
             displayRevision &+= 1
@@ -126,7 +198,7 @@ struct GuidedSurfaceCoverage: Sendable {
         uniqueSurfaceCellCount = 0
         displayRevision = 0
         isAtSampleLimit = false
-        nextHapticThreshold = 48
+        nextHapticThreshold = firstHapticThreshold
         hapticMilestone = 0
     }
 }

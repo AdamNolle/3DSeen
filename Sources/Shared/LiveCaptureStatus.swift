@@ -16,18 +16,28 @@ public struct LiveCaptureStatus: Equatable, Sendable {
     public let frameCount: Int?
     public let trackingStatus: String?
     public let surfaceTriangleCount: Int?
+    public let surfaceSampleCount: Int?
     public let texturedTriangleCount: Int?
     public let textureCoveragePercent: Int?
     public let surfaceClassificationSummary: String?
 
-    public init(mode: CaptureMode, phase: Phase, frameCount: Int? = nil, trackingStatus: String? = nil,
-                surfaceTriangleCount: Int? = nil, texturedTriangleCount: Int? = nil,
-                textureCoveragePercent: Int? = nil, surfaceClassificationSummary: String? = nil) {
+    public init(
+        mode: CaptureMode,
+        phase: Phase,
+        frameCount: Int? = nil,
+        trackingStatus: String? = nil,
+        surfaceTriangleCount: Int? = nil,
+        texturedTriangleCount: Int? = nil,
+        textureCoveragePercent: Int? = nil,
+        surfaceClassificationSummary: String? = nil,
+        surfaceSampleCount: Int? = nil
+    ) {
         self.mode = mode
         self.phase = phase
         self.frameCount = frameCount.map { max(0, $0) }
         self.trackingStatus = trackingStatus?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.surfaceTriangleCount = surfaceTriangleCount.map { max(0, $0) }
+        self.surfaceSampleCount = surfaceSampleCount.map { max(0, $0) }
         self.texturedTriangleCount = texturedTriangleCount.map { max(0, $0) }
         self.textureCoveragePercent = textureCoveragePercent.map { min(100, max(0, $0)) }
         self.surfaceClassificationSummary = surfaceClassificationSummary?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -58,6 +68,9 @@ public struct LiveCaptureStatus: Equatable, Sendable {
         if let surfaceTriangleCount {
             facts.append("\(ModelGeometryFacts(vertexCount: 0, triangleCount: surfaceTriangleCount).formattedTriangleCount) faces")
         }
+        if let surfaceSampleCount {
+            facts.append("\(surfaceSampleCount.formatted()) surface dots")
+        }
         if let textureCoveragePercent {
             facts.append("\(textureCoveragePercent)% preview textured")
         } else if let texturedTriangleCount {
@@ -83,7 +96,8 @@ public struct LiveCaptureStatus: Equatable, Sendable {
             return "Building the measured LiDAR surface and embedding captured camera textures in your model."
         case (.space, _):
             return "Move slowly around walls, floors, furniture, and corners. " +
-                "The live preview samples measured faces to stay responsive; the saved model uses all captured geometry and camera textures. " +
+                "World-locked dots mark measured surfaces; a subtle tap confirms new coverage. " +
+                "The live mesh is a responsive preview; the saved model uses all captured geometry and camera textures. " +
                 "Only visible, well-tracked surfaces can be captured."
         case (.landscape, .capturing):
             return "Walk a smooth arc while frames are captured automatically."

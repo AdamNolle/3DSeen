@@ -26,8 +26,26 @@ final class CaptureTelemetryTests: XCTestCase {
     }
 
     func testSpaceCaptureShowsMeasuredSurfaceCount() {
-        let status = LiveCaptureStatus(mode: .space, phase: .capturing, frameCount: 3, surfaceTriangleCount: 400)
-        XCTAssertEqual(status.primaryFacts, ["3 frames", "400 faces"])
+        let status = LiveCaptureStatus(
+            mode: .space,
+            phase: .capturing,
+            frameCount: 3,
+            surfaceTriangleCount: 400,
+            surfaceSampleCount: 1_250
+        )
+        XCTAssertEqual(status.primaryFacts, ["3 frames", "400 faces", "1,250 surface dots"])
+    }
+
+    func testSpaceCaptureGuidesDotsAndHapticCoverage() {
+        let status = LiveCaptureStatus(mode: .space, phase: .capturing)
+
+        XCTAssertEqual(
+            status.guidance,
+            "Move slowly around walls, floors, furniture, and corners. "
+                + "World-locked dots mark measured surfaces; a subtle tap confirms new coverage. "
+                + "The live mesh is a responsive preview; the saved model uses all captured geometry and camera textures. "
+                + "Only visible, well-tracked surfaces can be captured."
+        )
     }
 
     func testSpaceProcessingStatusExplainsThatTheModelIsBeingBuilt() {
