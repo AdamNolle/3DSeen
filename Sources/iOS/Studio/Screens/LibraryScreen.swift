@@ -201,8 +201,10 @@ private struct PhoneLibrary: View {
                         .font(.sf(13.5)).foregroundStyle(theme.text2)
                         .padding(.top, 6)
 
-                    LibrarySearchField(query: $query, placeholder: "Search scans")
-                        .padding(.top, 16)
+                    if !saved.isEmpty {
+                        LibrarySearchField(query: $query, placeholder: "Search scans")
+                            .padding(.top, 16)
+                    }
 
                     if let featured {
                         FeaturedCard(scan: featured, onRename: onRename, onDelete: onDelete).padding(.top, 16)
@@ -210,7 +212,11 @@ private struct PhoneLibrary: View {
                         EmptyLibraryState().padding(.top, 16)
                     }
 
-                    FilterPills(active: $filter, scans: LibraryData.source(saved)).padding(.top, 18).padding(.bottom, 12)
+                    if !saved.isEmpty {
+                        FilterPills(active: $filter, scans: LibraryData.source(saved))
+                            .padding(.top, 18)
+                            .padding(.bottom, 12)
+                    }
 
                     LazyVGrid(columns: columns, spacing: 12) {
                         ForEach(items, id: \.id) { s in
@@ -292,7 +298,9 @@ private struct PadLibrary: View {
                         } else if saved.isEmpty {
                             EmptyLibraryState(big: true).padding(.top, 18)
                         }
-                        recentHeader
+                        if !saved.isEmpty {
+                            recentHeader
+                        }
                         LazyVGrid(columns: columns, spacing: 14) {
                             ForEach(items, id: \.id) { s in
                                 ScanThumbButton(scan: s, onRename: onRename, onDelete: onDelete)
@@ -312,9 +320,13 @@ private struct PadLibrary: View {
 
     private var searchRow: some View {
         HStack(alignment: .center, spacing: 12) {
-            LibrarySearchField(query: $query,
-                               placeholder: "Search scans…",
-                               height: 46, iconSize: 18)
+            if saved.isEmpty {
+                Spacer(minLength: 0)
+            } else {
+                LibrarySearchField(query: $query,
+                                   placeholder: "Search scans…",
+                                   height: 46, iconSize: 18)
+            }
             StButton(title: "New Scan", kind: .accent, icon: "scan") { model.beginNewScan(using: settings) }
         }
     }

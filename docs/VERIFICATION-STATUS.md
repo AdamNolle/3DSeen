@@ -152,6 +152,12 @@ The following remain unproven or need a final repeat on the latest build:
 9. The direct-distribution Mac app can run the installed COLMAP + Nerfstudio runtime on a representative image capture, produce a renderable trained PLY, and return that PLY through an actual Multipeer result package.
 10. A reconstructed, textured capture USDZ converts through the macOS Blender path into GLB and FBX that open in a third-party viewer.
 
+## October 3 empty-library polish and release-gate recheck
+
+The empty iPhone/iPad library now suppresses search, zero-count mode pills, and the iPad Recent row until there are saved scans; the New Scan action stays visible. Current-source screenshots on iPhone 16 Pro and iPad Pro 11-inch show the simplified state. The six iOS UI tests pass. The macOS pane-render test passes and produces 20 screenshots across all five panes, light/dark appearance, and empty/populated states at 1040×680. Strict SwiftLint and `git diff --check` pass; XcodeGen reports no project drift.
+
+The physical iPhone 15 Pro Max is now reachable over the local network, booted, paired, and in Developer Mode. A current-source device build is still blocked by Xcode reporting `No Accounts` and no iOS development provisioning profile for `com.adamnolle.3DSeen-iOS`. The local Apple Development certificate is present, but account sign-in and profile provisioning are not. No latest-source install or LiDAR walkthrough has been completed. Developer ID notarization is also still pending: `notarytool` has no `3DSeenNotary` Keychain profile, GitHub Actions has no release secrets or variables, and the currently installed Mac app remains the earlier notarized 1.0.0 (1) build. The later code-signed 1.0.0 (2) archive remains unnotarized and has not replaced it.
+
 ## Known Constraints
 
 - Geometry-derived PLY previews are vertex-based splat previews, not trained neural radiance fields.
