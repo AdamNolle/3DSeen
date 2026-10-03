@@ -234,12 +234,10 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
 
     private var isCancelled: Bool { lock.withLock { cancelled } }
 
-    private static func classificationSummary(for meshes: [LiDARSurfaceMesh]) -> String? {
+    private static func classificationSummary(for classificationCounts: [UInt8: Int]) -> String? {
         var counts: [String: Int] = [:]
-        for mesh in meshes where !mesh.classifications.isEmpty {
-            for rawValue in mesh.classifications where rawValue != 0 {
-                counts[LiDARSurfaceClassification.label(for: rawValue), default: 0] += 1
-            }
+        for (rawValue, count) in classificationCounts where rawValue != 0 {
+            counts[LiDARSurfaceClassification.label(for: rawValue), default: 0] += count
         }
         let labels = counts.sorted { lhs, rhs in
             lhs.value == rhs.value ? lhs.key < rhs.key : lhs.value > rhs.value
@@ -291,7 +289,7 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
 
     private func publishMeshState() {
         let count = meshes.triangleCount
-        let classificationSummary = Self.classificationSummary(for: meshes.meshValues)
+        let classificationSummary = Self.classificationSummary(for: meshes.classificationCounts)
         let guidance = captureGuidanceOverrideText
         publish {
             $0.triangleCount = count

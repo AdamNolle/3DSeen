@@ -32,14 +32,17 @@ final class BoundedMeshAnchorStoreTests: XCTestCase {
         var store = BoundedMeshAnchorStore<UUID>(maximumTriangleCount: 10)
         let firstAnchor = UUID()
         let secondAnchor = UUID()
-        XCTAssertTrue(store.update(mesh(triangles: 6), for: firstAnchor))
-        XCTAssertTrue(store.update(mesh(triangles: 3), for: secondAnchor))
+        XCTAssertTrue(store.update(mesh(triangles: 6, classifications: Array(repeating: 1, count: 6)), for: firstAnchor))
+        XCTAssertTrue(store.update(mesh(triangles: 3, classifications: Array(repeating: 2, count: 3)), for: secondAnchor))
 
-        XCTAssertFalse(store.update(mesh(triangles: 8), for: firstAnchor))
+        XCTAssertFalse(store.update(mesh(triangles: 8, classifications: Array(repeating: 3, count: 8)), for: firstAnchor))
 
         XCTAssertEqual(store.triangleCount, 9)
         XCTAssertEqual(store.meshes[firstAnchor]?.triangleCount, 6)
         XCTAssertEqual(store.meshes[secondAnchor]?.triangleCount, 3)
+        XCTAssertEqual(store.classificationCounts[1], 6)
+        XCTAssertEqual(store.classificationCounts[2], 3)
+        XCTAssertNil(store.classificationCounts[3])
         XCTAssertTrue(store.didReachLimit)
     }
 
@@ -58,7 +61,28 @@ final class BoundedMeshAnchorStoreTests: XCTestCase {
         XCTAssertFalse(store.isEmpty)
     }
 
-    private func mesh(triangles: Int) -> LiDARSurfaceMesh {
-        LiDARSurfaceMesh(vertices: [SIMD3<Float>(repeating: 0)], indices: Array(repeating: 0, count: triangles * 3))
+    func testClassificationCountsTrackAnchorReplacementAndRemoval() {
+        var store = BoundedMeshAnchorStore<UUID>(maximumTriangleCount: 10)
+        let firstAnchor = UUID()
+        let secondAnchor = UUID()
+
+        XCTAssertTrue(store.update(mesh(triangles: 2, classifications: [1, 1]), for: firstAnchor))
+        XCTAssertTrue(store.update(mesh(triangles: 3, classifications: [2, 2, 2]), for: secondAnchor))
+        XCTAssertTrue(store.update(mesh(triangles: 1, classifications: [2]), for: firstAnchor))
+
+        XCTAssertNil(store.classificationCounts[1])
+        XCTAssertEqual(store.classificationCounts[2], 4)
+
+        store.remove(secondAnchor)
+
+        XCTAssertEqual(store.classificationCounts[2], 1)
+    }
+
+    private func mesh(triangles: Int, classifications: [UInt8] = []) -> LiDARSurfaceMesh {
+        LiDARSurfaceMesh(
+            vertices: [SIMD3<Float>(repeating: 0)],
+            indices: Array(repeating: 0, count: triangles * 3),
+            classifications: classifications
+        )
     }
 }

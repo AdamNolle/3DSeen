@@ -7,6 +7,7 @@ struct BoundedMeshAnchorStore<AnchorID: Hashable> {
 
     private(set) var meshes: [AnchorID: LiDARSurfaceMesh] = [:]
     private(set) var triangleCount = 0
+    private(set) var classificationCounts: [UInt8: Int] = [:]
     private(set) var didReachLimit = false
 
     let maximumTriangleCount: Int
@@ -38,21 +39,37 @@ struct BoundedMeshAnchorStore<AnchorID: Hashable> {
     @discardableResult
     mutating func update(_ mesh: LiDARSurfaceMesh, for anchorID: AnchorID) -> Bool {
         guard canAcceptUpdate(triangleCount: mesh.triangleCount, for: anchorID) else { return false }
-        let previousCount = meshes[anchorID]?.triangleCount ?? 0
+        let previousMesh = meshes[anchorID]
+        let previousCount = previousMesh?.triangleCount ?? 0
         let retainedCount = triangleCount - previousCount
+        if let previousMesh { adjustClassifications(previousMesh.classifications, by: -1) }
         meshes[anchorID] = mesh
+        adjustClassifications(mesh.classifications, by: 1)
         triangleCount = retainedCount + mesh.triangleCount
         return true
     }
 
     mutating func remove(_ anchorID: AnchorID) {
         guard let removed = meshes.removeValue(forKey: anchorID) else { return }
+        adjustClassifications(removed.classifications, by: -1)
         triangleCount -= removed.triangleCount
     }
 
     mutating func removeAll(keepingCapacity: Bool = false) {
         meshes.removeAll(keepingCapacity: keepingCapacity)
         triangleCount = 0
+        classificationCounts.removeAll(keepingCapacity: keepingCapacity)
         didReachLimit = false
+    }
+
+    private mutating func adjustClassifications(_ values: [UInt8], by delta: Int) {
+        for value in values where value != 0 {
+            let updatedCount = (classificationCounts[value] ?? 0) + delta
+            if updatedCount > 0 {
+                classificationCounts[value] = updatedCount
+            } else {
+                classificationCounts[value] = nil
+            }
+        }
     }
 }

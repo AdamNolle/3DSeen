@@ -59,7 +59,7 @@ This document is the canonical repository-level definition of production behavio
 - Signed iOS distribution, Developer ID signing/notarization, physical capture, real Multipeer transfer, representative trained-splat execution, and third-party GLB/FBX validation remain external credential/hardware/runtime gates. They must be recorded as blocked until actually executed.
 
 ## Bounded real-time LiDAR coverage
-Room scans retain accepted mesh geometry up to the 500,000-triangle export budget and guide users to save a section when the mesh, 256-frame, or dot-coverage budget is reached. Over-budget anchor updates are skipped without deleting valid partial geometry. Object segmentation and world-space object dots continue to update from live camera frames after stored texture-frame capture reaches its limit; haptic feedback remains rate-limited to discovery and coverage milestones.
+Room scans retain accepted mesh geometry up to the 500,000-triangle export budget and guide users to save a section when the mesh, 256-frame, or dot-coverage budget is reached. Per-anchor mesh and face-category totals are incrementally maintained for capture feedback. Over-budget anchor updates are skipped without deleting valid partial geometry. Object segmentation and world-space object dots continue to update from live camera frames after stored texture-frame capture reaches its limit; haptic feedback remains rate-limited to discovery and coverage milestones.
 
 ## Change policy
 
