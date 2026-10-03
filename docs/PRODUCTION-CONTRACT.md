@@ -58,6 +58,9 @@ This document is the canonical repository-level definition of production behavio
 - A release candidate requires strict SwiftLint, all iOS/macOS unit and UI tests, XcodeGen drift validation, unsigned Release builds, workflow validation, and `git diff --check`.
 - Signed iOS distribution, Developer ID signing/notarization, physical capture, real Multipeer transfer, representative trained-splat execution, and third-party GLB/FBX validation remain external credential/hardware/runtime gates. They must be recorded as blocked until actually executed.
 
+## Bounded real-time LiDAR coverage
+Room scans retain accepted mesh geometry up to the 500,000-triangle export budget and guide users to save a section when the mesh, 256-frame, or dot-coverage budget is reached. Over-budget anchor updates are skipped without deleting valid partial geometry. Object segmentation and world-space object dots continue to update from live camera frames after stored texture-frame capture reaches its limit; haptic feedback remains rate-limited to discovery and coverage milestones.
+
 ## Change policy
 
 A behavior change must update this contract, relevant tests, and `docs/VERIFICATION-STATUS.md` in the same release work. Historical design documents should not be silently rewritten to imply they describe current production behavior.

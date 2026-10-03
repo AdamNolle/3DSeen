@@ -77,6 +77,7 @@
 		6C9BC460341656D7D9989649 /* MacLibraryPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BEDEB7EFB54C45767689D41 /* MacLibraryPane.swift */; };
 		6E21E4326F2462B0AAD4307B /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 10DEAF503F471822B4E715BC /* PrivacyInfo.xcprivacy */; };
 		6EA21C0797D0DFAFB81FB8D8 /* ScanLifecycleManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B290292242D89550970068F4 /* ScanLifecycleManagerTests.swift */; };
+		6EF2F7155E77CFFD9026BC8C /* BoundedMeshAnchorStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBADB51EF075823627DCBBD4 /* BoundedMeshAnchorStore.swift */; };
 		6FF8B02A2FB10DE4C91F0A19 /* StudioComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D535C6B22419107CA1BE97C /* StudioComponents.swift */; };
 		7035A8234FDEF1B545EBCE57 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 10DEAF503F471822B4E715BC /* PrivacyInfo.xcprivacy */; };
 		70DA98E80BA39694368960E9 /* ModelGeometryInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94267FF59D408E2A692E43BB /* ModelGeometryInspector.swift */; };
@@ -145,6 +146,7 @@
 		C378704DEF112B1161D98AC7 /* ScanSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA53940BBA8FCD5C9ED3794 /* ScanSession.swift */; };
 		C400CC02E203E00EFC6A589F /* HandoffControlCipher.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0C83023832D099CC4438B95 /* HandoffControlCipher.swift */; };
 		C417A5ED67ABE1893B9627B4 /* GuidedScanCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44807A4146F6D3C1EE584B6D /* GuidedScanCore.swift */; };
+		C70103EF267A9540CD99E9F3 /* BoundedMeshAnchorStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBADB51EF075823627DCBBD4 /* BoundedMeshAnchorStore.swift */; };
 		C7EE7BF07BBF072BCF3950FD /* HandoffTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E9069508A6BB2A6AF3157E7 /* HandoffTransport.swift */; };
 		C9AD59FF6F58547E4021D6B9 /* ObjectCaptureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE453E975B978103D45FAD /* ObjectCaptureEngine.swift */; };
 		CA53FDC8CE9D22852895B0B2 /* HandoffControlCipherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7B2FD79A72BA2CD41D594C4 /* HandoffControlCipherTests.swift */; };
@@ -164,6 +166,7 @@
 		EAD320028C8170FC7A2B9907 /* HandoffPairingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96BE68CCC1669D6127D359C5 /* HandoffPairingCoordinator.swift */; };
 		EB2C0D73EEDCA21A965BA071 /* LocalQueueManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D346EB2BD18E2A661B3BF1F /* LocalQueueManager.swift */; };
 		EE22AADD355AE96D66605E0F /* HandoffCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9756B2993AD4E297961CB3B2 /* HandoffCoordinator.swift */; };
+		F0058E2ED91AA837FCDFE011 /* BoundedMeshAnchorStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFDD3136F73284BD19201AB0 /* BoundedMeshAnchorStoreTests.swift */; };
 		F0F468A6319F4972C1C1D3DF /* RoomSurfaceARView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F72A179EEFE8649E62398935 /* RoomSurfaceARView.swift */; };
 		F6230FCC1FFE9C5BF31111DB /* SplatGeneratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7F1EBB08D5A1806B90E8DB7 /* SplatGeneratorTests.swift */; };
 		F7676F45F78678BDB30183AD /* ThemeAndRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68EF972E44A504A2F5E88083 /* ThemeAndRenderTests.swift */; };
@@ -324,8 +327,10 @@
 		F859450B348E448505DB12BA /* 3DSeen-macOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "3DSeen-macOSTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		F85DDBDD6E873DC5AAF7C124 /* LiveCaptureHUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveCaptureHUD.swift; sourceTree = "<group>"; };
 		F8ABEFAF4C800310DE2199BD /* ComputeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputeScreen.swift; sourceTree = "<group>"; };
+		FBADB51EF075823627DCBBD4 /* BoundedMeshAnchorStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundedMeshAnchorStore.swift; sourceTree = "<group>"; };
 		FC5D2EB4650ACC4A0FB016D7 /* StateMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateMachineTests.swift; sourceTree = "<group>"; };
 		FDAB72BEA60D5A70D3B7AC67 /* StudioRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioRouter.swift; sourceTree = "<group>"; };
+		FFDD3136F73284BD19201AB0 /* BoundedMeshAnchorStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundedMeshAnchorStoreTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -529,6 +534,7 @@
 			isa = PBXGroup;
 			children = (
 				281F78B7D402BE66E74A9771 /* AutoPilotTests.swift */,
+				FFDD3136F73284BD19201AB0 /* BoundedMeshAnchorStoreTests.swift */,
 				E2D63C1AF9F8FD5E2C6AFC43 /* CaptureTelemetryTests.swift */,
 				64953E3F4E46190D0E5C36FE /* ComputeDetailCapabilityTests.swift */,
 				C1A28D2A5101900B49581CE0 /* GuidedScannerTests.swift */,
@@ -556,6 +562,7 @@
 			isa = PBXGroup;
 			children = (
 				9A2A28C46F8496F999E0A552 /* AutoPilotVisionManager.swift */,
+				FBADB51EF075823627DCBBD4 /* BoundedMeshAnchorStore.swift */,
 				E98F370212A0EB3C878F8F5D /* CaptureQualityAnalyzer.swift */,
 				8B7D7527397EBB52B2F66CED /* CompactSplatFile.swift */,
 				F0C83023832D099CC4438B95 /* HandoffControlCipher.swift */,
@@ -817,6 +824,7 @@
 			files = (
 				0B98DA421C4EC7CFC7DA9F9A /* AutoPilotTests.swift in Sources */,
 				58873C98237C01EC4F4743F7 /* BoundedArchiveExtractorTests.swift in Sources */,
+				F0058E2ED91AA837FCDFE011 /* BoundedMeshAnchorStoreTests.swift in Sources */,
 				E5D1820F52E8DC53581193E6 /* CaptureTelemetryTests.swift in Sources */,
 				4095D1BC6D04B6BDC2CF1CD0 /* CompactSplatFileTests.swift in Sources */,
 				E1D81375B20049AEEEC86FF2 /* ComputeDetailCapabilityTests.swift in Sources */,
@@ -852,6 +860,7 @@
 				55143D9E4B912C225EB8EA4A /* AutoPilotVisionManager.swift in Sources */,
 				960E76F119F182BF6D68E553 /* BlenderModelConverter.swift in Sources */,
 				B9340D0F69D546EC67585CF3 /* BoundedArchiveExtractor.swift in Sources */,
+				6EF2F7155E77CFFD9026BC8C /* BoundedMeshAnchorStore.swift in Sources */,
 				B774D582846E74BF958BFB78 /* CaptureQualityAnalyzer.swift in Sources */,
 				01800A10263E9F68CB1972E3 /* CompactSplatFile.swift in Sources */,
 				AF5998B414E507B278960DEA /* ComputeCoordinator.swift in Sources */,
@@ -917,6 +926,7 @@
 				043DE1418392692AAA10B8CC /* AIPBRMaterialEstimator.swift in Sources */,
 				4996E9BB3BA317180388D3D0 /* AutoPilotVisionManager.swift in Sources */,
 				4350F7CF047027DABFC717C5 /* BoundedArchiveExtractor.swift in Sources */,
+				C70103EF267A9540CD99E9F3 /* BoundedMeshAnchorStore.swift in Sources */,
 				963C111EC42D504BC96AB7DE /* BriefingScreen.swift in Sources */,
 				115B1546366E464ABE2A4F77 /* CaptureCoordinatorView.swift in Sources */,
 				ACB180BF6FB8355B721C6C8A /* CaptureQualityAnalyzer.swift in Sources */,

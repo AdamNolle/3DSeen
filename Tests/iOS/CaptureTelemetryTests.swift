@@ -25,6 +25,16 @@ final class CaptureTelemetryTests: XCTestCase {
         XCTAssertEqual(status.primaryActionTitle, "Start auto-detection")
     }
 
+    func testCaptureGuidanceOverrideIsTrimmedAndTakesPrecedence() {
+        let status = LiveCaptureStatus(
+            mode: .space,
+            phase: .capturing,
+            guidanceOverride: "  Finish this section to save its scan data.  "
+        )
+
+        XCTAssertEqual(status.guidance, "Finish this section to save its scan data.")
+    }
+
     func testSpaceCaptureShowsMeasuredSurfaceCount() {
         let status = LiveCaptureStatus(
             mode: .space,

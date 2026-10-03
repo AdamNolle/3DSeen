@@ -21,6 +21,7 @@ struct RoomCaptureEngine: View {
                     phase: controller.isProcessing ? .processing : .capturing,
                     frameCount: controller.frameCount,
                     trackingStatus: controller.status,
+                    guidanceOverride: controller.captureGuidanceOverride,
                     surfaceTriangleCount: controller.triangleCount,
                     texturedTriangleCount: controller.texturedTriangleCount,
                     textureCoveragePercent: controller.textureCoveragePercent,
@@ -70,6 +71,7 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
     @Published private(set) var objectSurfaceSampleCount = 0
     @Published private(set) var isProcessing = false
     @Published private(set) var status = "Starting LiDAR"
+    @Published private(set) var captureGuidanceOverride: String?
     var textureCoveragePercent: Int? {
         guard previewTriangleCount > 0 else { return nil }
         return Int((Double(texturedTriangleCount) / Double(previewTriangleCount) * 100).rounded())
@@ -93,10 +95,11 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
     private var sealed = false
     private var started = false
     private var folder: URL?
-    private var meshes: [UUID: LiDARSurfaceMesh] = [:]
+    private var meshes = BoundedMeshAnchorStore<UUID>()
     private var frames: [LiDARTextureFrame] = []
     private var snapshotCount = 0
     private var lastFrameTime: TimeInterval = 0
+    private static let maximumTextureFrameCount = 256
     private var lastCoverageSampleTime: TimeInterval = 0
     private var lastSurfacePublicationTime: TimeInterval = 0
     private var lastSurfacePublicationRevision: UInt64 = 0
@@ -186,7 +189,7 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
                     guard !isCancelled else { return }
                     do {
                         let result = try LiDARTextureExporter.export(
-                            meshes: Array(meshes.values), frames: frames,
+                            meshes: meshes.meshValues, frames: frames,
                             to: folder.appendingPathComponent(LiDARCaptureBundle.modelName),
                             isCancelled: { self.isCancelled }
                         )
@@ -231,7 +234,7 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
 
     private var isCancelled: Bool { lock.withLock { cancelled } }
 
-    private static func classificationSummary(for meshes: Dictionary<UUID, LiDARSurfaceMesh>.Values) -> String? {
+    private static func classificationSummary(for meshes: [LiDARSurfaceMesh]) -> String? {
         var counts: [String: Int] = [:]
         for mesh in meshes where !mesh.classifications.isEmpty {
             for rawValue in mesh.classifications where rawValue != 0 {
@@ -261,25 +264,40 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
     func session(_ session: ARSession, didUpdate anchors: [ARAnchor]) { update(anchors) }
     func session(_ session: ARSession, didRemove anchors: [ARAnchor]) {
         guard accepting, !isCancelled else { return }
-        for anchor in anchors { meshes[anchor.identifier] = nil }
+        for anchor in anchors { meshes.remove(anchor.identifier) }
+        publishMeshState()
         scheduleLivePreview()
     }
 
     private func update(_ anchors: [ARAnchor]) {
         guard accepting, !isCancelled else { return }
-        do {
-            for anchor in anchors.compactMap({ $0 as? ARMeshAnchor }) where anchor.geometry.faces.count >= 1 {
-                meshes[anchor.identifier] = try LiDARCaptureFrames.mesh(anchor)
+        for anchor in anchors.compactMap({ $0 as? ARMeshAnchor }) where anchor.geometry.faces.count >= 1 {
+            guard meshes.canAcceptUpdate(triangleCount: anchor.geometry.faces.count, for: anchor.identifier) else {
+                break
             }
-            guard meshes.values.reduce(0, { $0 + $1.triangleCount }) <= 500_000 else { throw LiDARSurfaceError.tooLarge }
-            let count = meshes.values.reduce(0, { $0 + $1.triangleCount })
-            let classificationSummary = Self.classificationSummary(for: meshes.values)
-            publish {
-                $0.triangleCount = count
-                $0.surfaceClassificationSummary = classificationSummary
+            do {
+                let mesh = try LiDARCaptureFrames.mesh(anchor)
+                guard meshes.update(mesh, for: anchor.identifier) else {
+                    break
+                }
+            } catch {
+                fail(error)
+                return
             }
-            scheduleLivePreview()
-        } catch { fail(error) }
+        }
+        publishMeshState()
+        scheduleLivePreview()
+    }
+
+    private func publishMeshState() {
+        let count = meshes.triangleCount
+        let classificationSummary = Self.classificationSummary(for: meshes.meshValues)
+        let guidance = captureGuidanceOverrideText
+        publish {
+            $0.triangleCount = count
+            $0.surfaceClassificationSummary = classificationSummary
+            $0.captureGuidanceOverride = guidance
+        }
     }
 
     func session(_ session: ARSession, cameraDidChangeTrackingState camera: ARCamera) {
@@ -314,32 +332,63 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
                 return value
             }
             if takeTexture {
-                try LiDARCaptureFrames.saveTexture(frame, index: snapshotCount,
-                                                  folder: folder.appendingPathComponent(LiDARCaptureBundle.texturesName), context: context)
+                try LiDARCaptureFrames.saveTexture(
+                    frame,
+                    index: snapshotCount,
+                    folder: folder.appendingPathComponent(LiDARCaptureBundle.texturesName),
+                    context: context
+                )
                 snapshotCount += 1
                 let count = snapshotCount
                 publish { $0.textureCount = count }
             }
-            guard frame.timestamp - lastFrameTime >= 0.4, frames.count < 256 else { return }
-            if let last = lastCameraTransform {
-                let translation = simd_distance(last.columns.3, frame.camera.transform.columns.3)
-                let facing = simd_dot(last.columns.2, frame.camera.transform.columns.2)
-                guard translation >= 0.12 || facing < 0.978 else { return }
-            }
-            guard frame.smoothedSceneDepth != nil || frame.sceneDepth != nil else { return }
-            let saved = try LiDARCaptureFrames.save(frame, index: frames.count,
-                                                   folder: folder.appendingPathComponent(LiDARCaptureBundle.framesName), context: context)
-            frames.append(saved)
-            scheduleObjectAnalysis(from: frame, textureFrame: saved)
-            lastFrameTime = frame.timestamp
-            lastCameraTransform = frame.camera.transform
-            let count = frames.count
-            publish {
-                $0.frameCount = count
-                if count == 256 { $0.status = "Photo limit reached · finish this section" }
-            }
-            scheduleLivePreview()
-        } catch { fail(error) }
+            let textureFrame = try saveTextureFrameIfNeeded(from: frame, folder: folder)
+            scheduleObjectAnalysis(from: frame, textureFrame: textureFrame)
+        } catch {
+            fail(error)
+        }
+    }
+
+    private func saveTextureFrameIfNeeded(from frame: ARFrame, folder: URL) throws -> LiDARTextureFrame? {
+        guard frame.timestamp - lastFrameTime >= 0.4,
+              frames.count < Self.maximumTextureFrameCount else { return nil }
+        if let last = lastCameraTransform {
+            let translation = simd_distance(last.columns.3, frame.camera.transform.columns.3)
+            let facing = simd_dot(last.columns.2, frame.camera.transform.columns.2)
+            guard translation >= 0.12 || facing < 0.978 else { return nil }
+        }
+        guard frame.smoothedSceneDepth != nil || frame.sceneDepth != nil else { return nil }
+        let saved = try LiDARCaptureFrames.save(
+            frame,
+            index: frames.count,
+            folder: folder.appendingPathComponent(LiDARCaptureBundle.framesName),
+            context: context
+        )
+        frames.append(saved)
+        scheduleLivePreview()
+        lastFrameTime = frame.timestamp
+        lastCameraTransform = frame.camera.transform
+        let count = frames.count
+        let guidance = captureGuidanceOverrideText
+        publish {
+            $0.frameCount = count
+            if count == Self.maximumTextureFrameCount { $0.status = "Photo limit reached · finish section" }
+            $0.captureGuidanceOverride = guidance
+        }
+        return saved
+    }
+
+    private var captureGuidanceOverrideText: String? {
+        if meshes.didReachLimit {
+            return "Mesh limit reached · finish this section to save the captured surfaces."
+        }
+        if frames.count >= Self.maximumTextureFrameCount {
+            return "Texture-frame limit reached · finish this section before scanning another area."
+        }
+        if surfaceCoverage.isAtSampleLimit || objectCoverage.isAtSampleLimit {
+            return "Dot coverage limit reached · finish this section to save its scan data."
+        }
+        return nil
     }
 
     private func updateSurfaceCoverage(from frame: ARFrame) {
@@ -422,10 +471,11 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
             if let sampleCount { controller.surfaceSampleCount = sampleCount }
             if let publishedPoints { controller.surfacePoints = publishedPoints }
             if let hapticPulse { controller.registerHapticPulse(hapticPulse) }
+            controller.captureGuidanceOverride = self.captureGuidanceOverrideText
         }
     }
 
-    private func scheduleObjectAnalysis(from frame: ARFrame, textureFrame: LiDARTextureFrame) {
+    private func scheduleObjectAnalysis(from frame: ARFrame, textureFrame: LiDARTextureFrame?) {
         guard !objectAnalysisInFlight, frame.timestamp - lastObjectAnalysisTime >= 0.9 else { return }
         objectAnalysisInFlight = true
         lastObjectAnalysisTime = frame.timestamp
@@ -445,7 +495,7 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
                 guard let self else { return }
                 objectAnalysisInFlight = false
                 guard !isCancelled else { return }
-                if let objectMask, !identifiersByLabel.isEmpty,
+                if let textureFrame, let objectMask, !identifiersByLabel.isEmpty,
                    let index = frames.firstIndex(where: { $0.imageURL == textureFrame.imageURL }) {
                     frames[index] = frames[index].attaching(objectMask)
                 }
@@ -483,6 +533,7 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
             controller.detectedObjectCount = objectCount
             controller.status = statusMessage
             if let hapticPulse { controller.registerHapticPulse(hapticPulse) }
+            controller.captureGuidanceOverride = self.captureGuidanceOverrideText
         }
     }
 
@@ -516,6 +567,30 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
         return values
     }
 
+    private func publish(_ update: @escaping (RoomCaptureController) -> Void) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.isCancelled, !self.isProcessing else { return }
+            update(self)
+        }
+    }
+
+    private func saveCameraMetadata(in folder: URL) throws {
+        let metadata: [[String: Any]] = frames.map { frame in
+            let transform = frame.camera.worldToCamera.inverse
+            let intrinsics = frame.camera.intrinsics
+            return ["image": frame.imageURL.lastPathComponent, "depth": frame.imageURL.lastPathComponent + ".depth.f32",
+                    "cameraToWorldColumnMajor": (0..<4).flatMap { column in (0..<4).map { transform[column][$0] } },
+                    "intrinsicsColumnMajor": (0..<3).flatMap { column in (0..<3).map { intrinsics[column][$0] } },
+                    "imageWidth": frame.camera.imageWidth, "imageHeight": frame.camera.imageHeight,
+                    "depthWidth": frame.camera.depthWidth, "depthHeight": frame.camera.depthHeight]
+        }
+        let data = try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "units": "meters",
+                                                               "depthEncoding": "little-endian-float32", "frames": metadata], options: [.sortedKeys])
+        try data.write(to: folder.appendingPathComponent(LiDARCaptureBundle.framesName).appendingPathComponent("cameras.json"), options: .atomic)
+    }
+}
+
+extension RoomCaptureController {
     @MainActor
     func attachPreview(_ view: ARView) {
         previewView = view
@@ -536,7 +611,7 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
         lastPreviewBuildTime = now
         previewRevision &+= 1
         let revision = previewRevision
-        let meshSnapshot = Array(meshes.values)
+        let meshSnapshot = meshes.meshValues
         let frameSnapshot = frames
         previewQueue.async { [weak self] in
             let preview = LiveMeshPreviewBuilder.build(
@@ -651,27 +726,5 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
         material.roughness = 0.85
         material.faceCulling = .none
         return material
-    }
-
-    private func publish(_ update: @escaping (RoomCaptureController) -> Void) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self, !self.isCancelled, !self.isProcessing else { return }
-            update(self)
-        }
-    }
-
-    private func saveCameraMetadata(in folder: URL) throws {
-        let metadata: [[String: Any]] = frames.map { frame in
-            let transform = frame.camera.worldToCamera.inverse
-            let intrinsics = frame.camera.intrinsics
-            return ["image": frame.imageURL.lastPathComponent, "depth": frame.imageURL.lastPathComponent + ".depth.f32",
-                    "cameraToWorldColumnMajor": (0..<4).flatMap { column in (0..<4).map { transform[column][$0] } },
-                    "intrinsicsColumnMajor": (0..<3).flatMap { column in (0..<3).map { intrinsics[column][$0] } },
-                    "imageWidth": frame.camera.imageWidth, "imageHeight": frame.camera.imageHeight,
-                    "depthWidth": frame.camera.depthWidth, "depthHeight": frame.camera.depthHeight]
-        }
-        let data = try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "units": "meters",
-                                                               "depthEncoding": "little-endian-float32", "frames": metadata], options: [.sortedKeys])
-        try data.write(to: folder.appendingPathComponent(LiDARCaptureBundle.framesName).appendingPathComponent("cameras.json"), options: .atomic)
     }
 }

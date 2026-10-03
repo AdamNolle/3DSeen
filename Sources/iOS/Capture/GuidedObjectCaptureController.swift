@@ -74,7 +74,7 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
     var finishing = false
     var sealed = false
     // AR mesh anchors, texture frames, and preview scheduling are queue-confined.
-    var surfaceMeshes: [UUID: LiDARSurfaceMesh] = [:]
+    var surfaceMeshes = BoundedMeshAnchorStore<UUID>()
     var textureFrames: [LiDARTextureFrame] = []
     var previewBuildInFlight = false
     var previewDirty = false
@@ -230,7 +230,7 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
         }
         frameProcessingQueue.async { [weak self] in
             guard let self else { return }
-            let meshSnapshot = Array(self.surfaceMeshes.values)
+            let meshSnapshot = self.surfaceMeshes.meshValues
             self.writerGroup.notify(queue: self.writerQueue) { [weak self] in
                 guard let self else { return }
                 let textureSnapshot = self.frameProcessingQueue.sync { self.textureFrames }

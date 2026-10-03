@@ -173,41 +173,55 @@ extension GuidedObjectCaptureController {
 
     func session(_ session: ARSession, didRemove anchors: [ARAnchor]) {
         guard lock.withLock({ acceptsFrames }), !meshCaptureDisabled else { return }
-        for anchor in anchors {
-            surfaceMeshes[anchor.identifier] = nil
-        }
+        for anchor in anchors { surfaceMeshes.remove(anchor.identifier) }
         publishMeshTriangleCount()
         scheduleLiveMeshPreview()
     }
 
     private func updateObjectMesh(_ anchors: [ARAnchor]) {
         guard lock.withLock({ acceptsFrames }), !meshCaptureDisabled else { return }
-        do {
-            for anchor in anchors.compactMap({ $0 as? ARMeshAnchor }) {
-                let priorCount = surfaceMeshes[anchor.identifier]?.triangleCount ?? 0
-                let total = surfaceMeshes.values.reduce(0) { $0 + $1.triangleCount }
-                guard total - priorCount + anchor.geometry.faces.count <= 500_000 else {
-                    throw LiDARSurfaceError.tooLarge
-                }
-                surfaceMeshes[anchor.identifier] = try LiDARCaptureFrames.mesh(anchor)
+        for anchor in anchors.compactMap({ $0 as? ARMeshAnchor }) {
+            guard surfaceMeshes.canAcceptUpdate(
+                triangleCount: anchor.geometry.faces.count,
+                for: anchor.identifier
+            ) else {
+                stopMeshCapture(
+                    instruction: "Mesh limit reached. The captured partial mesh and photos will be saved."
+                )
+                break
             }
-        } catch {
-            meshCaptureDisabled = true
-            surfaceMeshes.removeAll(keepingCapacity: false)
-            previewRevision &+= 1
-            publishLiveMeshPreview(nil, revision: previewRevision)
-            logger.error("Object mesh capture stopped: \(error.localizedDescription)")
-            publish {
-                $0.instruction = "The live mesh reached its safe size limit. Photos are still being saved."
+            do {
+                let mesh = try LiDARCaptureFrames.mesh(anchor)
+                guard surfaceMeshes.update(mesh, for: anchor.identifier) else {
+                    stopMeshCapture(
+                        instruction: "Mesh limit reached. The captured partial mesh and photos will be saved."
+                    )
+                    break
+                }
+            } catch {
+                stopMeshCapture(
+                    instruction: "Mesh capture paused. Previously captured geometry and photos will be saved.",
+                    reason: error.localizedDescription
+                )
+                break
             }
         }
         publishMeshTriangleCount()
         scheduleLiveMeshPreview()
     }
 
+    private func stopMeshCapture(instruction: String, reason: String? = nil) {
+        meshCaptureDisabled = true
+        if let reason {
+            logger.error("Object mesh capture stopped: \(reason)")
+        } else {
+            logger.warning("Object mesh capture reached its triangle limit; preserving the accepted mesh.")
+        }
+        publish { $0.instruction = instruction }
+    }
+
     private func publishMeshTriangleCount() {
-        let count = surfaceMeshes.values.reduce(0) { $0 + $1.triangleCount }
-        publishMeshTriangleCount(count)
+        publishMeshTriangleCount(surfaceMeshes.triangleCount)
     }
 
     func scheduleLiveMeshPreview() {
@@ -227,7 +241,7 @@ extension GuidedObjectCaptureController {
         lastPreviewBuildTime = now
         previewRevision &+= 1
         let revision = previewRevision
-        let meshSnapshot = Array(surfaceMeshes.values)
+        let meshSnapshot = surfaceMeshes.meshValues
         let frameSnapshot = textureFrames
         previewQueue.async { [weak self] in
             guard let self else { return }

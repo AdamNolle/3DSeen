@@ -15,6 +15,7 @@ public struct LiveCaptureStatus: Equatable, Sendable {
     public let phase: Phase
     public let frameCount: Int?
     public let trackingStatus: String?
+    public let guidanceOverride: String?
     public let surfaceTriangleCount: Int?
     public let surfaceSampleCount: Int?
     public let objectSurfaceSampleCount: Int?
@@ -28,6 +29,7 @@ public struct LiveCaptureStatus: Equatable, Sendable {
         phase: Phase,
         frameCount: Int? = nil,
         trackingStatus: String? = nil,
+        guidanceOverride: String? = nil,
         surfaceTriangleCount: Int? = nil,
         texturedTriangleCount: Int? = nil,
         textureCoveragePercent: Int? = nil,
@@ -40,6 +42,8 @@ public struct LiveCaptureStatus: Equatable, Sendable {
         self.phase = phase
         self.frameCount = frameCount.map { max(0, $0) }
         self.trackingStatus = trackingStatus?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedGuidance = guidanceOverride?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.guidanceOverride = normalizedGuidance?.isEmpty == true ? nil : normalizedGuidance
         self.surfaceTriangleCount = surfaceTriangleCount.map { max(0, $0) }
         self.surfaceSampleCount = surfaceSampleCount.map { max(0, $0) }
         self.trackedObjectCount = trackedObjectCount.map { max(0, $0) }
@@ -94,6 +98,7 @@ public struct LiveCaptureStatus: Equatable, Sendable {
     }
 
     public var guidance: String {
+        if let guidanceOverride { return guidanceOverride }
         switch (mode, phase) {
         case (.object, .ready):
             return "Frame the object, then begin automatic detection."
