@@ -1,6 +1,10 @@
 # Verification Status
 
-Last updated: 2026-10-02
+Last updated: 2026-10-03
+
+## October 3 notarized-release gate
+
+The prior tag-driven Release run published unsigned iOS and macOS app archives while skipping both signing jobs. The workflow now keeps unsigned builds as workflow artifacts and attaches a public GitHub Release asset only from the Developer ID job, after notarization, stapling, signature validation, and Gatekeeper assessment succeed. Current GitHub release secrets/variables and the local `3DSeenNotary` Keychain profile are absent, so this guarded path has not produced a new notarized build yet. A valid Developer ID certificate is installed locally, but Xcode still has no signed-in iOS team account or matching provisioning profile.
 
 ## October 2 export sharing regression
 
