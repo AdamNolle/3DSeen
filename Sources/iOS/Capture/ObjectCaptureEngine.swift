@@ -72,11 +72,24 @@ struct ObjectCaptureEngine: View {
                 Text(capture.snapshot.surfacePointCount.formatted())
                     .monospacedDigit()
                     .foregroundStyle(.primary)
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.18), value: capture.snapshot.surfacePointCount)
             }
             .font(.caption.weight(.semibold))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(surfacePointStatus)
             .accessibilityValue("\(capture.snapshot.surfacePointCount) spatial samples")
+
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                Image(systemName: surfacePointDetailIcon)
+                    .font(.caption2.weight(.semibold))
+                Text(surfacePointDetail)
+                    .font(.caption2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(.secondary)
+            .accessibilityElement(children: .combine)
 
             if capture.meshTriangleCount > 0 {
                 VStack(spacing: 5) {
@@ -222,7 +235,29 @@ struct ObjectCaptureEngine: View {
         if capture.snapshot.pointSource == .visualFeatures {
             return "AR feature points · depth unavailable"
         }
-        return "Waiting for LiDAR depth"
+        return supportsLiDARDepth ? "Waiting for LiDAR depth" : "AR feature points · no LiDAR sensor"
+    }
+
+    private var surfacePointDetail: String {
+        switch capture.snapshot.pointSource {
+        case .lidarDepth:
+            return "Dots stay pinned in 3D; light haptics mark new surface samples."
+        case .visualFeatures:
+            return "Screen-space guidance only; LiDAR depth is unavailable."
+        case nil:
+            return supportsLiDARDepth
+                ? "LiDAR depth pins scan dots directly to the object."
+                : "This device uses tracked points; depth-pinned dots require LiDAR."
+        }
+    }
+
+    private var surfacePointDetailIcon: String {
+        capture.snapshot.pointSource == .lidarDepth ? "waveform" : "info.circle"
+    }
+
+    private var supportsLiDARDepth: Bool {
+        ARWorldTrackingConfiguration.supportsFrameSemantics(.smoothedSceneDepth)
+            || ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth)
     }
 
     private func finish() {
