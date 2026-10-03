@@ -6,7 +6,7 @@ Last updated: 2026-10-03
 
 The prior tag-driven Release run published unsigned iOS and macOS app archives while skipping both signing jobs. The workflow now keeps unsigned builds as workflow artifacts and attaches a public GitHub Release asset only from the Developer ID job, after notarization, stapling, signature validation, and Gatekeeper assessment succeed. Current GitHub release secrets/variables and the local `3DSeenNotary` Keychain profile are absent, so this guarded path has not produced a new notarized build yet. A valid Developer ID certificate is installed locally, but Xcode still has no signed-in iOS team account or matching provisioning profile.
 
-The bounded archive extractor now has regression tests for path traversal, per-entry and aggregate expanded-size limits, entry-count limits, nonempty destination preservation, and successful extraction. The full macOS suite passes 74 tests, and generic iOS Simulator build-for-testing succeeds. Local execution of the iOS test target is still blocked by CoreSimulator's `launchd_sim` boot failure; hosted iPhone/iPad runs remain the execution check.
+The bounded archive extractor now has six regression tests for path traversal, symbolic-link rejection, per-entry and aggregate expanded-size limits, entry-count limits, nonempty destination preservation, and successful extraction. The full macOS suite passes 75 tests, and generic iOS Simulator build-for-testing succeeds. Local execution of the iOS test target is still blocked by CoreSimulator's `launchd_sim` boot failure; hosted iPhone/iPad runs remain the execution check.
 
 ## October 2 export sharing regression
 

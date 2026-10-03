@@ -29,6 +29,35 @@ final class BoundedArchiveExtractorTests: XCTestCase {
         }.isEmpty)
     }
 
+    func testRejectsSymbolicLinks() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let archiveURL = root.appendingPathComponent("symlink.zip")
+        let destination = root.appendingPathComponent("extracted", isDirectory: true)
+        let linkTarget = Data("../../outside.txt".utf8)
+        let archive = try Archive(url: archiveURL, accessMode: .create)
+        try archive.addEntry(
+            with: "link.txt",
+            type: .symlink,
+            uncompressedSize: Int64(linkTarget.count),
+            compressionMethod: .none
+        ) { position, requestedSize in
+            let start = Int(position)
+            guard start < linkTarget.count else { return Data() }
+            let end = min(start + requestedSize, linkTarget.count)
+            return linkTarget.subdata(in: start..<end)
+        }
+
+        XCTAssertThrowsError(try BoundedArchiveExtractor.extract(archiveURL, to: destination)) { error in
+            guard let extractionError = error as? BoundedArchiveExtractor.ExtractionError,
+                  case .unsupportedEntryType = extractionError
+            else {
+                return XCTFail("Expected symbolic-link rejection, received \(error)")
+            }
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+    }
+
     func testEnforcesPerEntryExpandedByteLimit() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
