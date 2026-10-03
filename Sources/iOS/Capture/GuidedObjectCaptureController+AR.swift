@@ -88,43 +88,52 @@ extension GuidedObjectCaptureController {
             viewport: presentation.0,
             orientation: presentation.1
         )
-        let coverageState = lock.withLock { () -> (count: Int, hapticMilestone: Int, points: [SIMD3<Float>]?) in
+        let coverageState = lock.withLock { () -> CoverageFramePublication in
             _ = surfaceCoverage.insert(pointResult.surfacePoints)
-            let shouldPublishPoints = surfaceCoverage.points.count != lastPublishedSurfaceCount
+            let shouldPublish = snapshotPublicationGate.shouldPublish(at: frame.timestamp)
+            let shouldPublishPoints = shouldPublish
+                && surfaceCoverage.points.count != lastPublishedSurfaceCount
                 && frame.timestamp - lastSurfacePublicationTime >= 0.25
             let points = shouldPublishPoints ? surfaceCoverage.points : nil
             if shouldPublishPoints {
                 lastPublishedSurfaceCount = surfaceCoverage.points.count
                 lastSurfacePublicationTime = frame.timestamp
             }
-            return (surfaceCoverage.points.count, surfaceCoverage.hapticMilestone, points)
+            return CoverageFramePublication(
+                shouldPublish: shouldPublish,
+                count: surfaceCoverage.points.count,
+                hapticMilestone: surfaceCoverage.hapticMilestone,
+                points: points
+            )
         }
-        publish { snapshot in
-            snapshot.subjectBounds = subjectProjection?.screenBounds
-            snapshot.points = pointResult.points
-            snapshot.pointSource = pointResult.source
-            snapshot.surfacePointCount = coverageState.count
-            snapshot.coverageHapticMilestone = coverageState.hapticMilestone
-            if let surfacePoints = coverageState.points {
-                snapshot.surfacePoints = surfacePoints
-            }
-            snapshot.phase = subjectProjection == nil ? .seekingSubject : .capturing
-            if !candidate.trackingIsNormal {
-                snapshot.instruction = "Hold still while camera tracking recovers."
-            } else if subjectProjection == nil {
-                snapshot.instruction = "Center one object and hold still for detection."
-            } else if !candidate.quality.isAcceptable {
-                snapshot.instruction = candidate.quality.meanLuminance < 0.10
-                    ? "Add more even light, then keep the object centered."
-                    : "Aim at a textured edge and hold the phone steady."
-            } else if !candidate.motionIsAcceptable {
-                snapshot.instruction = "Move more slowly so each photo stays sharp."
-            } else if snapshot.frameCount >= snapshot.recommendedFrameCount {
-                snapshot.instruction = "Photo set ready. Add top or underside views, or finish."
-            } else if snapshot.frameCount < 8 {
-                snapshot.instruction = "Move slowly around the object. Photos save automatically."
-            } else {
-                snapshot.instruction = "Keep circling. Capture the top and every side."
+        if coverageState.shouldPublish {
+            publish { snapshot in
+                snapshot.subjectBounds = subjectProjection?.screenBounds
+                snapshot.points = pointResult.points
+                snapshot.pointSource = pointResult.source
+                snapshot.surfacePointCount = coverageState.count
+                snapshot.coverageHapticMilestone = coverageState.hapticMilestone
+                if let surfacePoints = coverageState.points {
+                    snapshot.surfacePoints = surfacePoints
+                }
+                snapshot.phase = subjectProjection == nil ? .seekingSubject : .capturing
+                if !candidate.trackingIsNormal {
+                    snapshot.instruction = "Hold still while camera tracking recovers."
+                } else if subjectProjection == nil {
+                    snapshot.instruction = "Center one object and hold still for detection."
+                } else if !candidate.quality.isAcceptable {
+                    snapshot.instruction = candidate.quality.meanLuminance < 0.10
+                        ? "Add more even light, then keep the object centered."
+                        : "Aim at a textured edge and hold the phone steady."
+                } else if !candidate.motionIsAcceptable {
+                    snapshot.instruction = "Move more slowly so each photo stays sharp."
+                } else if snapshot.frameCount >= snapshot.recommendedFrameCount {
+                    snapshot.instruction = "Photo set ready. Add top or underside views, or finish."
+                } else if snapshot.frameCount < 8 {
+                    snapshot.instruction = "Move slowly around the object. Photos save automatically."
+                } else {
+                    snapshot.instruction = "Keep circling. Capture the top and every side."
+                }
             }
         }
         evaluateAndCapture(candidate, manual: false)

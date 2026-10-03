@@ -5,6 +5,13 @@ import OSLog
 import UIKit
 
 final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSessionDelegate {
+    struct CoverageFramePublication {
+        let shouldPublish: Bool
+        let count: Int
+        let hapticMilestone: Int
+        let points: [SIMD3<Float>]?
+    }
+
     struct FrameCandidate {
         let pixelBuffer: CVPixelBuffer
         let pose: CapturePose
@@ -20,6 +27,10 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
     let detector: ForegroundSubjectDetecting
     let gate: GuidedCaptureGate
     let logger = Logger(subsystem: "com.adamnolle.3DSeen", category: "GuidedObject")
+    let frameProcessingQueue = DispatchQueue(
+        label: "com.adamnolle.3DSeen.guided-object.frames",
+        qos: .userInitiated
+    )
     let analysisQueue = DispatchQueue(label: "com.adamnolle.3DSeen.guided-object.vision", qos: .userInitiated)
     let writerQueue = DispatchQueue(label: "com.adamnolle.3DSeen.guided-object.writer", qos: .userInitiated)
     let writerGroup = DispatchGroup()
@@ -37,6 +48,7 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
     var lastDetectionTime: TimeInterval = -.infinity
     var detectionInFlight = false
     var surfaceCoverage = GuidedSurfaceCoverage()
+    var snapshotPublicationGate = GuidedSnapshotPublicationGate()
     var lastPublishedSurfaceCount = 0
     var lastSurfacePublicationTime: TimeInterval = -.infinity
     var writerBacklog = 0
@@ -58,6 +70,7 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
             .appendingPathComponent("guided-object-\(UUID().uuidString)", isDirectory: true)
         super.init()
         snapshot.recommendedFrameCount = max(12, recommendedFrameCount)
+        session.delegateQueue = frameProcessingQueue
         session.delegate = self
     }
 
@@ -98,6 +111,7 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
             lastDetectionTime = -.infinity
             detectionInFlight = false
             surfaceCoverage.reset()
+            snapshotPublicationGate.reset()
             lastPublishedSurfaceCount = 0
             lastSurfacePublicationTime = -.infinity
         }

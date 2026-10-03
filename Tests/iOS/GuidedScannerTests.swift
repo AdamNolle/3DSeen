@@ -1,8 +1,26 @@
+import ARKit
 import XCTest
 import simd
 @testable import ThreeDSeen
 
 final class GuidedScannerTests: XCTestCase {
+    func testObjectCaptureUsesDedicatedARSessionDelegateQueue() {
+        let controller = GuidedObjectCaptureController()
+        XCTAssertNotNil(controller.session.delegateQueue)
+    }
+
+    func testLiveSnapshotPublicationIsThrottledAndResettable() {
+        var gate = GuidedSnapshotPublicationGate()
+
+        XCTAssertTrue(gate.shouldPublish(at: 1.0))
+        XCTAssertFalse(gate.shouldPublish(at: 1.05))
+        XCTAssertTrue(gate.shouldPublish(at: 1.1))
+        XCTAssertFalse(gate.shouldPublish(at: 1.09))
+
+        gate.reset()
+        XCTAssertTrue(gate.shouldPublish(at: 0.1))
+    }
+
     func testSubjectSelectorPrefersCenteredForegroundInstance() {
         let labels: [UInt8] = [
             1, 1, 0, 2, 2,

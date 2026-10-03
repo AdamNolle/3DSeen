@@ -86,3 +86,21 @@ struct GuidedSurfaceCoverage: Sendable {
         hapticMilestone = 0
     }
 }
+
+struct GuidedSnapshotPublicationGate: Sendable {
+    var minimumInterval: TimeInterval = 0.1
+    private(set) var lastPublishedTimestamp = -Double.infinity
+
+    mutating func shouldPublish(at timestamp: TimeInterval) -> Bool {
+        guard timestamp.isFinite, timestamp >= lastPublishedTimestamp else { return false }
+        guard !lastPublishedTimestamp.isFinite || timestamp - lastPublishedTimestamp >= minimumInterval else {
+            return false
+        }
+        lastPublishedTimestamp = timestamp
+        return true
+    }
+
+    mutating func reset() {
+        lastPublishedTimestamp = -Double.infinity
+    }
+}
