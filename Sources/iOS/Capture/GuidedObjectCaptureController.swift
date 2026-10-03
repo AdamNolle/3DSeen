@@ -36,6 +36,9 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
     var lastAcceptedPose: CapturePose?
     var lastDetectionTime: TimeInterval = -.infinity
     var detectionInFlight = false
+    var surfaceCoverage = GuidedSurfaceCoverage()
+    var lastPublishedSurfaceCount = 0
+    var lastSurfacePublicationTime: TimeInterval = -.infinity
     var writerBacklog = 0
     var nextFrameIndex = 0
     var sessionGeneration = 0
@@ -91,10 +94,17 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
             lastAcceptedPose = nil
             lastDetectionTime = -.infinity
             detectionInFlight = false
+            surfaceCoverage.reset()
+            lastPublishedSurfaceCount = 0
+            lastSurfacePublicationTime = -.infinity
         }
         publish {
             $0.phase = .seekingSubject
             $0.instruction = "Point at one object and keep it inside the frame."
+            $0.points = []
+            $0.surfacePoints = []
+            $0.surfacePointCount = 0
+            $0.coverageHapticMilestone = 0
             $0.isFinishing = false
         }
         session.run(configuration, options: [.resetTracking, .removeExistingAnchors])

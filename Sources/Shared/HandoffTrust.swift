@@ -12,6 +12,7 @@ public protocol PairingCredentialStore: AnyObject {
 public enum PairingCredentialError: LocalizedError, Equatable {
     case keychain(OSStatus)
     case invalidSecret
+    case invalidChallenge
 
     public var errorDescription: String? {
         switch self {
@@ -19,15 +20,21 @@ public enum PairingCredentialError: LocalizedError, Equatable {
             return SecCopyErrorMessageString(status, nil) as String? ?? "Keychain error \(status)."
         case .invalidSecret:
             return "A pairing secret must contain at least 32 bytes."
+        case .invalidChallenge:
+            return "The peer sent an invalid key-agreement challenge."
         }
     }
 }
 
 public final class KeychainPairingCredentialStore: PairingCredentialStore {
     private let service: String
+    private let legacyService: String?
 
-    public init(service: String = "com.adamnolle.3DSeen.handoff-pairing") {
+    public init(service: String = "com.adamnolle.3DSeen.handoff-pairing.v3") {
         self.service = service
+        legacyService = service == "com.adamnolle.3DSeen.handoff-pairing.v3"
+            ? "com.adamnolle.3DSeen.handoff-pairing"
+            : nil
     }
 
     public func secret(for peerID: HandoffInstallationID) throws -> Data? {
@@ -46,7 +53,10 @@ public final class KeychainPairingCredentialStore: PairingCredentialStore {
         let query = baseQuery(peerID: peerID)
         let attributes: [String: Any] = [kSecValueData as String: secret]
         let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
-        if updateStatus == errSecSuccess { return }
+        if updateStatus == errSecSuccess {
+            try deleteLegacyCredentials(for: peerID)
+            return
+        }
         guard updateStatus == errSecItemNotFound else {
             throw PairingCredentialError.keychain(updateStatus)
         }
@@ -55,6 +65,7 @@ public final class KeychainPairingCredentialStore: PairingCredentialStore {
         item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         let addStatus = SecItemAdd(item as CFDictionary, nil)
         guard addStatus == errSecSuccess else { throw PairingCredentialError.keychain(addStatus) }
+        try deleteLegacyCredentials(for: peerID)
     }
 
     public func removeSecret(for peerID: HandoffInstallationID) throws {
@@ -62,9 +73,11 @@ public final class KeychainPairingCredentialStore: PairingCredentialStore {
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw PairingCredentialError.keychain(status)
         }
+        try deleteLegacyCredentials(for: peerID)
     }
 
     public func trustedPeerIDs() throws -> Set<HandoffInstallationID> {
+        try deleteLegacyCredentials()
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -89,6 +102,21 @@ public final class KeychainPairingCredentialStore: PairingCredentialStore {
             kSecAttrService as String: service,
             kSecAttrAccount as String: peerID.rawValue.uuidString,
         ]
+    }
+
+    private func deleteLegacyCredentials(for peerID: HandoffInstallationID? = nil) throws {
+        guard let legacyService else { return }
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: legacyService,
+        ]
+        if let peerID {
+            query[kSecAttrAccount as String] = peerID.rawValue.uuidString
+        }
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw PairingCredentialError.keychain(status)
+        }
     }
 }
 
@@ -118,6 +146,7 @@ public final class InMemoryPairingCredentialStore: PairingCredentialStore {
 
 public enum HandoffAuthenticator {
     public static let nonceByteCount = 32
+    public static let publicKeyByteCount = 32
 
     public static func makeNonce() throws -> Data {
         var bytes = [UInt8](repeating: 0, count: nonceByteCount)
@@ -126,36 +155,64 @@ public enum HandoffAuthenticator {
         return Data(bytes)
     }
 
-    public static func sharedAuthenticationCode(
-        localID: HandoffInstallationID,
-        remoteID: HandoffInstallationID,
-        localNonce: Data,
-        remoteNonce: Data
-    ) -> String {
-        let digest = SHA256.hash(data: canonicalMaterial(
-            context: "sas",
-            localID: localID,
-            remoteID: remoteID,
-            localNonce: localNonce,
-            remoteNonce: remoteNonce
-        ))
-        let value = digest.prefix(8).reduce(UInt64(0)) { ($0 << 8) | UInt64($1) } % 1_000_000
-        return String(format: "%06llu", value)
+    public static func makeKeyAgreementPrivateKey() -> Curve25519.KeyAgreement.PrivateKey {
+        Curve25519.KeyAgreement.PrivateKey()
     }
 
     public static func deriveSharedSecret(
         localID: HandoffInstallationID,
         remoteID: HandoffInstallationID,
-        localNonce: Data,
-        remoteNonce: Data
-    ) -> Data {
-        Data(SHA256.hash(data: canonicalMaterial(
-            context: "secret",
-            localID: localID,
-            remoteID: remoteID,
-            localNonce: localNonce,
-            remoteNonce: remoteNonce
-        )))
+        localChallenge: HandoffAuthenticationChallenge,
+        remoteChallenge: HandoffAuthenticationChallenge,
+        localPrivateKey: Curve25519.KeyAgreement.PrivateKey
+    ) throws -> Data {
+        guard localChallenge.nonce.count == nonceByteCount,
+              remoteChallenge.nonce.count == nonceByteCount,
+              localID != remoteID,
+              localChallenge.keyAgreementPublicKey.count == publicKeyByteCount,
+              remoteChallenge.keyAgreementPublicKey.count == publicKeyByteCount,
+              localChallenge.keyAgreementPublicKey == localPrivateKey.publicKey.rawRepresentation else {
+            throw PairingCredentialError.invalidChallenge
+        }
+
+        let publicKey: Curve25519.KeyAgreement.PublicKey
+        do {
+            publicKey = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: remoteChallenge.keyAgreementPublicKey)
+        } catch {
+            throw PairingCredentialError.invalidChallenge
+        }
+
+        let participants = [
+            (localID, localChallenge.nonce, localChallenge.keyAgreementPublicKey),
+            (remoteID, remoteChallenge.nonce, remoteChallenge.keyAgreementPublicKey),
+        ].sorted { $0.0.rawValue.uuidString < $1.0.rawValue.uuidString }
+        var transcript = Data("3DSeen-pairing-v3|".utf8)
+        for (id, nonce, key) in participants {
+            transcript.append(Data(id.rawValue.uuidString.lowercased().utf8))
+            transcript.append(0)
+            transcript.append(nonce)
+            transcript.append(0)
+            transcript.append(key)
+            transcript.append(0)
+        }
+
+        let sharedSecret = try localPrivateKey.sharedSecretFromKeyAgreement(with: publicKey)
+        let key = sharedSecret.hkdfDerivedSymmetricKey(
+            using: SHA256.self,
+            salt: transcript,
+            sharedInfo: Data("3DSeen-pairing-credential-v3".utf8),
+            outputByteCount: 32
+        )
+        return key.withUnsafeBytes { Data($0) }
+    }
+
+    public static func sharedAuthenticationCode(secret: Data) -> String {
+        let digest = HMAC<SHA256>.authenticationCode(
+            for: Data("3DSeen-pairing-confirm-v3".utf8),
+            using: SymmetricKey(data: secret)
+        )
+        let value = digest.prefix(8).reduce(UInt64(0)) { ($0 << 8) | UInt64($1) } % 1_000_000
+        return String(format: "%06llu", value)
     }
 
     public static func authenticationResponse(
@@ -183,27 +240,8 @@ public enum HandoffAuthenticator {
         )
     }
 
-    private static func canonicalMaterial(
-        context: String,
-        localID: HandoffInstallationID,
-        remoteID: HandoffInstallationID,
-        localNonce: Data,
-        remoteNonce: Data
-    ) -> Data {
-        let participants = [(localID, localNonce), (remoteID, remoteNonce)]
-            .sorted { $0.0.rawValue.uuidString < $1.0.rawValue.uuidString }
-        var data = Data("3DSeen-pairing-v2|\(context)|".utf8)
-        for (id, nonce) in participants {
-            data.append(Data(id.rawValue.uuidString.lowercased().utf8))
-            data.append(0)
-            data.append(nonce)
-            data.append(0)
-        }
-        return data
-    }
-
     private static func responseMaterial(challenge: Data, responderID: HandoffInstallationID) -> Data {
-        var data = Data("3DSeen-auth-v2|".utf8)
+        var data = Data("3DSeen-auth-v3|".utf8)
         data.append(Data(responderID.rawValue.uuidString.lowercased().utf8))
         data.append(0)
         data.append(challenge)

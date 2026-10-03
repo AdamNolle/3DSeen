@@ -92,7 +92,12 @@ final class HandoffPairingCoordinatorTests: XCTestCase {
         try await settle()
 
         phonePairing.reject(try XCTUnwrap(phonePairing.pendingRequests.first))
+        relayPayload(.pairingRejected, from: phone, to: mac)
+        try await settle()
+
         XCTAssertTrue(try phoneStore.trustedPeerIDs().isEmpty)
+        XCTAssertTrue(macPairing.pendingRequests.isEmpty)
+        XCTAssertEqual(macPairing.lastError, "The peer declined this pairing request.")
         XCTAssertFalse(phonePairing.isAuthenticated(mac.localInstallationID))
         withExtendedLifetime(macPairing) {}
     }
@@ -117,18 +122,21 @@ final class HandoffPairingCoordinatorTests: XCTestCase {
 private enum PairingPayloadKind: CustomStringConvertible {
     case authenticationChallenge
     case authenticationResponse
+    case pairingRejected
 
     var description: String {
         switch self {
         case .authenticationChallenge: "authentication challenge"
         case .authenticationResponse: "authentication response"
+        case .pairingRejected: "pairing rejection"
         }
     }
 
     func matches(_ payload: HandoffMessagePayload) -> Bool {
         switch (self, payload) {
         case (.authenticationChallenge, .authenticationChallenge),
-             (.authenticationResponse, .authenticationResponse):
+             (.authenticationResponse, .authenticationResponse),
+             (.pairingRejected, .pairingRejected):
             true
         default:
             false

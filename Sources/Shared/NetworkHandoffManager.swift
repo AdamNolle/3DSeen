@@ -28,72 +28,23 @@ public struct ScanHandoffMetadata: Equatable, Sendable {
     }
 }
 
+enum HandoffPeerIdentityRegistrationPolicy {
+    static func mayReplace(
+        existingPeer: MCPeerID?,
+        with candidatePeer: MCPeerID,
+        connectedPeers: [MCPeerID]
+    ) -> Bool {
+        guard let existingPeer, existingPeer != candidatePeer else { return true }
+        return !connectedPeers.contains(existingPeer)
+    }
+}
+
 private struct ScanHandoffResourceEnvelope: Codable {
     let jobID: UUID?
     let scanID: UUID?
     let captureModeRaw: String
     let detailTier: String?
     let originalName: String
-}
-
-/// Creates a file resource suitable for `MCSession.sendResource`. Image captures are directories
-/// on iOS, but Multipeer handoff and macOS reconstruction both operate on a ZIP archive.
-public enum ScanHandoffArchive {
-    private static let captureQualityReportFileName = "3dseen-capture-quality.json"
-
-    public enum ArchiveError: LocalizedError {
-        case missingCapture(URL)
-
-        public var errorDescription: String? {
-            switch self {
-            case .missingCapture(let url):
-                return "The capture archive at \(url.lastPathComponent) is no longer available."
-            }
-        }
-    }
-
-    public static func package(_ captureURL: URL, captureQualityReport: CaptureQualityReport? = nil) throws -> URL {
-        let fileManager = FileManager.default
-        var isDirectory: ObjCBool = false
-        guard fileManager.fileExists(atPath: captureURL.path, isDirectory: &isDirectory) else {
-            throw ArchiveError.missingCapture(captureURL)
-        }
-        guard isDirectory.boolValue else { return captureURL }
-
-        let packageURL = captureURL.deletingLastPathComponent()
-            .appendingPathComponent("\(captureURL.lastPathComponent).zip")
-        if fileManager.fileExists(atPath: packageURL.path) {
-            try fileManager.removeItem(at: packageURL)
-        }
-        try fileManager.zipItem(at: captureURL, to: packageURL, shouldKeepParent: false)
-        if let captureQualityReport {
-            try append(captureQualityReport, to: packageURL)
-        }
-        return packageURL
-    }
-
-    /// Reads the optional image-quality sidecar from an extracted capture package. Older packages
-    /// and RoomPlan USDZ handoffs intentionally return `nil`.
-    public static func captureQualityReport(in extractedArchive: URL) -> CaptureQualityReport? {
-        let url = extractedArchive.appendingPathComponent(captureQualityReportFileName)
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? JSONDecoder().decode(CaptureQualityReport.self, from: data)
-    }
-
-    private static func append(_ report: CaptureQualityReport, to packageURL: URL) throws {
-        let data = try JSONEncoder().encode(report)
-        let archive = try Archive(url: packageURL, accessMode: .update)
-        try archive.addEntry(
-            with: captureQualityReportFileName,
-            type: .file,
-            uncompressedSize: Int64(data.count),
-            compressionMethod: .deflate
-        ) { position, size in
-            let start = Int(position)
-            let end = min(start + size, data.count)
-            return start < end ? data.subdata(in: start..<end) : Data()
-        }
-    }
 }
 
 /// Manages sending raw scan archives from iOS to macOS using MultipeerConnectivity.
@@ -109,6 +60,7 @@ public final class NetworkHandoffManager: NSObject, ObservableObject {
     }
 
     private let serviceType = "3dseen"
+    private let pairingCredentialStore: any PairingCredentialStore
     public let localInstallationID: HandoffInstallationID
     private let myPeerId: MCPeerID
     private var session: MCSession!
@@ -157,7 +109,12 @@ public final class NetworkHandoffManager: NSObject, ObservableObject {
     private var seenMessageIDs: Set<UUID> = []
     private var seenMessageOrder: [UUID] = []
 
-    public override init() {
+    public override convenience init() {
+        self.init(credentialStore: nil)
+    }
+
+    public init(credentialStore: (any PairingCredentialStore)?) {
+        pairingCredentialStore = credentialStore ?? KeychainPairingCredentialStore()
         localInstallationID = HandoffInstallationIdentityStore().loadOrCreate()
         #if os(iOS)
         myPeerId = MCPeerID(displayName: UIDevice.current.name)
@@ -241,9 +198,16 @@ public final class NetworkHandoffManager: NSObject, ObservableObject {
     public func send(_ message: HandoffMessageEnvelope, to peerID: HandoffInstallationID) -> Bool {
         guard message.senderInstallationID == localInstallationID,
               let destination = peerIDsByInstallationID[peerID],
-        session.connectedPeers.contains(destination) else { return false }
+              session.connectedPeers.contains(destination) else { return false }
         do {
-            let data = try JSONEncoder().encode(message)
+            let secret: Data
+            if HandoffControlCipher.requiresAuthentication(message.payload) {
+                guard let storedSecret = try pairingCredentialStore.secret(for: peerID) else { return false }
+                secret = storedSecret
+            } else {
+                secret = Data()
+            }
+            let data = try HandoffControlCipher.seal(message, using: secret)
             guard HandoffControlMessageAdmissionPolicy.accepts(byteCount: data.count) else {
                 return false
             }
@@ -259,25 +223,77 @@ public final class NetworkHandoffManager: NSObject, ObservableObject {
     public func sendResource(fileURL: URL, named resourceName: String? = nil, to peer: MCPeerID,
                              completion: ((Error?) -> Void)? = nil) {
         let name = resourceName ?? fileURL.lastPathComponent
-        let transferID = UUID()
-        logger.debug("Sending resource \(name, privacy: .public) to \(peer.displayName, privacy: .public)")
-        let maybeProgress = session.sendResource(at: fileURL, withName: name, toPeer: peer) { [weak self] error in
-            self?.finishProgress(id: transferID, succeeded: error == nil)
-            if let error {
-                self?.logger.error("Resource send failed: \(error.localizedDescription, privacy: .public)")
-            } else {
-                self?.logger.info("Resource sent: \(name, privacy: .public)")
-            }
-            DispatchQueue.main.async {
-                if let error { self?.onSendError?(error) }
-                completion?(error)
-            }
-        }
-        guard let progress = maybeProgress else {
-            DispatchQueue.main.async { self.transferProgress = 0 }
+        guard session.connectedPeers.contains(peer),
+              let installationID = installationID(for: peer) else {
+            reportResourceSendFailure(HandoffResourceCipherError.peerNotPaired, completion: completion)
             return
         }
-        observe(progress, id: transferID)
+        let pairingSecret: Data?
+        do {
+            pairingSecret = try pairingCredentialStore.secret(for: installationID)
+        } catch {
+            reportResourceSendFailure(error, completion: completion)
+            return
+        }
+        guard let secret = pairingSecret else {
+            reportResourceSendFailure(HandoffResourceCipherError.peerNotPaired, completion: completion)
+            return
+        }
+
+        let encryptedURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("3dseen-handoff-\(UUID().uuidString).sealed")
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            do {
+                try HandoffResourceCipher.encrypt(fileURL, to: encryptedURL, secret: secret)
+                let encryptedSize = try FileManager.default.attributesOfItem(atPath: encryptedURL.path)[.size] as? NSNumber
+                guard let encryptedSize,
+                      !HandoffResourceAdmissionPolicy.exceedsSizeLimit(encryptedSize.int64Value) else {
+                    throw HandoffResourceCipherError.resourceTooLarge
+                }
+                DispatchQueue.main.async {
+                    guard let self, self.session.connectedPeers.contains(peer) else {
+                        try? FileManager.default.removeItem(at: encryptedURL)
+                        let error = HandoffResourceCipherError.transferUnavailable
+                        completion?(error)
+                        return
+                    }
+                    let transferID = UUID()
+                    self.logger.debug("Sending encrypted resource \(name, privacy: .public) to \(peer.displayName, privacy: .public)")
+                    let maybeProgress = self.session.sendResource(
+                        at: encryptedURL,
+                        withName: name,
+                        toPeer: peer
+                    ) { [weak self] error in
+                        try? FileManager.default.removeItem(at: encryptedURL)
+                        self?.finishProgress(id: transferID, succeeded: error == nil)
+                        if let error {
+                            self?.logger.error("Resource send failed: \(error.localizedDescription, privacy: .public)")
+                        } else {
+                            self?.logger.info("Encrypted resource sent: \(name, privacy: .public)")
+                        }
+                        DispatchQueue.main.async {
+                            if let error { self?.onSendError?(error) }
+                            completion?(error)
+                        }
+                    }
+                    guard let progress = maybeProgress else {
+                        try? FileManager.default.removeItem(at: encryptedURL)
+                        self.transferProgress = 0
+                        let error = HandoffResourceCipherError.transferUnavailable
+                        self.onSendError?(error)
+                        completion?(error)
+                        return
+                    }
+                    self.observe(progress, id: transferID)
+                }
+            } catch {
+                try? FileManager.default.removeItem(at: encryptedURL)
+                DispatchQueue.main.async {
+                    self?.onSendError?(error)
+                    completion?(error)
+                }
+            }
+        }
     }
 
     /// Deletes a resource only when it is inside this manager's UUID-scoped inbox. Callers can
@@ -289,6 +305,13 @@ public final class NetworkHandoffManager: NSObject, ObservableObject {
         let resourcePath = url.standardizedFileURL.path
         guard resourcePath.hasPrefix(inbox) else { return }
         try? fileManager.removeItem(at: url.deletingLastPathComponent())
+    }
+
+    private func reportResourceSendFailure(_ error: Error, completion: ((Error?) -> Void)?) {
+        DispatchQueue.main.async {
+            self.onSendError?(error)
+            completion?(error)
+        }
     }
 
     public func sendScan(fileURL: URL, to peer: MCPeerID, metadata: ScanHandoffMetadata = .init()) {
@@ -377,12 +400,23 @@ extension NetworkHandoffManager: MCSessionDelegate {
         guard HandoffControlMessageAdmissionPolicy.accepts(byteCount: data.count) else {
             return
         }
-        guard let message = try? JSONDecoder().decode(HandoffMessageEnvelope.self, from: data) else {
-            logger.warning("Ignoring malformed handoff control data.")
-            return
-        }
         DispatchQueue.main.async {
-            guard let peerIDValue = self.peerIDsByInstallationID.first(where: { $0.value == peerID })?.key,
+            guard let peerIDValue = self.peerIDsByInstallationID.first(where: { $0.value == peerID })?.key else {
+                self.logger.warning("Ignoring handoff control data from an unknown transport peer.")
+                return
+            }
+            let message: HandoffMessageEnvelope?
+            if let secret = try? self.pairingCredentialStore.secret(for: peerIDValue),
+               let authenticated = try? HandoffControlCipher.open(
+                    data,
+                    expectedSenderID: peerIDValue,
+                    using: secret
+               ) {
+                message = authenticated
+            } else {
+                message = try? HandoffControlCipher.decodeUnauthenticatedHandshake(data)
+            }
+            guard let message,
                   peerIDValue == message.senderInstallationID,
                   self.recordMessageIfNew(message.id) else {
                 self.logger.warning("Ignoring uncorrelated or duplicate handoff control message.")
@@ -475,30 +509,50 @@ extension NetworkHandoffManager: MCSessionDelegate {
         let destinationName = URL(fileURLWithPath: Self.handoffOriginalResourceName(from: resourceName)).lastPathComponent
         let destination = transferDirectory.appendingPathComponent(destinationName)
         DispatchQueue.main.async {
-            defer { self.releaseIncomingAdmission(id: transfer.id) }
             let isResultPackage = destinationName.hasSuffix(ScanResultPackage.fileSuffix)
             let hasReceiver = isResultPackage
                 ? self.onReceiveResultPackage != nil
                 : self.onReceiveScan != nil
-            guard self.isIncomingResourceAuthorized(peerID), hasReceiver else {
+            guard self.isIncomingResourceAuthorized(peerID), hasReceiver,
+                  let installationID = self.installationID(for: peerID),
+                  let secret = try? self.pairingCredentialStore.secret(for: installationID) else {
                 try? fileManager.removeItem(at: localURL)
+                self.releaseIncomingAdmission(id: transfer.id)
                 self.logger.warning("Discarded incoming resource without an authenticated receiver")
                 return
             }
-            do {
-                try fileManager.createDirectory(at: transferDirectory, withIntermediateDirectories: true)
-                try fileManager.moveItem(at: localURL, to: destination)
-                self.logger.info("Received \(resourceName) → \(destination.path)")
-                self.transferProgress = 1
-                if isResultPackage {
-                    self.onReceiveResultPackage?(destination, peerID, metadata)
-                } else {
-                    self.lastReceivedScan = destination
-                    self.onReceiveScan?(destination, peerID, metadata)
+            let decryptedURL = fileManager.temporaryDirectory
+                .appendingPathComponent("3dseen-received-\(UUID().uuidString).resource")
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try HandoffResourceCipher.decrypt(localURL, to: decryptedURL, secret: secret)
+                    try? fileManager.removeItem(at: localURL)
+                    DispatchQueue.main.async {
+                        defer { self.releaseIncomingAdmission(id: transfer.id) }
+                        do {
+                            try fileManager.createDirectory(at: transferDirectory, withIntermediateDirectories: true)
+                            try fileManager.moveItem(at: decryptedURL, to: destination)
+                            self.logger.info("Received authenticated resource \(resourceName) → \(destination.path)")
+                            self.transferProgress = 1
+                            if isResultPackage {
+                                self.onReceiveResultPackage?(destination, peerID, metadata)
+                            } else {
+                                self.lastReceivedScan = destination
+                                self.onReceiveScan?(destination, peerID, metadata)
+                            }
+                        } catch {
+                            try? fileManager.removeItem(at: decryptedURL)
+                            self.logger.error("Could not stage received resource: \(error.localizedDescription)")
+                        }
+                    }
+                } catch {
+                    try? fileManager.removeItem(at: localURL)
+                    try? fileManager.removeItem(at: decryptedURL)
+                    DispatchQueue.main.async {
+                        self.releaseIncomingAdmission(id: transfer.id)
+                        self.logger.error("Could not authenticate received resource: \(error.localizedDescription)")
+                    }
                 }
-            } catch {
-                try? fileManager.removeItem(at: localURL)
-                self.logger.error("Could not stage received resource: \(error.localizedDescription)")
             }
         }
     }
@@ -542,7 +596,16 @@ extension NetworkHandoffManager {
         )
     }
 
-    private func register(_ peer: HandoffPeer, peerID: MCPeerID) {
+    @discardableResult
+    private func register(_ peer: HandoffPeer, peerID: MCPeerID) -> Bool {
+        guard HandoffPeerIdentityRegistrationPolicy.mayReplace(
+            existingPeer: peerIDsByInstallationID[peer.installationID],
+            with: peerID,
+            connectedPeers: session.connectedPeers
+        ) else {
+            logger.warning("Ignoring a duplicate installation identity that conflicts with a connected peer.")
+            return false
+        }
         peerIDsByInstallationID[peer.installationID] = peerID
         if let index = discoveredPeers.firstIndex(where: { $0.installationID == peer.installationID }) {
             discoveredPeers[index] = peer
@@ -551,6 +614,7 @@ extension NetworkHandoffManager {
         }
         discoveredPeers.sort { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
         refreshConnectedHandoffPeers()
+        return true
     }
 
     private func updatePeer(_ peer: HandoffPeer, state: HandoffPeerConnectionState) {
@@ -755,7 +819,10 @@ extension NetworkHandoffManager: MCNearbyServiceAdvertiserDelegate {
             return
         }
         DispatchQueue.main.async { [self] in
-            self.register(peer, peerID: peerID)
+            guard self.register(peer, peerID: peerID) else {
+                invitationHandler(false, nil)
+                return
+            }
             let invitation = HandoffInvitation(peer: peer, expiresAt: Date().addingTimeInterval(30))
             self.invitationRecords[invitation.id] = PendingInvitationRecord(
                 invitation: invitation,

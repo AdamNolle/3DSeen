@@ -62,8 +62,11 @@ import json, re, sys
 devices = json.load(sys.stdin)["devices"]
 ordered = sorted(devices, key=lambda key: tuple(map(int, re.findall(r"\d+", key))), reverse=True)
 items = [d for runtime in ordered for d in devices[runtime]
-         if d.get("isAvailable") and (".iPhone-" in d.get("deviceTypeIdentifier", "") or d["name"].startswith("iPhone"))]
-if not items: raise SystemExit("No available iPhone Simulator")
+ if d.get("isAvailable") and re.match(r"iPhone-\d", d.get("deviceTypeIdentifier", "").rsplit(".", 1)[-1])]
+if not items: raise SystemExit("No available named iPhone Simulator; set IOS_DEVICE_ID explicitly")
+idle_items = [device for device in items if device.get("state") == "Shutdown"]
+if not idle_items: raise SystemExit("No shutdown iPhone Simulator is available; set IOS_DEVICE_ID explicitly")
+items = idle_items
 print(items[0]["udid"])
 ')
 fi
@@ -73,8 +76,11 @@ import json, re, sys
 devices = json.load(sys.stdin)["devices"]
 ordered = sorted(devices, key=lambda key: tuple(map(int, re.findall(r"\d+", key))), reverse=True)
 items = [d for runtime in ordered for d in devices[runtime]
-         if d.get("isAvailable") and (".iPad-" in d.get("deviceTypeIdentifier", "") or d["name"].startswith("iPad"))]
-if not items: raise SystemExit("No available iPad Simulator")
+         if d.get("isAvailable") and d["name"].startswith("iPad")]
+if not items: raise SystemExit("No available named iPad Simulator; set IPAD_DEVICE_ID explicitly")
+idle_items = [device for device in items if device.get("state") == "Shutdown"]
+if not idle_items: raise SystemExit("No shutdown iPad Simulator is available; set IPAD_DEVICE_ID explicitly")
+items = idle_items
 print(items[0]["udid"])
 ')
 fi

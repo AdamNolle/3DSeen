@@ -2,8 +2,10 @@ import CryptoKit
 import Foundation
 
 public enum HandoffProtocolVersion {
-    public static let current = 2
-    public static let minimumSupported = 1
+    // Version 3 replaces transcript-derived pairing credentials with ephemeral Curve25519 key agreement.
+    // Older peers cannot safely authenticate, so they must update before they can hand off scans.
+    public static let current = 3
+    public static let minimumSupported = 3
 
     public static func validate(_ version: Int) throws {
         guard (minimumSupported...current).contains(version) else {
@@ -228,8 +230,9 @@ public struct HandoffJobStatus: Codable, Equatable, Sendable {
 
 public enum HandoffMessagePayload: Codable, Equatable, Sendable {
     case hello(HandoffPeer)
-    case authenticationChallenge(Data)
+    case authenticationChallenge(HandoffAuthenticationChallenge)
     case authenticationResponse(Data)
+    case pairingRejected(Data)
     case jobOffer(HandoffJobOffer)
     case jobAccepted
     case progress(Double)
@@ -240,6 +243,16 @@ public enum HandoffMessagePayload: Codable, Equatable, Sendable {
     case statusRequest
     case statusResponse(HandoffJobStatus)
     case protocolRejected(minimum: Int, maximum: Int)
+}
+
+public struct HandoffAuthenticationChallenge: Codable, Equatable, Sendable {
+    public let nonce: Data
+    public let keyAgreementPublicKey: Data
+
+    public init(nonce: Data, keyAgreementPublicKey: Data) {
+        self.nonce = nonce
+        self.keyAgreementPublicKey = keyAgreementPublicKey
+    }
 }
 
 public struct HandoffMessageEnvelope: Codable, Equatable, Identifiable, Sendable {

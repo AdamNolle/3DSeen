@@ -88,10 +88,26 @@ extension GuidedObjectCaptureController {
             viewport: presentation.0,
             orientation: presentation.1
         )
+        let coverageState = lock.withLock { () -> (Int, Int, [SIMD3<Float>]?) in
+            _ = surfaceCoverage.insert(pointResult.surfacePoints)
+            let shouldPublishPoints = surfaceCoverage.points.count != lastPublishedSurfaceCount
+                && frame.timestamp - lastSurfacePublicationTime >= 0.25
+            let points = shouldPublishPoints ? surfaceCoverage.points : nil
+            if shouldPublishPoints {
+                lastPublishedSurfaceCount = surfaceCoverage.points.count
+                lastSurfacePublicationTime = frame.timestamp
+            }
+            return (surfaceCoverage.points.count, surfaceCoverage.hapticMilestone, points)
+        }
         publish { snapshot in
             snapshot.subjectBounds = subjectProjection?.screenBounds
             snapshot.points = pointResult.points
             snapshot.pointSource = pointResult.source
+            snapshot.surfacePointCount = coverageState.0
+            snapshot.coverageHapticMilestone = coverageState.1
+            if let surfacePoints = coverageState.2 {
+                snapshot.surfacePoints = surfacePoints
+            }
             snapshot.phase = subjectProjection == nil ? .seekingSubject : .capturing
             if !candidate.trackingIsNormal {
                 snapshot.instruction = "Hold still while camera tracking recovers."
@@ -157,21 +173,23 @@ extension GuidedObjectCaptureController {
         subjectProjection: SubjectImageProjection?,
         viewport: CGSize,
         orientation: UIInterfaceOrientation
-    ) -> (points: [CGPoint], source: GuidedPointSource?) {
+    ) -> (points: [CGPoint], surfacePoints: [SIMD3<Float>], source: GuidedPointSource?) {
         guard let subjectProjection,
               !subjectProjection.screenBounds.isNull,
-              !subjectProjection.screenBounds.isEmpty else { return ([], nil) }
+              !subjectProjection.screenBounds.isEmpty else { return ([], [], nil) }
         if let depth = frame.smoothedSceneDepth ?? frame.sceneDepth {
-            let points = depthPoints(
+            let result = depthPoints(
                 depth,
                 frame: frame,
                 subjectProjection: subjectProjection,
                 viewport: viewport,
                 orientation: orientation
             )
-            if points.count >= 6 { return (points, .lidarDepth) }
+            if result.screenPoints.count >= 6 {
+                return (result.screenPoints, result.surfacePoints, .lidarDepth)
+            }
         }
-        guard let cloud = frame.rawFeaturePoints else { return ([], nil) }
+        guard let cloud = frame.rawFeaturePoints else { return ([], [], nil) }
         var points: [CGPoint] = []
         let stride = max(1, cloud.points.count / 180)
         for index in Swift.stride(from: 0, to: cloud.points.count, by: stride) {
@@ -183,7 +201,7 @@ extension GuidedObjectCaptureController {
             if subjectProjection.contains(screenPoint: point) { points.append(point) }
             if points.count == 180 { break }
         }
-        return (points, points.isEmpty ? nil : .visualFeatures)
+        return (points, [], points.isEmpty ? nil : .visualFeatures)
     }
 
     private func depthPoints(
@@ -192,7 +210,7 @@ extension GuidedObjectCaptureController {
         subjectProjection: SubjectImageProjection,
         viewport: CGSize,
         orientation: UIInterfaceOrientation
-    ) -> [CGPoint] {
+    ) -> (screenPoints: [CGPoint], surfacePoints: [SIMD3<Float>]) {
         let map = depth.depthMap
         let confidence = depth.confidenceMap
         CVPixelBufferLockBaseAddress(map, .readOnly)
@@ -201,9 +219,11 @@ extension GuidedObjectCaptureController {
             CVPixelBufferUnlockBaseAddress(map, .readOnly)
             if let confidence { CVPixelBufferUnlockBaseAddress(confidence, .readOnly) }
         }
-        guard let depthBase = CVPixelBufferGetBaseAddress(map) else { return [] }
+        guard let depthBase = CVPixelBufferGetBaseAddress(map) else { return ([], []) }
         let width = CVPixelBufferGetWidth(map)
         let height = CVPixelBufferGetHeight(map)
+        let imageWidth = CVPixelBufferGetWidth(frame.capturedImage)
+        let imageHeight = CVPixelBufferGetHeight(frame.capturedImage)
         let depthRow = CVPixelBufferGetBytesPerRow(map) / MemoryLayout<Float32>.stride
         let confidenceRow = confidence.map { CVPixelBufferGetBytesPerRow($0) } ?? 0
         let confidenceBase = confidence.flatMap { CVPixelBufferGetBaseAddress($0) }?
@@ -211,7 +231,16 @@ extension GuidedObjectCaptureController {
         let depthValues = depthBase.assumingMemoryBound(to: Float32.self)
         let sampleStride = max(3, max(width, height) / 34)
         let transform = frame.displayTransform(for: orientation, viewportSize: viewport)
-        var result: [CGPoint] = []
+        let intrinsics = frame.camera.intrinsics
+        let focalX = intrinsics.columns.0.x
+        let focalY = intrinsics.columns.1.y
+        guard focalX > 0, focalY > 0 else { return ([], []) }
+        let principalX = intrinsics.columns.2.x
+        let principalY = intrinsics.columns.2.y
+        let depthToImageX = Float(imageWidth) / Float(width)
+        let depthToImageY = Float(imageHeight) / Float(height)
+        var screenPoints: [CGPoint] = []
+        var surfacePoints: [SIMD3<Float>] = []
         for y in Swift.stride(from: 0, to: height, by: sampleStride) {
             for x in Swift.stride(from: 0, to: width, by: sampleStride) {
                 let metres = depthValues[y * depthRow + x]
@@ -222,13 +251,27 @@ extension GuidedObjectCaptureController {
                     y: (CGFloat(y) + 0.5) / CGFloat(height)
                 ).applying(transform)
                 let point = CGPoint(x: normalized.x * viewport.width, y: normalized.y * viewport.height)
-                if subjectProjection.contains(rawImagePoint: CGPoint(
+                let rawImagePoint = CGPoint(
                     x: (CGFloat(x) + 0.5) / CGFloat(width),
                     y: (CGFloat(y) + 0.5) / CGFloat(height)
-                )) { result.append(point) }
-                if result.count == 180 { return result }
+                )
+                guard subjectProjection.contains(rawImagePoint: rawImagePoint) else { continue }
+
+                screenPoints.append(point)
+                let pixelX = (Float(x) + 0.5) * depthToImageX
+                let pixelY = (Float(y) + 0.5) * depthToImageY
+                if let sample = GuidedDepthProjection.worldPosition(
+                    pixel: SIMD2<Float>(pixelX, pixelY),
+                    depth: metres,
+                    focalLength: SIMD2<Float>(focalX, focalY),
+                    principalPoint: SIMD2<Float>(principalX, principalY),
+                    cameraTransform: frame.camera.transform
+                ) {
+                    surfacePoints.append(sample)
+                }
+                if screenPoints.count == 180 { return (screenPoints, surfacePoints) }
             }
         }
-        return result
+        return (screenPoints, surfacePoints)
     }
 }

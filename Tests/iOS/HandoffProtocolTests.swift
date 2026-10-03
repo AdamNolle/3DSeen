@@ -47,7 +47,10 @@ final class HandoffProtocolTests: XCTestCase {
         let descriptor = HandoffResourceDescriptor(byteCount: 4_096, sha256: String(repeating: "a", count: 64))
         let payloads: [HandoffMessagePayload] = [
             .hello(peer),
-            .authenticationChallenge(Data("nonce".utf8)),
+            .authenticationChallenge(HandoffAuthenticationChallenge(
+                nonce: Data(repeating: 0, count: HandoffAuthenticator.nonceByteCount),
+                keyAgreementPublicKey: Data(repeating: 1, count: HandoffAuthenticator.publicKeyByteCount)
+            )),
             .authenticationResponse(Data("hmac".utf8)),
             .jobOffer(HandoffJobOffer(captureMode: .landscape, detailTier: "Full", resource: descriptor)),
             .jobAccepted,
@@ -58,7 +61,7 @@ final class HandoffProtocolTests: XCTestCase {
             .cancelled,
             .statusRequest,
             .statusResponse(HandoffJobStatus(state: .processing, progress: 0.75)),
-            .protocolRejected(minimum: 1, maximum: 2),
+            .protocolRejected(minimum: HandoffProtocolVersion.minimumSupported, maximum: HandoffProtocolVersion.current),
         ]
 
         for payload in payloads {
@@ -82,6 +85,8 @@ final class HandoffProtocolTests: XCTestCase {
             payload: .statusRequest
         )
         XCTAssertThrowsError(try rejected.validateVersion())
+        XCTAssertNoThrow(try HandoffProtocolVersion.validate(HandoffProtocolVersion.current))
+        XCTAssertThrowsError(try HandoffProtocolVersion.validate(2))
     }
 
     func testJobRejectsImpossibleTransition() {
@@ -134,8 +139,30 @@ final class HandoffProtocolTests: XCTestCase {
     }
 
     @MainActor
+    func testConnectedPeerIdentityCannotBeReplacedByDuplicateDiscoveryID() {
+        let trustedPeer = MCPeerID(displayName: "Trusted Mac")
+        let duplicatePeer = MCPeerID(displayName: "Nearby Impostor")
+
+        XCTAssertFalse(HandoffPeerIdentityRegistrationPolicy.mayReplace(
+            existingPeer: trustedPeer,
+            with: duplicatePeer,
+            connectedPeers: [trustedPeer]
+        ))
+        XCTAssertTrue(HandoffPeerIdentityRegistrationPolicy.mayReplace(
+            existingPeer: trustedPeer,
+            with: trustedPeer,
+            connectedPeers: [trustedPeer]
+        ))
+        XCTAssertTrue(HandoffPeerIdentityRegistrationPolicy.mayReplace(
+            existingPeer: trustedPeer,
+            with: duplicatePeer,
+            connectedPeers: []
+        ))
+    }
+
+    @MainActor
     func testControlDispatchCorrelatesSenderAndDeduplicatesMessageID() async throws {
-        let manager = NetworkHandoffManager()
+        let credentials = InMemoryPairingCredentialStore()
         let remotePeerID = MCPeerID(displayName: "Render Mac")
         let remotePeer = HandoffPeer(
             installationID: HandoffInstallationID(),
@@ -143,6 +170,9 @@ final class HandoffProtocolTests: XCTestCase {
             platform: .macOS,
             capabilities: [.photogrammetry]
         )
+        let secret = Data(repeating: 0x51, count: 32)
+        try credentials.store(secret: secret, for: remotePeer.installationID)
+        let manager = NetworkHandoffManager(credentialStore: credentials)
         let advertiser = MCNearbyServiceAdvertiser(
             peer: MCPeerID(displayName: "Test iPhone"),
             discoveryInfo: nil,
@@ -158,12 +188,15 @@ final class HandoffProtocolTests: XCTestCase {
             senderInstallationID: remotePeer.installationID,
             payload: .statusRequest
         )
-        let data = try JSONEncoder().encode(message)
+        let unprotectedData = try JSONEncoder().encode(message)
+        let protectedData = try HandoffControlCipher.seal(message, using: secret)
         var events: [HandoffControlEvent] = []
         let cancellable = manager.controlEventsPublisher.sink { events.append($0) }
 
-        manager.session(MCSession(peer: MCPeerID(displayName: "Receiver")), didReceive: data, fromPeer: remotePeerID)
-        manager.session(MCSession(peer: MCPeerID(displayName: "Receiver")), didReceive: data, fromPeer: remotePeerID)
+        let receivingSession = MCSession(peer: MCPeerID(displayName: "Receiver"))
+        manager.session(receivingSession, didReceive: unprotectedData, fromPeer: remotePeerID)
+        manager.session(receivingSession, didReceive: protectedData, fromPeer: remotePeerID)
+        manager.session(receivingSession, didReceive: protectedData, fromPeer: remotePeerID)
         try await Task.sleep(for: .milliseconds(50))
 
         XCTAssertEqual(events, [HandoffControlEvent(message: message, peerID: remotePeer.installationID)])
@@ -190,7 +223,7 @@ final class HandoffProtocolTests: XCTestCase {
             credentialStore: credentials
         )
         try await Task.sleep(for: .milliseconds(50))
-        let localChallenge = try XCTUnwrap(transport.sentMessages.compactMap { message -> Data? in
+        let localChallenge = try XCTUnwrap(transport.sentMessages.compactMap { message -> HandoffAuthenticationChallenge? in
             guard case .authenticationChallenge(let challenge) = message.payload else { return nil }
             return challenge
         }.first)
@@ -199,7 +232,7 @@ final class HandoffProtocolTests: XCTestCase {
                 senderInstallationID: remoteID,
                 payload: .authenticationResponse(HandoffAuthenticator.authenticationResponse(
                     secret: secret,
-                    challenge: localChallenge,
+                    challenge: localChallenge.nonce,
                     responderID: remoteID
                 ))
             ),
@@ -288,32 +321,6 @@ final class HandoffProtocolTests: XCTestCase {
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: package.path))
         XCTAssertTrue(coordinator.lastErrorMessage?.contains("unauthenticated") == true)
-    }
-
-    @MainActor
-    func testCoordinatorRejectsAuthenticatedResultWithoutAnActiveCorrelatedJob() async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("handoff-unsolicited-result-\(UUID())", isDirectory: true)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let package = root.appendingPathComponent("unsolicited.3dseen-result.zip")
-        try Data("unsolicited".utf8).write(to: package)
-        let transport = FakeHandoffTransport(connectedName: "Trusted Mac")
-        let remoteID = transport.connectedHandoffPeers[0].installationID
-        let secret = Data(repeating: 5, count: 32)
-        let credentials = InMemoryPairingCredentialStore()
-        try credentials.store(secret: secret, for: remoteID)
-        let coordinator = IOSHandoffCoordinator(
-            transport: transport,
-            journal: HandoffJobJournal(fileURL: root.appendingPathComponent("jobs.json")),
-            credentialStore: credentials
-        )
-        try await authenticate(coordinator: coordinator, transport: transport, remoteID: remoteID, secret: secret)
-
-        transport.onReceiveResultPackage?(package, MCPeerID(displayName: "Trusted Mac"), .init())
-
-        XCTAssertFalse(FileManager.default.fileExists(atPath: package.path))
-        XCTAssertTrue(coordinator.lastErrorMessage?.contains("unsolicited") == true)
     }
 
     @MainActor
@@ -610,7 +617,7 @@ final class HandoffProtocolTests: XCTestCase {
         secret: Data
     ) async throws {
         try await Task.sleep(for: .milliseconds(30))
-        let challenge = try XCTUnwrap(transport.sentMessages.compactMap { message -> Data? in
+        let challenge = try XCTUnwrap(transport.sentMessages.compactMap { message -> HandoffAuthenticationChallenge? in
             guard case .authenticationChallenge(let value) = message.payload else { return nil }
             return value
         }.first)
@@ -619,7 +626,7 @@ final class HandoffProtocolTests: XCTestCase {
                 senderInstallationID: remoteID,
                 payload: .authenticationResponse(HandoffAuthenticator.authenticationResponse(
                     secret: secret,
-                    challenge: challenge,
+                    challenge: challenge.nonce,
                     responderID: remoteID
                 ))
             ),
@@ -642,6 +649,59 @@ final class HandoffProtocolTests: XCTestCase {
         )
     }
 
+}
+
+extension HandoffProtocolTests {
+    @MainActor
+    func testCoordinatorRejectsAuthenticatedResultWithoutAnActiveCorrelatedJob() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("handoff-unsolicited-result-\(UUID())", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let package = root.appendingPathComponent("unsolicited.3dseen-result.zip")
+        try Data("unsolicited".utf8).write(to: package)
+        let transport = FakeHandoffTransport(connectedName: "Trusted Mac")
+        let remoteID = transport.connectedHandoffPeers[0].installationID
+        let secret = Data(repeating: 5, count: 32)
+        let credentials = InMemoryPairingCredentialStore()
+        try credentials.store(secret: secret, for: remoteID)
+        let coordinator = IOSHandoffCoordinator(
+            transport: transport,
+            journal: HandoffJobJournal(fileURL: root.appendingPathComponent("jobs.json")),
+            credentialStore: credentials
+        )
+        try await authenticate(coordinator: coordinator, transport: transport, remoteID: remoteID, secret: secret)
+
+        transport.onReceiveResultPackage?(package, MCPeerID(displayName: "Trusted Mac"), .init())
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: package.path))
+        XCTAssertTrue(coordinator.lastErrorMessage?.contains("unsolicited") == true)
+    }
+
+}
+
+extension HandoffProtocolTests {
+    func testJournalPersistsAndMarksActiveWorkInterrupted() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("handoff-journal-\(UUID())", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("jobs.json")
+        let journal = HandoffJobJournal(fileURL: url)
+        var job = HandoffJobRecord(
+            scanID: UUID(),
+            captureMode: .landscape,
+            detailTier: "Medium"
+        )
+        try job.transition(to: .sending)
+        try await journal.upsert(job)
+
+        let reopened = HandoffJobJournal(fileURL: url)
+        let interrupted = try await reopened.markInterruptedWork()
+
+        XCTAssertEqual(interrupted.count, 1)
+        XCTAssertEqual(interrupted.first?.state, .interrupted)
+        XCTAssertNotNil(interrupted.first?.lastError)
+    }
 }
 
 extension HandoffProtocolTests {
@@ -676,27 +736,6 @@ extension HandoffProtocolTests {
         ))
     }
 
-    func testJournalPersistsAndMarksActiveWorkInterrupted() async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("handoff-journal-\(UUID())", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let url = root.appendingPathComponent("jobs.json")
-        let journal = HandoffJobJournal(fileURL: url)
-        var job = HandoffJobRecord(
-            scanID: UUID(),
-            captureMode: .landscape,
-            detailTier: "Medium"
-        )
-        try job.transition(to: .sending)
-        try await journal.upsert(job)
-
-        let reopened = HandoffJobJournal(fileURL: url)
-        let interrupted = try await reopened.markInterruptedWork()
-
-        XCTAssertEqual(interrupted.count, 1)
-        XCTAssertEqual(interrupted.first?.state, .interrupted)
-        XCTAssertNotNil(interrupted.first?.lastError)
-    }
 }
 
 @MainActor

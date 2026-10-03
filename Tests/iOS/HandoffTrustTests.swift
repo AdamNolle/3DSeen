@@ -1,4 +1,5 @@
 import Security
+import CryptoKit
 import XCTest
 @testable import ThreeDSeen
 
@@ -35,7 +36,7 @@ final class HandoffTrustTests: XCTestCase {
         }
     }
 
-    func testSASAndSecretDerivationHaveStableSymmetricVectors() throws {
+    func testEphemeralKeyAgreementDerivesSymmetricSecretAndRejectsRelayKey() throws {
         let first = HandoffInstallationID(
             rawValue: try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
         )
@@ -44,37 +45,65 @@ final class HandoffTrustTests: XCTestCase {
         )
         let firstNonce = Data((0..<32).map(UInt8.init))
         let secondNonce = Data((32..<64).map(UInt8.init))
-
-        let firstCode = HandoffAuthenticator.sharedAuthenticationCode(
-            localID: first,
-            remoteID: second,
-            localNonce: firstNonce,
-            remoteNonce: secondNonce
+        let firstKey = HandoffAuthenticator.makeKeyAgreementPrivateKey()
+        let secondKey = HandoffAuthenticator.makeKeyAgreementPrivateKey()
+        let firstChallenge = HandoffAuthenticationChallenge(
+            nonce: firstNonce,
+            keyAgreementPublicKey: firstKey.publicKey.rawRepresentation
         )
-        let secondCode = HandoffAuthenticator.sharedAuthenticationCode(
-            localID: second,
-            remoteID: first,
-            localNonce: secondNonce,
-            remoteNonce: firstNonce
-        )
-        let firstSecret = HandoffAuthenticator.deriveSharedSecret(
-            localID: first,
-            remoteID: second,
-            localNonce: firstNonce,
-            remoteNonce: secondNonce
-        )
-        let secondSecret = HandoffAuthenticator.deriveSharedSecret(
-            localID: second,
-            remoteID: first,
-            localNonce: secondNonce,
-            remoteNonce: firstNonce
+        let secondChallenge = HandoffAuthenticationChallenge(
+            nonce: secondNonce,
+            keyAgreementPublicKey: secondKey.publicKey.rawRepresentation
         )
 
-        XCTAssertEqual(firstCode, "981121")
-        XCTAssertEqual(secondCode, firstCode)
+        let firstSecret = try HandoffAuthenticator.deriveSharedSecret(
+            localID: first,
+            remoteID: second,
+            localChallenge: firstChallenge,
+            remoteChallenge: secondChallenge,
+            localPrivateKey: firstKey
+        )
+        let secondSecret = try HandoffAuthenticator.deriveSharedSecret(
+            localID: second,
+            remoteID: first,
+            localChallenge: secondChallenge,
+            remoteChallenge: firstChallenge,
+            localPrivateKey: secondKey
+        )
+
         XCTAssertEqual(firstSecret, secondSecret)
-        XCTAssertEqual(firstSecret.map { String(format: "%02x", $0) }.joined(),
-                       "59a3c067eb6c8d2de49109a9c6b7bd0a2eebcba069eb2db13ee06eda6da08b04")
+        XCTAssertEqual(
+            HandoffAuthenticator.sharedAuthenticationCode(secret: firstSecret),
+            HandoffAuthenticator.sharedAuthenticationCode(secret: secondSecret)
+        )
+
+        let relayKey = HandoffAuthenticator.makeKeyAgreementPrivateKey()
+        let relayChallenge = HandoffAuthenticationChallenge(
+            nonce: firstNonce,
+            keyAgreementPublicKey: relayKey.publicKey.rawRepresentation
+        )
+        let relaySecret = try HandoffAuthenticator.deriveSharedSecret(
+            localID: first,
+            remoteID: second,
+            localChallenge: relayChallenge,
+            remoteChallenge: secondChallenge,
+            localPrivateKey: relayKey
+        )
+        XCTAssertNotEqual(firstSecret, relaySecret)
+        XCTAssertNotEqual(
+            HandoffAuthenticator.sharedAuthenticationCode(secret: firstSecret),
+            HandoffAuthenticator.sharedAuthenticationCode(secret: relaySecret)
+        )
+        XCTAssertThrowsError(try HandoffAuthenticator.deriveSharedSecret(
+            localID: first,
+            remoteID: second,
+            localChallenge: firstChallenge,
+            remoteChallenge: HandoffAuthenticationChallenge(
+                nonce: secondNonce,
+                keyAgreementPublicKey: Data(repeating: 0, count: HandoffAuthenticator.publicKeyByteCount - 1)
+            ),
+            localPrivateKey: firstKey
+        ))
     }
 
     func testHMACChallengeResponseRejectsTampering() {

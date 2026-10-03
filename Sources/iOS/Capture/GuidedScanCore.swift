@@ -246,6 +246,9 @@ struct GuidedScanSnapshot: Equatable, Sendable {
     var subjectBounds: CGRect?
     var points: [CGPoint] = []
     var pointSource: GuidedPointSource?
+    var surfacePoints: [SIMD3<Float>] = []
+    var surfacePointCount = 0
+    var coverageHapticMilestone = 0
     var isSubjectLocked = false
     var frameCount = 0
     var recommendedFrameCount = 48

@@ -1,4 +1,5 @@
 import Combine
+import CryptoKit
 import Foundation
 
 public struct HandoffPairingRequest: Identifiable, Equatable, Sendable {
@@ -20,8 +21,10 @@ public final class HandoffPairingCoordinator: ObservableObject {
     private struct SessionState {
         var peer: HandoffPeer
         var localNonce: Data
+        var localPrivateKey: Curve25519.KeyAgreement.PrivateKey
         var remoteNonce: Data?
         var pendingResponse: Data?
+        var pendingSecret: Data?
         var provisionalSecret: Data?
     }
 
@@ -69,13 +72,8 @@ public final class HandoffPairingCoordinator: ObservableObject {
         let peerID = request.peer.installationID
         guard var state = sessions[peerID],
               let remoteNonce = state.remoteNonce,
-              pairingCode(for: state, remoteNonce: remoteNonce) == request.code else { return }
-        let secret = HandoffAuthenticator.deriveSharedSecret(
-            localID: transport.localInstallationID,
-            remoteID: peerID,
-            localNonce: state.localNonce,
-            remoteNonce: remoteNonce
-        )
+              let secret = state.pendingSecret,
+              pairingCode(for: state) == request.code else { return }
         state.provisionalSecret = secret
         sessions[peerID] = state
         pendingRequests.removeAll { $0.id == peerID }
@@ -87,12 +85,18 @@ public final class HandoffPairingCoordinator: ObservableObject {
 
     public func reject(_ request: HandoffPairingRequest) {
         let peerID = request.peer.installationID
+        if let state = sessions[peerID],
+           let remoteNonce = state.remoteNonce,
+           let secret = state.pendingSecret {
+            let proof = HandoffAuthenticator.authenticationResponse(
+                secret: secret,
+                challenge: remoteNonce,
+                responderID: transport.localInstallationID
+            )
+            send(.pairingRejected(proof), to: peerID)
+        }
         pendingRequests.removeAll { $0.id == peerID }
         sessions.removeValue(forKey: peerID)
-        send(
-            .failed(HandoffFailure(code: .untrustedPeer, detail: "The authentication code was not approved.")),
-            to: peerID
-        )
     }
 
     public func forget(_ peerID: HandoffInstallationID) {
@@ -120,11 +124,19 @@ public final class HandoffPairingCoordinator: ObservableObject {
     private func beginAuthentication(with peer: HandoffPeer) {
         do {
             let localNonce = try HandoffAuthenticator.makeNonce()
+            let localPrivateKey = HandoffAuthenticator.makeKeyAgreementPrivateKey()
             sessions[peer.installationID] = SessionState(
                 peer: peer,
-                localNonce: localNonce
+                localNonce: localNonce,
+                localPrivateKey: localPrivateKey
             )
-            send(.authenticationChallenge(localNonce), to: peer.installationID)
+            send(
+                .authenticationChallenge(HandoffAuthenticationChallenge(
+                    nonce: localNonce,
+                    keyAgreementPublicKey: localPrivateKey.publicKey.rawRepresentation
+                )),
+                to: peer.installationID
+            )
         } catch {
             lastError = "Authentication could not start: \(error.localizedDescription)"
         }
@@ -139,6 +151,8 @@ public final class HandoffPairingCoordinator: ObservableObject {
             receive(challenge: challenge, from: event.peerID)
         case .authenticationResponse(let response):
             receive(response: response, from: event.peerID)
+        case .pairingRejected(let proof):
+            receivePairingRejection(proof, from: event.peerID)
         case .failed(let failure) where failure.code == .untrustedPeer:
             lastError = failure.detail
             authenticatedPeerIDs.remove(event.peerID)
@@ -149,26 +163,51 @@ public final class HandoffPairingCoordinator: ObservableObject {
         }
     }
 
-    private func receive(challenge: Data, from peerID: HandoffInstallationID) {
-        guard var state = sessions[peerID], challenge.count == HandoffAuthenticator.nonceByteCount else { return }
-        state.remoteNonce = challenge
-        sessions[peerID] = state
+    private func receive(challenge: HandoffAuthenticationChallenge, from peerID: HandoffInstallationID) {
+        guard var state = sessions[peerID],
+              challenge.nonce.count == HandoffAuthenticator.nonceByteCount,
+              challenge.keyAgreementPublicKey.count == HandoffAuthenticator.publicKeyByteCount else {
+            lastError = "The peer sent an invalid key-agreement challenge."
+            return
+        }
+        state.remoteNonce = challenge.nonce
+        let existingSecret: Data?
         do {
-            if let secret = try credentialStore.secret(for: peerID) {
-                sendResponse(secret: secret, challenge: challenge, to: peerID)
-            } else {
-                let request = HandoffPairingRequest(
-                    peer: state.peer,
-                    code: pairingCode(for: state, remoteNonce: challenge)
-                )
-                if let index = pendingRequests.firstIndex(where: { $0.id == peerID }) {
-                    pendingRequests[index] = request
-                } else {
-                    pendingRequests.append(request)
-                }
-            }
+            existingSecret = try credentialStore.secret(for: peerID)
         } catch {
             lastError = "Pairing credentials could not be read: \(error.localizedDescription)"
+            return
+        }
+        if let existingSecret {
+            sessions[peerID] = state
+            sendResponse(secret: existingSecret, challenge: challenge.nonce, to: peerID)
+            return
+        }
+
+        do {
+            let secret = try HandoffAuthenticator.deriveSharedSecret(
+                localID: transport.localInstallationID,
+                remoteID: peerID,
+                localChallenge: HandoffAuthenticationChallenge(
+                    nonce: state.localNonce,
+                    keyAgreementPublicKey: state.localPrivateKey.publicKey.rawRepresentation
+                ),
+                remoteChallenge: challenge,
+                localPrivateKey: state.localPrivateKey
+            )
+            state.pendingSecret = secret
+            sessions[peerID] = state
+            let request = HandoffPairingRequest(
+                peer: state.peer,
+                code: pairingCode(for: state)
+            )
+            if let index = pendingRequests.firstIndex(where: { $0.id == peerID }) {
+                pendingRequests[index] = request
+            } else {
+                pendingRequests.append(request)
+            }
+        } catch {
+            lastError = "Pairing could not be established: \(error.localizedDescription)"
         }
     }
 
@@ -181,6 +220,24 @@ public final class HandoffPairingCoordinator: ObservableObject {
                 return
             }
             verify(response: response, for: peerID, state: state, secret: secret)
+        } catch {
+            lastError = "Pairing credentials could not be read: \(error.localizedDescription)"
+        }
+    }
+
+    private func receivePairingRejection(_ proof: Data, from peerID: HandoffInstallationID) {
+        guard let state = sessions[peerID] else { return }
+        do {
+            guard let secret = try credentialStore.secret(for: peerID) ?? state.pendingSecret,
+                  HandoffAuthenticator.verifyAuthenticationResponse(
+                    proof,
+                    secret: secret,
+                    challenge: state.localNonce,
+                    responderID: peerID
+                  ) else { return }
+            pendingRequests.removeAll { $0.id == peerID }
+            sessions.removeValue(forKey: peerID)
+            lastError = "The peer declined this pairing request."
         } catch {
             lastError = "Pairing credentials could not be read: \(error.localizedDescription)"
         }
@@ -225,13 +282,9 @@ public final class HandoffPairingCoordinator: ObservableObject {
         send(.authenticationResponse(response), to: peerID)
     }
 
-    private func pairingCode(for state: SessionState, remoteNonce: Data) -> String {
-        HandoffAuthenticator.sharedAuthenticationCode(
-            localID: transport.localInstallationID,
-            remoteID: state.peer.installationID,
-            localNonce: state.localNonce,
-            remoteNonce: remoteNonce
-        )
+    private func pairingCode(for state: SessionState) -> String {
+        guard let secret = state.pendingSecret else { return "" }
+        return HandoffAuthenticator.sharedAuthenticationCode(secret: secret)
     }
 
     private func send(_ payload: HandoffMessagePayload, to peerID: HandoffInstallationID) {

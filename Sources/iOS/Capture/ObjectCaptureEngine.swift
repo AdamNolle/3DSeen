@@ -1,6 +1,7 @@
 import ARKit
 import RealityKit
 import SwiftUI
+import UIKit
 
 struct ObjectCaptureEngine: View {
     @EnvironmentObject private var stateMachine: ProcessingStateMachine
@@ -17,8 +18,15 @@ struct ObjectCaptureEngine: View {
 
     var body: some View {
         ZStack {
-            GuidedObjectARView(controller: capture).ignoresSafeArea()
-            GuidedTrackingOverlay(snapshot: capture.snapshot)
+            GuidedObjectARView(
+                controller: capture,
+                surfacePoints: capture.snapshot.surfacePoints
+            )
+            .ignoresSafeArea()
+            GuidedTrackingOverlay(
+                snapshot: capture.snapshot,
+                showsScreenPoints: capture.snapshot.pointSource != .lidarDepth
+            )
                 .allowsHitTesting(false)
             VStack(spacing: 0) {
                 Spacer()
@@ -26,6 +34,10 @@ struct ObjectCaptureEngine: View {
             }
         }
         .background(Color.black)
+        .sensoryFeedback(
+            .impact(weight: .light, intensity: 0.55),
+            trigger: capture.snapshot.coverageHapticMilestone
+        )
         .onAppear { capture.start() }
         .onDisappear { capture.stop(discardUnsealedCapture: true) }
     }
@@ -47,8 +59,22 @@ struct ObjectCaptureEngine: View {
                 Spacer(minLength: 4)
                 Text("\(capture.snapshot.frameCount)")
                     .font(.title2.monospacedDigit().weight(.semibold))
-                    .accessibilityLabel("\(capture.snapshot.frameCount) photos saved")
+                .accessibilityLabel("\(capture.snapshot.frameCount) photos saved")
             }
+
+            HStack(spacing: 8) {
+                Image(systemName: "circle.grid.3x3.fill")
+                    .foregroundStyle(Color(red: 0.30, green: 0.72, blue: 1.0))
+                Text(surfacePointStatus)
+                Spacer()
+                Text(capture.snapshot.surfacePointCount.formatted())
+                    .monospacedDigit()
+                    .foregroundStyle(.primary)
+            }
+            .font(.caption.weight(.semibold))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(surfacePointStatus)
+            .accessibilityValue("\(capture.snapshot.surfacePointCount) spatial samples")
 
             VStack(spacing: 4) {
                 ProgressView(value: captureProgress)
@@ -166,6 +192,16 @@ struct ObjectCaptureEngine: View {
             : .white
     }
 
+    private var surfacePointStatus: String {
+        if capture.snapshot.surfacePointCount > 0 || capture.snapshot.pointSource == .lidarDepth {
+            return "3D LiDAR surface dots"
+        }
+        if capture.snapshot.pointSource == .visualFeatures {
+            return "AR feature points · depth unavailable"
+        }
+        return "Waiting for LiDAR depth"
+    }
+
     private func finish() {
         capture.finish { result in
             switch result {
@@ -180,6 +216,7 @@ struct ObjectCaptureEngine: View {
 
 private struct GuidedTrackingOverlay: View {
     let snapshot: GuidedScanSnapshot
+    let showsScreenPoints: Bool
 
     var body: some View {
         Canvas { context, _ in
@@ -190,10 +227,12 @@ private struct GuidedTrackingOverlay: View {
                     style: StrokeStyle(lineWidth: 2, dash: [9, 7])
                 )
             }
-            for point in snapshot.points {
-                let rect = CGRect(x: point.x - 2.5, y: point.y - 2.5, width: 5, height: 5)
-                context.fill(Path(ellipseIn: rect), with: .color(.white.opacity(0.86)))
-                context.stroke(Path(ellipseIn: rect), with: .color(.blue.opacity(0.55)), lineWidth: 1)
+            if showsScreenPoints {
+                for point in snapshot.points {
+                    let rect = CGRect(x: point.x - 2.5, y: point.y - 2.5, width: 5, height: 5)
+                    context.fill(Path(ellipseIn: rect), with: .color(.white.opacity(0.86)))
+                    context.stroke(Path(ellipseIn: rect), with: .color(.blue.opacity(0.55)), lineWidth: 1)
+                }
             }
         }
         .accessibilityHidden(true)
@@ -202,10 +241,16 @@ private struct GuidedTrackingOverlay: View {
 
 private struct GuidedObjectARView: UIViewRepresentable {
     let controller: GuidedObjectCaptureController
+    let surfacePoints: [SIMD3<Float>]
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
 
     func makeUIView(context: Context) -> ARView {
         let view = ARView(frame: .zero, cameraMode: .ar, automaticallyConfigureSession: false)
         view.session = controller.session
+        context.coordinator.attach(to: view)
         return view
     }
 
@@ -214,5 +259,54 @@ private struct GuidedObjectARView: UIViewRepresentable {
             viewportSize: view.bounds.size,
             orientation: view.window?.windowScene?.interfaceOrientation ?? .portrait
         )
+        context.coordinator.update(points: surfacePoints)
+    }
+
+    static func dismantleUIView(_ view: ARView, coordinator: Coordinator) {
+        coordinator.detach(from: view)
+    }
+
+    @MainActor
+    final class Coordinator {
+        private let anchor = AnchorEntity(world: .zero)
+        private let dotMesh = MeshResource.generateSphere(radius: 0.0045)
+        private let dotMaterial = UnlitMaterial(
+            color: UIColor(red: 0.20, green: 0.72, blue: 1.0, alpha: 1)
+        )
+        private var dots: [ModelEntity] = []
+        private var previousPoints: [SIMD3<Float>] = []
+
+        func attach(to view: ARView) {
+            if !view.scene.anchors.contains(where: { $0 === anchor }) {
+                view.scene.addAnchor(anchor)
+            }
+        }
+
+        func update(points: [SIMD3<Float>]) {
+            guard points != previousPoints else { return }
+            previousPoints = points
+
+            while dots.count < points.count {
+                let dot = ModelEntity(mesh: dotMesh, materials: [dotMaterial])
+                dot.isEnabled = false
+                anchor.addChild(dot)
+                dots.append(dot)
+            }
+
+            for (index, dot) in dots.enumerated() {
+                guard index < points.count else {
+                    dot.isEnabled = false
+                    continue
+                }
+                dot.position = points[index]
+                dot.isEnabled = true
+            }
+        }
+
+        func detach(from view: ARView) {
+            view.scene.removeAnchor(anchor)
+            dots.removeAll(keepingCapacity: false)
+            previousPoints.removeAll(keepingCapacity: false)
+        }
     }
 }
