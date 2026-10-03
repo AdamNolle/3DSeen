@@ -277,6 +277,9 @@ private struct GuidedObjectARView: UIViewRepresentable {
         private var previousPoints: [SIMD3<Float>] = []
 
         func attach(to view: ARView) {
+            if ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) {
+                view.environment.sceneUnderstanding.options.insert(.occlusion)
+            }
             if !view.scene.anchors.contains(where: { $0 === anchor }) {
                 view.scene.addAnchor(anchor)
             }

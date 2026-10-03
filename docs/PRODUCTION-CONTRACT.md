@@ -1,6 +1,6 @@
 # 3DSeen Production Contract
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 This document is the canonical repository-level definition of production behavior. Source code and automated tests are the implementation authority; `docs/VERIFICATION-STATUS.md` records evidence and external gates. Files under `docs/design-spec/`, `docs/design-ref/`, `docs/review/`, and `docs/audit/`, plus `docs/EXECUTION-PLAN.md`, are historical design and review inputs. They may explain intent but do not override this contract.
 
@@ -9,7 +9,7 @@ This document is the canonical repository-level definition of production behavio
 - iPhone and iPad run the same persisted Studio workflow with adaptive layouts: Library → Mode → Briefing → Detail → Capture → Review → Compute → Viewer → Export.
 - macOS provides Library, Viewer, Compute, Export, and Settings panes and acts as an optional local reconstruction worker.
 - macOS uses a single Studio window with persistent navigation. Library grids adapt to available width; phone and iPad controls respect larger touch areas, Reduce Motion, and Reduce Transparency.
-- Minimum deployment targets are iOS/iPadOS 17 and macOS 14. Local verification supports Xcode 26.3 or newer; hosted CI deliberately selects exact Xcode 26.3 for reproducibility.
+- Minimum deployment targets are iOS/iPadOS 17 and macOS 14. Local verification currently uses Xcode 27.0.1; hosted CI selects exact Xcode 26.6 for reproducibility.
 
 ## Capture
 
@@ -20,7 +20,7 @@ This document is the canonical repository-level definition of production behavio
 - Face categories label individual triangles; they do not segment every physical object into a unique, editable object. The live texture percentage describes only the bounded preview sample, while the completed scan report computes coverage over the exported mesh. Geometry is an ARKit LiDAR approximation of visible, tracked surfaces, not a metrology guarantee or a reconstruction of hidden surfaces.
 - Surface snapshots are user-requested center crops saved as PNG. They retain captured lighting; they are not seamless textures or measured PBR maps. Embedded model textures and reusable snapshots survive deletion of source frames.
 - Landscape capture uses ARKit world tracking and retained image frames.
-- Guided object capture projects LiDAR depth samples through the camera intrinsics into ARKit world coordinates and renders a bounded, persistent dot cloud on the detected object. The HUD shows the number of unique spatial samples; light haptic feedback fires at new-surface milestones. Devices without LiDAR keep the screen-space feature-point fallback and do not claim depth coverage. Dots are live scan guidance, while image capture and object reconstruction remain separate stages; the dot cloud is not a final textured mesh or a metrology result.
+- Guided object capture projects LiDAR depth samples through the camera intrinsics into ARKit world coordinates and renders a bounded, persistent dot cloud on the detected object. Where ARKit mesh reconstruction is available, RealityKit mesh occlusion keeps accumulated dots behind nearer tracked surfaces. The HUD shows the number of unique spatial samples; light haptic feedback fires at new-surface milestones. Devices without LiDAR keep the screen-space feature-point fallback and do not claim depth coverage. Dots are live scan guidance, while image capture and object reconstruction remain separate stages; the dot cloud is not a final textured mesh or a metrology result.
 - Auto-Pilot uses Vision classification to recommend a real capture engine; it is not a separate reconstruction algorithm.
 - Simulator and unsupported-hardware paths must block honestly. No synthetic capture may be presented as a real scan.
 - Review metrics may only display retained-frame measurements or explicit unavailable states. Geometry coverage, dimensions, lighting, or thermal claims must be tied to measured APIs.

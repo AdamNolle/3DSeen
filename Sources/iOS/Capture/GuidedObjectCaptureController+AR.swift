@@ -88,7 +88,7 @@ extension GuidedObjectCaptureController {
             viewport: presentation.0,
             orientation: presentation.1
         )
-        let coverageState = lock.withLock { () -> (Int, Int, [SIMD3<Float>]?) in
+        let coverageState = lock.withLock { () -> (count: Int, hapticMilestone: Int, points: [SIMD3<Float>]?) in
             _ = surfaceCoverage.insert(pointResult.surfacePoints)
             let shouldPublishPoints = surfaceCoverage.points.count != lastPublishedSurfaceCount
                 && frame.timestamp - lastSurfacePublicationTime >= 0.25
@@ -103,9 +103,9 @@ extension GuidedObjectCaptureController {
             snapshot.subjectBounds = subjectProjection?.screenBounds
             snapshot.points = pointResult.points
             snapshot.pointSource = pointResult.source
-            snapshot.surfacePointCount = coverageState.0
-            snapshot.coverageHapticMilestone = coverageState.1
-            if let surfacePoints = coverageState.2 {
+            snapshot.surfacePointCount = coverageState.count
+            snapshot.coverageHapticMilestone = coverageState.hapticMilestone
+            if let surfacePoints = coverageState.points {
                 snapshot.surfacePoints = surfacePoints
             }
             snapshot.phase = subjectProjection == nil ? .seekingSubject : .capturing

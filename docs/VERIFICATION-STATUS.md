@@ -16,7 +16,9 @@ The prior notarized Mac installation was missing from `/Applications` at the sta
 
 Object capture now unprojects subject-masked LiDAR depth into world-space points, deduplicates on a 2.5 cm spatial grid, pins a maximum of 360 blue dots to the object in RealityKit, and displays the measured point count. Light haptics fire when newly observed surface samples cross scan milestones. The count is not a percent-complete estimate; non-LiDAR feature-point fallback remains screen-space. Physical alignment, haptic feel, and sustained capture still require a LiDAR device walkthrough.
 
-Latest Xcode 27.0.1 checks: generic iOS Simulator build, strict SwiftLint (112 files), icon validation, XcodeGen drift, and Release dry run passed. On iPhone 16e/iOS 18.5, all six `GuidedSurfaceCoverageTests` and both `HandoffControlCipherTests` passed. The macOS suite passed 66 tests. The full iOS suite could not resolve a simulator destination after CoreSimulator became unresponsive; the refreshed iPad UI run stalled before its test runner and was stopped after Xcode blocked saving the test record. The earlier full iPhone/iPad suites remain recorded below; hosted CI must validate this revision.
+RealityKit now enables ARKit mesh reconstruction and scene-understanding occlusion on supported LiDAR hardware, so the persistent dots are hidden behind nearer reconstructed surfaces. This is a visual overlay on the camera feed; it does not create or save a per-object textured mesh. The existing photo capture/reconstruction pipeline remains a separate stage.
+
+Latest Xcode 27.0.1 checks: generic iOS Simulator build, strict SwiftLint (112 files), icon validation, XcodeGen drift, and Release dry run passed. On iPhone 16e/iOS 18.5, all six `GuidedSurfaceCoverageTests` and both `HandoffControlCipherTests` passed. The macOS suite passed 66 tests. The full iOS suite could not resolve a simulator destination after CoreSimulator became unresponsive; the refreshed iPad UI run stalled before its test runner and was stopped after Xcode blocked saving the test record. The earlier full iPhone/iPad suites remain recorded below. Hosted CI run [37080716227](https://github.com/AdamNolle/3DSeen/actions/runs/37080716227) passed on baseline commit `2cec620`; the mesh-occlusion follow-up still needs its own hosted run and physical LiDAR verification.
 
 ## October 2 classified live room mesh and UI audit
 
@@ -119,7 +121,7 @@ The following remain unproven or need a final repeat on the latest build:
 2. Rapid Object Finish/Cancel and AR interruption recovery under repeated physical stress.
 3. Landscape ARKit captures valid, non-empty JPEG frames and drains them before persistence.
 4. Auto-Pilot receives a live camera frame, settles on an appropriate Vision mode, and transitions into the selected capture engine.
-5. RoomPlan on LiDAR hardware exports a USDZ that reaches Viewer and Export.
+5. ARKit LiDAR room-mesh capture on supported hardware exports a USDZ that reaches Viewer and Export.
 6. RealityKit photogrammetry completes at each supported detail request on the target Mac and device.
 7. A real authenticated Multipeer handoff transfers the ZIP capture, model, and geometry-preview PLY in both directions, including cancellation, disconnect/retry, relaunch reconciliation, and completed-result resend.
 8. SceneKit model-surface hit testing produces sensible real-world measurement distances for the model scale.
