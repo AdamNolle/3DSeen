@@ -96,6 +96,76 @@ final class ComputeStageTests: XCTestCase {
         XCTAssertEqual(coordinator.queuedRemoteJobCount, 0)
     }
 
+    func testExpiredComputeOffersAreRemovedBeforeQueueAdmission() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("offer-expiry-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let coordinator = ComputeCoordinator(
+            credentialStore: InMemoryPairingCredentialStore(),
+            assetStore: try ScanAssetStore(rootDirectory: root.appendingPathComponent("scans")),
+            remoteJobJournalURL: root.appendingPathComponent("jobs.json")
+        )
+        let peer = HandoffInstallationID()
+        let resource = HandoffResourceDescriptor(byteCount: 100, sha256: String(repeating: "a", count: 64))
+        let offer = HandoffJobOffer(captureMode: .object, detailTier: "Full", resource: resource)
+        let expiredJobID = UUID()
+        let expiredScanID = UUID()
+        coordinator.pendingOffers[expiredJobID] = ComputeCoordinator.PendingOffer(
+            peerID: peer,
+            scanID: expiredScanID,
+            offer: offer,
+            expiresAt: .distantPast
+        )
+
+        let newJobID = UUID()
+        coordinator.handleAuthenticatedControlEvent(HandoffControlEvent(
+            message: HandoffMessageEnvelope(
+                jobID: newJobID,
+                scanID: UUID(),
+                senderInstallationID: peer,
+                payload: .jobOffer(offer)
+            ),
+            peerID: peer
+        ))
+
+        XCTAssertNil(coordinator.pendingOffers[expiredJobID])
+        XCTAssertEqual(coordinator.pendingOffers.count, 1)
+        XCTAssertEqual(coordinator.remoteJobJournal.records[expiredJobID]?.state, .failed)
+        XCTAssertEqual(coordinator.queuedRemoteJobCount, 1)
+    }
+
+    func testComputeOfferQueueRejectsExcessOffers() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("offer-limit-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let coordinator = ComputeCoordinator(
+            credentialStore: InMemoryPairingCredentialStore(),
+            assetStore: try ScanAssetStore(rootDirectory: root.appendingPathComponent("scans")),
+            remoteJobJournalURL: root.appendingPathComponent("jobs.json")
+        )
+        let peer = HandoffInstallationID()
+        let offer = HandoffJobOffer(
+            captureMode: .object,
+            detailTier: "Full",
+            resource: HandoffResourceDescriptor(byteCount: 100, sha256: String(repeating: "a", count: 64))
+        )
+        var rejectedJobID: UUID?
+        for index in 0...ComputeCoordinator.maximumPendingJobOffers {
+            let jobID = UUID()
+            let message = HandoffMessageEnvelope(
+                jobID: jobID,
+                scanID: UUID(),
+                senderInstallationID: peer,
+                payload: .jobOffer(offer)
+            )
+            coordinator.handleAuthenticatedControlEvent(HandoffControlEvent(message: message, peerID: peer))
+            if index == ComputeCoordinator.maximumPendingJobOffers { rejectedJobID = jobID }
+        }
+
+        XCTAssertEqual(coordinator.pendingOffers.count, ComputeCoordinator.maximumPendingJobOffers)
+        let rejectedJob = try XCTUnwrap(rejectedJobID)
+        XCTAssertNil(coordinator.remoteJobJournal.records[rejectedJob])
+        XCTAssertEqual(coordinator.queuedRemoteJobCount, ComputeCoordinator.maximumPendingJobOffers)
+    }
+
     func testTrainerRuntimeRequiresAllCommands() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("trainer-runtime-\(UUID().uuidString)", isDirectory: true)

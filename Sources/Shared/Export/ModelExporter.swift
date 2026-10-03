@@ -38,6 +38,7 @@ public enum ExportFormat: String, CaseIterable, Sendable {
 
 public enum ExportError: LocalizedError {
     case sourceUnreadable(URL)
+    case invalidManifest
     case unsupportedByModelIO(String)
     case exportFailed(String)
     case noSourceAsset(UUID)
@@ -45,6 +46,7 @@ public enum ExportError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .sourceUnreadable(let url): return "Could not read source model at \(url.lastPathComponent)."
+        case .invalidManifest: return "The result package manifest is invalid or exceeds the metadata limits."
         case .unsupportedByModelIO(let ext): return "ModelIO cannot write .\(ext). glTF/FBX require an external converter."
         case .exportFailed(let msg): return "Export failed: \(msg)"
         case .noSourceAsset(let scanID): return "Scan \(scanID.uuidString) does not have a computed model to export."
@@ -119,7 +121,12 @@ public struct ScanResultPackage {
               ModelGeometryInspector.inspect(modelURL: modelURL) != nil else {
             throw ExportError.sourceUnreadable(modelURL)
         }
-        let manifest = try JSONDecoder().decode(ScanAssetManifest.self, from: Data(contentsOf: manifestURL))
+        let manifestData = try BoundedArchiveExtractor.readMetadataFile(
+            at: manifestURL,
+            maximumByteCount: ScanAssetManifest.maximumTransferMetadataBytes
+        )
+        let manifest = try JSONDecoder().decode(ScanAssetManifest.self, from: manifestData)
+        guard manifest.isWithinTransferLimits else { throw ExportError.invalidManifest }
         let previewPLYURL = files.first { $0.pathExtension.lowercased() == "ply" }
         if let previewPLYURL {
             let payloadKind: PLYPayloadKind = manifest.previewPLYKind == .trainedSplat

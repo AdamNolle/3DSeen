@@ -141,12 +141,13 @@ struct GaussianSplatMetalView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: MTKView, context: Context) {
-        context.coordinator.loadIfNeeded()
+        context.coordinator.loadIfNeeded(in: uiView)
     }
 
     final class Coordinator: NSObject, MTKViewDelegate {
         private let controller: SplatController
         private let logger = Logger(subsystem: "com.adamnolle.3DSeen", category: "Splat")
+        private let loadQueue = DispatchQueue(label: "com.adamnolle.3DSeen.splat-import", qos: .userInitiated)
         private var device: MTLDevice?
         private var queue: MTLCommandQueue?
         private var renderer: SplatRenderer?
@@ -178,47 +179,108 @@ struct GaussianSplatMetalView: UIViewRepresentable {
             }
         }
 
-        func loadIfNeeded() {
+        func loadIfNeeded(in view: MTKView) {
             guard let url = controller.url, controller.loadAttemptID != loadedAttemptID else { return }
             let attemptID = controller.loadAttemptID
             loadedAttemptID = attemptID
-            guard let renderer else {
+            guard let device else {
                 DispatchQueue.main.async {
                     guard self.controller.loadAttemptID == attemptID else { return }
                     self.controller.status = "3D rendering is unavailable on this device"
                 }
                 return
             }
-            let accessing = url.startAccessingSecurityScopedResource()
-            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
-            do {
-                renderer.reset()
-                if url.pathExtension.lowercased() == "splat" {
-                    let file = try CompactSplatFile(contentsOf: url)
-                    try renderer.ensureAdditionalCapacity(file.count)
-                    for index in 0..<file.count {
-                        let point = try file.point(at: index)
-                        try renderer.add(SplatScenePoint(
-                            position: point.position, normal: .zero,
-                            color: .linearUInt8(point.rgba.x, point.rgba.y, point.rgba.z),
-                            opacity: point.opacityLogit, scale: point.logScale,
-                            rotation: simd_quatf(ix: point.rotation.y, iy: point.rotation.z,
-                                                 iz: point.rotation.w, r: point.rotation.x)
-                        ))
+
+            let colorFormat = view.colorPixelFormat
+            let depthFormat = view.depthStencilPixelFormat
+            let sampleCount = view.sampleCount
+            renderer = nil
+            loadQueue.async { [weak self] in
+                do {
+                    let candidate = try Self.makeRenderer(
+                        device: device,
+                        colorFormat: colorFormat,
+                        depthFormat: depthFormat,
+                        sampleCount: sampleCount
+                    )
+                    let accessing = url.startAccessingSecurityScopedResource()
+                    defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+
+                    switch url.pathExtension.lowercased() {
+                    case "splat":
+                        let file = try CompactSplatFile(contentsOf: url)
+                        try candidate.ensureAdditionalCapacity(file.count)
+                        for index in 0..<file.count {
+                            let point = try file.point(at: index)
+                            try candidate.add(SplatScenePoint(
+                                position: point.position,
+                                normal: .zero,
+                                color: .linearUInt8(point.rgba.x, point.rgba.y, point.rgba.z),
+                                opacity: point.opacityLogit,
+                                scale: point.logScale,
+                                rotation: simd_quatf(
+                                    ix: point.rotation.y,
+                                    iy: point.rotation.z,
+                                    iz: point.rotation.w,
+                                    r: point.rotation.x
+                                )
+                            ))
+                        }
+                    case "ply":
+                        guard PLYValidator.isWithinImportLimits(url),
+                              PLYValidator.isValid(url, kind: .geometry) else {
+                            throw PointCloudImportError.invalidPLY
+                        }
+                        try candidate.readPLY(from: url)
+                    default:
+                        throw PointCloudImportError.unsupportedFormat
                     }
-                } else {
-                    try renderer.readPLY(from: url)
+
+                    let count = candidate.splatCount
+                    DispatchQueue.main.async {
+                        guard let self, self.controller.loadAttemptID == attemptID else { return }
+                        self.renderer = candidate
+                        self.controller.splatCount = count
+                        self.controller.status = "\(count) splats"
+                    }
+                } catch {
+                    let message = error.localizedDescription
+                    self?.logger.error("Point-cloud import failed: \(message)")
+                    DispatchQueue.main.async {
+                        guard let self, self.controller.loadAttemptID == attemptID else { return }
+                        self.controller.status = message
+                    }
                 }
-                DispatchQueue.main.async {
-                    guard self.controller.loadAttemptID == attemptID else { return }
-                    self.controller.splatCount = renderer.splatCount
-                    self.controller.status = "\(renderer.splatCount) splats"
-                }
-            } catch {
-                logger.error("readPLY failed: \(error.localizedDescription)")
-                DispatchQueue.main.async {
-                    guard self.controller.loadAttemptID == attemptID else { return }
-                    self.controller.status = "Could not open splat file"
+            }
+        }
+
+        private static func makeRenderer(
+            device: MTLDevice,
+            colorFormat: MTLPixelFormat,
+            depthFormat: MTLPixelFormat,
+            sampleCount: Int
+        ) throws -> SplatRenderer {
+            try SplatRenderer(
+                device: device,
+                colorFormat: colorFormat,
+                depthFormat: depthFormat,
+                stencilFormat: .invalid,
+                sampleCount: sampleCount,
+                maxViewCount: 1,
+                maxSimultaneousRenders: 3
+            )
+        }
+
+        private enum PointCloudImportError: LocalizedError {
+            case invalidPLY
+            case unsupportedFormat
+
+            var errorDescription: String? {
+                switch self {
+                case .invalidPLY:
+                    return "The PLY file is invalid or exceeds the 500,000-point device preview limit."
+                case .unsupportedFormat:
+                    return "Choose a compatible .splat or .ply point-cloud file."
                 }
             }
         }
@@ -226,7 +288,6 @@ struct GaussianSplatMetalView: UIViewRepresentable {
         func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) { viewportSize = size }
 
         func draw(in view: MTKView) {
-            loadIfNeeded()
             guard let renderer, let queue,
                   let rpd = view.currentRenderPassDescriptor,
                   let drawable = view.currentDrawable,

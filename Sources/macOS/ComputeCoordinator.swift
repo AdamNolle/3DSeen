@@ -9,18 +9,22 @@ import OSLog
 /// unzips it, runs RealityKit PhotogrammetrySession on Apple Silicon, and publishes pipeline state.
 @MainActor
 public final class ComputeCoordinator: ObservableObject {
+    static let maximumPendingJobOffers = 8
+    static let pendingJobOfferLifetime: TimeInterval = 120
 
-    private struct PendingHandoff {
+    struct PendingHandoff {
         let archive: URL
+        let byteCount: Int64
         let replyPeer: MCPeerID
         let peerInstallationID: HandoffInstallationID
         let metadata: ScanHandoffMetadata
     }
 
-    private struct PendingOffer {
+    struct PendingOffer {
         let peerID: HandoffInstallationID
         let scanID: UUID
         let offer: HandoffJobOffer
+        let expiresAt: Date
     }
 
     private struct CompletionInput {
@@ -88,12 +92,13 @@ public final class ComputeCoordinator: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private let logger = Logger(subsystem: "com.adamnolle.3DSeen", category: "Compute")
     private let assetStore: ScanAssetStore?
-    private let remoteJobJournal: MacHandoffJobJournal
-    private var pendingHandoffs: [PendingHandoff] = []
-    private var pendingOffers: [UUID: PendingOffer] = [:]
+    let remoteJobJournal: MacHandoffJobJournal
+    var pendingHandoffs: [PendingHandoff] = []
+    var pendingOffers: [UUID: PendingOffer] = [:]
     private var activeRemoteJob: (jobID: UUID, scanID: UUID, peerID: HandoffInstallationID)?
+    var activeHandoffByteCount: Int64 = 0
     private var cancelledRemoteJobIDs: Set<UUID> = []
-    private var isDrainingHandoffs = false
+    var isDrainingHandoffs = false
     private var isExecutingProcess = false
 
     public init(
@@ -203,7 +208,7 @@ public final class ComputeCoordinator: ObservableObject {
         stage = Stage.forProgress(p)
     }
 
-    private func addLog(_ message: String) {
+    func addLog(_ message: String) {
         let f = DateFormatter(); f.dateFormat = "HH:mm:ss"
         log.append((f.string(from: Date()), message))
         logger.info("\(message)")
@@ -216,6 +221,7 @@ public final class ComputeCoordinator: ObservableObject {
 
     /// Routing after the transport's authenticated-peer gate; also permits isolated protocol tests.
     func handleAuthenticatedControlEvent(_ event: HandoffControlEvent) {
+        _ = pruneExpiredPendingOffers()
         switch event.message.payload {
         case .jobOffer(let offer):
             guard let jobID = event.message.jobID, let scanID = event.message.scanID else {
@@ -237,7 +243,18 @@ public final class ComputeCoordinator: ObservableObject {
                     return
                 }
             }
-            pendingOffers[jobID] = PendingOffer(peerID: event.peerID, scanID: scanID, offer: offer)
+            guard pendingOffers[jobID] != nil || pendingOffers.count < Self.maximumPendingJobOffers else {
+                send(.failed(HandoffFailure(code: .transferFailed, detail: "The compute offer queue is full.")), event: event)
+                return
+            }
+            if pendingOffers[jobID] == nil {
+                pendingOffers[jobID] = PendingOffer(
+                    peerID: event.peerID,
+                    scanID: scanID,
+                    offer: offer,
+                    expiresAt: Date().addingTimeInterval(Self.pendingJobOfferLifetime)
+                )
+            }
             recordRemoteJob(jobID: jobID, scanID: scanID, peerID: event.peerID, state: .accepted, progress: 0)
             updateQueueProjection()
             send(.jobAccepted, event: event)
@@ -264,70 +281,6 @@ public final class ComputeCoordinator: ObservableObject {
             if durableRecord.state == .completed { resendCompletedResult(durableRecord) }
         default:
             break
-        }
-    }
-
-    private func receiveHandoff(archive: URL, peer: MCPeerID, metadata: ScanHandoffMetadata) async {
-        guard let peerID = network.installationID(for: peer), pairing.isAuthenticated(peerID) else {
-            network.removeReceivedResource(archive)
-            addLog("Rejected unauthenticated scan resource from \(peer.displayName)")
-            return
-        }
-        if let jobID = metadata.jobID {
-            guard let offer = pendingOffers[jobID],
-                  offer.peerID == peerID,
-                  offer.scanID == metadata.scanID,
-                  (try? HandoffResourceDescriptor.inspect(archive)) == offer.offer.resource else {
-                network.removeReceivedResource(archive)
-                if let scanID = metadata.scanID,
-                   remoteJobJournal.records[jobID]?.peerID == peerID,
-                   remoteJobJournal.records[jobID]?.scanID == scanID {
-                    recordRemoteJob(jobID: jobID, scanID: scanID, peerID: peerID, state: .failed, progress: 0)
-                }
-                send(
-                    .failed(HandoffFailure(code: .corruptArchive, detail: "The offered resource digest did not match.")),
-                    jobID: jobID,
-                    scanID: metadata.scanID,
-                    to: peerID
-                )
-                addLog("Rejected uncorrelated or corrupt job resource")
-                return
-            }
-            pendingOffers.removeValue(forKey: jobID)
-            updateQueueProjection()
-        }
-        await enqueueHandoff(archive: archive, peer: peer, peerID: peerID, metadata: metadata)
-    }
-
-    private func enqueueHandoff(
-        archive: URL,
-        peer: MCPeerID,
-        peerID: HandoffInstallationID,
-        metadata: ScanHandoffMetadata
-    ) async {
-        pendingHandoffs.append(.init(
-            archive: archive,
-            replyPeer: peer,
-            peerInstallationID: peerID,
-            metadata: metadata
-        ))
-        updateQueueProjection()
-        addLog("Queued hand-off from \(peer.displayName) (\(pendingHandoffs.count) waiting)")
-        guard !isDrainingHandoffs else { return }
-        isDrainingHandoffs = true
-        defer { isDrainingHandoffs = false }
-        while !pendingHandoffs.isEmpty {
-            let handoff = pendingHandoffs.removeFirst()
-            updateQueueProjection()
-            await process(
-                archive: handoff.archive,
-                replyPeer: handoff.replyPeer,
-                captureMode: handoff.metadata.captureMode,
-                detailTier: handoff.metadata.detailTier,
-                sourceScanID: handoff.metadata.scanID,
-                replyPeerID: handoff.peerInstallationID,
-                jobID: handoff.metadata.jobID
-            )
         }
     }
 
@@ -674,7 +627,7 @@ extension ComputeCoordinator {
         addLog("Cancelled queued remote jobs")
     }
 
-    private func updateQueueProjection() {
+    func updateQueueProjection() {
         queuedRemoteJobCount = pendingOffers.count + pendingHandoffs.count
         activeRemoteJobID = activeRemoteJob?.jobID
     }
@@ -688,7 +641,7 @@ extension ComputeCoordinator {
         send(payload, jobID: event.message.jobID, scanID: event.message.scanID, to: event.peerID)
     }
 
-    private func send(
+    func send(
         _ payload: HandoffMessagePayload,
         jobID: UUID?,
         scanID: UUID?,
@@ -738,7 +691,7 @@ extension ComputeCoordinator {
         }
     }
 
-    private func recordRemoteJob(
+    func recordRemoteJob(
         jobID: UUID,
         scanID: UUID,
         peerID: HandoffInstallationID,

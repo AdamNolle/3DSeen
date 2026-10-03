@@ -16,6 +16,7 @@ enum BoundedArchiveExtractor {
 
     enum ExtractionError: LocalizedError {
         case archiveSizeLimitExceeded
+        case metadataFileLimitExceeded(String)
         case invalidPath(String)
         case unsupportedEntryType(String)
         case entryLimitExceeded
@@ -27,6 +28,8 @@ enum BoundedArchiveExtractor {
             switch self {
             case .archiveSizeLimitExceeded:
                 return "The archive file exceeds the allowed size."
+            case .metadataFileLimitExceeded(let name):
+                return "The archive metadata file exceeds the allowed size: \(name)."
             case .invalidPath(let path):
                 return "The archive contains an unsafe path: \(path)"
             case .unsupportedEntryType(let path):
@@ -41,6 +44,32 @@ enum BoundedArchiveExtractor {
                 return "The archive entry is malformed: \(path)"
             }
         }
+    }
+
+    static func readMetadataFile(at url: URL, maximumByteCount: Int) throws -> Data {
+        guard maximumByteCount > 0,
+              maximumByteCount < Int.max,
+              let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+              values.isRegularFile == true,
+              let fileSize = values.fileSize,
+              fileSize >= 0,
+              fileSize <= maximumByteCount else {
+            throw ExtractionError.metadataFileLimitExceeded(url.lastPathComponent)
+        }
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        let readLimit = maximumByteCount + 1
+        var data = Data()
+        data.reserveCapacity(fileSize)
+        while data.count < readLimit {
+            guard let chunk = try handle.read(upToCount: min(64 * 1_024, readLimit - data.count)),
+                  !chunk.isEmpty else { break }
+            data.append(contentsOf: chunk)
+        }
+        guard data.count <= maximumByteCount, data.count == fileSize else {
+            throw ExtractionError.metadataFileLimitExceeded(url.lastPathComponent)
+        }
+        return data
     }
 
     static func extract(

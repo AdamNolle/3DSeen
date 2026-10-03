@@ -155,6 +155,22 @@ final class BoundedArchiveExtractorTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: extractedFile), Data("mesh".utf8))
     }
 
+    func testMetadataReaderReadsBoundedRegularFilesAndRejectsOversizedFiles() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("metadata.json")
+        try Data("{}".utf8).write(to: url)
+        XCTAssertEqual(try BoundedArchiveExtractor.readMetadataFile(at: url, maximumByteCount: 16), Data("{}".utf8))
+
+        try Data(repeating: 0x20, count: 17).write(to: url)
+        XCTAssertThrowsError(try BoundedArchiveExtractor.readMetadataFile(at: url, maximumByteCount: 16)) { error in
+            guard let extractionError = error as? BoundedArchiveExtractor.ExtractionError,
+                  case .metadataFileLimitExceeded = extractionError else {
+                return XCTFail("Expected metadata size rejection, received \(error)")
+            }
+        }
+    }
+
     private func makeArchive(at url: URL, entries: [(path: String, data: Data)]) throws {
         let archive = try Archive(url: url, accessMode: .create)
         for entry in entries {

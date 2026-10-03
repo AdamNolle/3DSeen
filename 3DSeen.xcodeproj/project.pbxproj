@@ -15,6 +15,7 @@
 		03B4ADE8AA7091CF9083B02F /* PhotogrammetryRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31CB2BDB4AAA6266CA396D7 /* PhotogrammetryRunner.swift */; };
 		03B679D586AF0E119F8E1CA1 /* PhotogrammetryRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B31CB2BDB4AAA6266CA396D7 /* PhotogrammetryRunner.swift */; };
 		043DE1418392692AAA10B8CC /* AIPBRMaterialEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2AC060B0BE18A703CEF83F1 /* AIPBRMaterialEstimator.swift */; };
+		0446512837EF4C2D46FAFC58 /* HandoffInvitationAdmissionLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F168794F133206EBD831833 /* HandoffInvitationAdmissionLimiter.swift */; };
 		04C808A00EBAEAF77E28BE75 /* 3DSeenApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F211D1F95F1137E6ED3888EC /* 3DSeenApp.swift */; };
 		0B98DA421C4EC7CFC7DA9F9A /* AutoPilotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 281F78B7D402BE66E74A9771 /* AutoPilotTests.swift */; };
 		0C17028F1E8678A45B43B9C7 /* HandoffProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7920D74A99B1596A19E73AC /* HandoffProtocolTests.swift */; };
@@ -49,9 +50,11 @@
 		395F0F279197F6BDE8505E66 /* LiveCaptureStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81D8872B17C1E43C16BF0E89 /* LiveCaptureStatus.swift */; };
 		3AEE80DA890B13896C22D33B /* ProcessingStateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69735CC14F7457670ECBD7C6 /* ProcessingStateMachine.swift */; };
 		3B1475DB7A4A31A8A491AC70 /* LiveCaptureHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = F85DDBDD6E873DC5AAF7C124 /* LiveCaptureHUD.swift */; };
+		3D3BE01F01FB2F7D61A409FC /* HandoffAdmissionPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80AD82EE5080F6BE839658D9 /* HandoffAdmissionPolicyTests.swift */; };
 		3F8832F31EF44497117BAE69 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = B8A7E315EAB4A35CDE7FAF4A /* ZIPFoundation */; };
 		407EA983A31F9A0DB6B26D63 /* ModelExportSharePackage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5890050AC3403EB4697B582 /* ModelExportSharePackage.swift */; };
 		4095D1BC6D04B6BDC2CF1CD0 /* CompactSplatFileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09C9FD9CDF8F18FC70EF9B3E /* CompactSplatFileTests.swift */; };
+		40FAFD468A2AF10D61C42BC4 /* ComputeCoordinatorHandoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0A41CD6EAE0CD842CBC1DC4 /* ComputeCoordinatorHandoff.swift */; };
 		4350F7CF047027DABFC717C5 /* BoundedArchiveExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E52B90F96A523A0F7D4B0459 /* BoundedArchiveExtractor.swift */; };
 		4467A3C868558569446D39A1 /* CaptureScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07651B3FCF956B10B87C371 /* CaptureScreen.swift */; };
 		45B8B960150491FC7CE47919 /* GuidedObjectCaptureController+Writing.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC14915AF3AE9245DB86A3D8 /* GuidedObjectCaptureController+Writing.swift */; };
@@ -149,6 +152,7 @@
 		C70103EF267A9540CD99E9F3 /* BoundedMeshAnchorStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBADB51EF075823627DCBBD4 /* BoundedMeshAnchorStore.swift */; };
 		C7EE7BF07BBF072BCF3950FD /* HandoffTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E9069508A6BB2A6AF3157E7 /* HandoffTransport.swift */; };
 		C9AD59FF6F58547E4021D6B9 /* ObjectCaptureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE453E975B978103D45FAD /* ObjectCaptureEngine.swift */; };
+		C9FF5B0C9767A1B4B9DB43B7 /* HandoffInvitationAdmissionLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F168794F133206EBD831833 /* HandoffInvitationAdmissionLimiter.swift */; };
 		CA53FDC8CE9D22852895B0B2 /* HandoffControlCipherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7B2FD79A72BA2CD41D594C4 /* HandoffControlCipherTests.swift */; };
 		CD97B962CE929B5AF9346AFC /* HandoffControlCipher.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0C83023832D099CC4438B95 /* HandoffControlCipher.swift */; };
 		CE3394A7355DFEBA52A71ED7 /* ModelExportSharePackage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5890050AC3403EB4697B582 /* ModelExportSharePackage.swift */; };
@@ -255,10 +259,12 @@
 		6AD323776CD4D94C47792345 /* ViewerScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewerScreen.swift; sourceTree = "<group>"; };
 		6D83DD0DC72326B02DADE40A /* ComputeCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputeCoordinator.swift; sourceTree = "<group>"; };
 		6DBB988AF570CA6FA57C4DC8 /* ModelExporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelExporterTests.swift; sourceTree = "<group>"; };
+		6F168794F133206EBD831833 /* HandoffInvitationAdmissionLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffInvitationAdmissionLimiter.swift; sourceTree = "<group>"; };
 		70A9B012C4A9D6C001FE697B /* ComputeOption.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputeOption.swift; sourceTree = "<group>"; };
 		7285F79EED4C6F44B29292AB /* ModePickerScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModePickerScreen.swift; sourceTree = "<group>"; };
 		73F041A48B09A08901142E55 /* GuidedObjectCaptureController+AR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GuidedObjectCaptureController+AR.swift"; sourceTree = "<group>"; };
 		7BEF257A4B59A9E6793F948E /* BriefingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingScreen.swift; sourceTree = "<group>"; };
+		80AD82EE5080F6BE839658D9 /* HandoffAdmissionPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffAdmissionPolicyTests.swift; sourceTree = "<group>"; };
 		81D8872B17C1E43C16BF0E89 /* LiveCaptureStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveCaptureStatus.swift; sourceTree = "<group>"; };
 		84DE17EB79919A1B79091980 /* NerfstudioRuntimeInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NerfstudioRuntimeInstaller.swift; sourceTree = "<group>"; };
 		8525FA57375C0BE2E9B0AA2F /* MacViewerPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacViewerPane.swift; sourceTree = "<group>"; };
@@ -299,6 +305,7 @@
 		CA8798C371C22F3700560089 /* 3DSeenIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = 3DSeenIcon.icon; sourceTree = "<group>"; };
 		CB80CB2523BFE5E9C74BBFBB /* BlenderModelConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlenderModelConverter.swift; sourceTree = "<group>"; };
 		CFCC585299A17E4BD48468C3 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		D0A41CD6EAE0CD842CBC1DC4 /* ComputeCoordinatorHandoff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputeCoordinatorHandoff.swift; sourceTree = "<group>"; };
 		D15C2670C33C1808B927D57A /* 3DSeenApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = 3DSeenApp.swift; sourceTree = "<group>"; };
 		D2EFDC324502E8EE8CDCE1FD /* MacSettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSettingsPane.swift; sourceTree = "<group>"; };
 		D699E59014BAC0A8CD7BF80F /* LandscapeCaptureEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LandscapeCaptureEngine.swift; sourceTree = "<group>"; };
@@ -419,6 +426,7 @@
 				8C95CA27A7E1E731D0B34517 /* Assets.xcassets */,
 				CB80CB2523BFE5E9C74BBFBB /* BlenderModelConverter.swift */,
 				6D83DD0DC72326B02DADE40A /* ComputeCoordinator.swift */,
+				D0A41CD6EAE0CD842CBC1DC4 /* ComputeCoordinatorHandoff.swift */,
 				CFCC585299A17E4BD48468C3 /* ContentView.swift */,
 				20AF247B7CE0D9B6DF319A58 /* Info.plist */,
 				C06A568A740BADD32AF158C7 /* MacComputedScan.swift */,
@@ -539,6 +547,7 @@
 				64953E3F4E46190D0E5C36FE /* ComputeDetailCapabilityTests.swift */,
 				C1A28D2A5101900B49581CE0 /* GuidedScannerTests.swift */,
 				88DFC3B6289EC43C4FB9F587 /* GuidedSurfaceCoverageTests.swift */,
+				80AD82EE5080F6BE839658D9 /* HandoffAdmissionPolicyTests.swift */,
 				E7B2FD79A72BA2CD41D594C4 /* HandoffControlCipherTests.swift */,
 				5497D160451FC0508F4E6754 /* HandoffPairingCoordinatorTests.swift */,
 				C5AD546BF2D55726CBD81997 /* HandoffPairingRejectionPayloadTests.swift */,
@@ -566,6 +575,7 @@
 				E98F370212A0EB3C878F8F5D /* CaptureQualityAnalyzer.swift */,
 				8B7D7527397EBB52B2F66CED /* CompactSplatFile.swift */,
 				F0C83023832D099CC4438B95 /* HandoffControlCipher.swift */,
+				6F168794F133206EBD831833 /* HandoffInvitationAdmissionLimiter.swift */,
 				96BE68CCC1669D6127D359C5 /* HandoffPairingCoordinator.swift */,
 				60DF3F918AC67A5FC851F598 /* HandoffProtocol.swift */,
 				BFF85DB47D704AEB47A91A0B /* HandoffResourceCipher.swift */,
@@ -830,6 +840,7 @@
 				E1D81375B20049AEEEC86FF2 /* ComputeDetailCapabilityTests.swift in Sources */,
 				46E00297C81CB0885ACD6EBA /* GuidedScannerTests.swift in Sources */,
 				D1D233A818CB7CB0E912741B /* GuidedSurfaceCoverageTests.swift in Sources */,
+				3D3BE01F01FB2F7D61A409FC /* HandoffAdmissionPolicyTests.swift in Sources */,
 				CA53FDC8CE9D22852895B0B2 /* HandoffControlCipherTests.swift in Sources */,
 				137225363E194759F2566F11 /* HandoffPairingCoordinatorTests.swift in Sources */,
 				39128E32B1E3B721B567A87A /* HandoffPairingRejectionPayloadTests.swift in Sources */,
@@ -864,9 +875,11 @@
 				B774D582846E74BF958BFB78 /* CaptureQualityAnalyzer.swift in Sources */,
 				01800A10263E9F68CB1972E3 /* CompactSplatFile.swift in Sources */,
 				AF5998B414E507B278960DEA /* ComputeCoordinator.swift in Sources */,
+				40FAFD468A2AF10D61C42BC4 /* ComputeCoordinatorHandoff.swift in Sources */,
 				AE8F535CD9B1D83E75355533 /* ContentView.swift in Sources */,
 				79B340355294E09310B6B3F4 /* GaussianSplatGenerator.swift in Sources */,
 				CD97B962CE929B5AF9346AFC /* HandoffControlCipher.swift in Sources */,
+				0446512837EF4C2D46FAFC58 /* HandoffInvitationAdmissionLimiter.swift in Sources */,
 				EAD320028C8170FC7A2B9907 /* HandoffPairingCoordinator.swift in Sources */,
 				D352A51421B97389F39FD80A /* HandoffProtocol.swift in Sources */,
 				38B4C38EF53A2B8E7E4C44B1 /* HandoffResourceCipher.swift in Sources */,
@@ -945,6 +958,7 @@
 				67F7B7E08C7F1AC046EF0DC2 /* GuidedSurfaceCoverage.swift in Sources */,
 				C400CC02E203E00EFC6A589F /* HandoffControlCipher.swift in Sources */,
 				EE22AADD355AE96D66605E0F /* HandoffCoordinator.swift in Sources */,
+				C9FF5B0C9767A1B4B9DB43B7 /* HandoffInvitationAdmissionLimiter.swift in Sources */,
 				C23D2E164A9213EFFB51719F /* HandoffPairingCoordinator.swift in Sources */,
 				777FCF8F2A3B4628558342BC /* HandoffProtocol.swift in Sources */,
 				7F6EF420DE5035D764FC7862 /* HandoffResourceCipher.swift in Sources */,

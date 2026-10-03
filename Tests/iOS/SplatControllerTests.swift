@@ -31,7 +31,7 @@ final class SplatControllerTests: XCTestCase {
             .first(where: { $0.contains("unavailable") })
             .sink { _ in unavailable.fulfill() }
 
-        coordinator.loadIfNeeded()
+        coordinator.loadIfNeeded(in: view)
 
         await fulfillment(of: [unavailable], timeout: 3)
         withExtendedLifetime(subscription) {}

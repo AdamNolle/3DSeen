@@ -237,6 +237,46 @@ final class ModelExporterTests: XCTestCase {
         XCTAssertEqual(ScanHandoffArchive.captureQualityReport(in: unpacked), report)
     }
 
+    func testHandoffArchiveIgnoresOversizedCaptureQualitySidecar() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("OversizedHandoffQualityTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let sidecar = root.appendingPathComponent("3dseen-capture-quality.json")
+        try Data(repeating: 0x20, count: 16 * 1_024 + 1).write(to: sidecar)
+
+        XCTAssertNil(ScanHandoffArchive.captureQualityReport(in: root))
+    }
+
+    func testScanAssetManifestTransferLimitsRejectOversizedFields() {
+        var manifest = ScanAssetManifest(scanID: UUID(), captureMode: .object, detailTier: "Medium")
+        manifest.frameCount = Int.max
+        XCTAssertFalse(manifest.isWithinTransferLimits)
+
+        manifest.frameCount = 0
+        manifest.displayName = String(repeating: "x", count: 513)
+        XCTAssertFalse(manifest.isWithinTransferLimits)
+
+        manifest.displayName = nil
+        manifest.measurements = Array(repeating: ScanMeasurement(
+            start: ScanMeasurementPoint(x: 0, y: 0, z: 0),
+            end: ScanMeasurementPoint(x: 1, y: 0, z: 0)
+        ), count: ScanAssetManifest.maximumTransferMeasurementCount + 1)
+        XCTAssertFalse(manifest.isWithinTransferLimits)
+    }
+
+    func testScanAssetStoreRejectsOversizedManifestFiles() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("OversizedLocalManifest-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try ScanAssetStore(rootDirectory: root)
+        let scanID = UUID()
+        let manifestURL = try store.manifestURL(for: scanID)
+        try Data(repeating: 0x20, count: ScanAssetManifest.maximumTransferMetadataBytes + 1).write(to: manifestURL)
+
+        XCTAssertThrowsError(try store.loadManifest(for: scanID))
+    }
+
     func testFileExtensions() {
         XCTAssertEqual(ExportFormat.usdz.fileExtension, "usdz")
         XCTAssertEqual(ExportFormat.usd.fileExtension, "usdc")
@@ -660,5 +700,26 @@ extension ModelExporterTests {
         XCTAssertThrowsError(
             try ScanResultPackage().unpack(zip, to: work.appendingPathComponent("unpacked", isDirectory: true))
         )
+    }
+
+    func testResultPackageRejectsOversizedManifestBeforeDecoding() throws {
+        let fileManager = FileManager.default
+        let work = fileManager.temporaryDirectory
+            .appendingPathComponent("oversized-result-manifest-\(UUID().uuidString)", isDirectory: true)
+        let package = work.appendingPathComponent("package", isDirectory: true)
+        try fileManager.createDirectory(at: package, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: work) }
+
+        let exporter = ModelExporter()
+        try exporter.export(asset: exporter.sampleAsset(), to: .stl, outputURL: package.appendingPathComponent("model.stl"))
+        try Data(repeating: 0x20, count: ScanAssetManifest.maximumTransferMetadataBytes + 1)
+            .write(to: package.appendingPathComponent("manifest.json"))
+        let archive = work.appendingPathComponent("oversized.3dseen-result.zip")
+        try fileManager.zipItem(at: package, to: archive, shouldKeepParent: false)
+
+        XCTAssertThrowsError(try ScanResultPackage().unpack(
+            archive,
+            to: work.appendingPathComponent("unpacked", isDirectory: true)
+        ))
     }
 }

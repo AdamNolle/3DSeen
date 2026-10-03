@@ -114,6 +114,38 @@ public struct HandoffInvitation: Identifiable, Equatable, Sendable {
     }
 }
 
+/// Bounds invitation work before the advertiser callback can enqueue it on the main queue.
+struct HandoffInvitationAdmissionGate {
+    static let maximumPendingInvitations = 8
+    static let maximumAdmissionsPerSecond = 4
+    static let peerCooldown: TimeInterval = 30
+
+    private var pendingInstallationIDs: Set<HandoffInstallationID> = []
+    private var lastAdmissionByInstallationID: [HandoffInstallationID: TimeInterval] = [:]
+    private var recentAdmissions: [TimeInterval] = []
+
+    mutating func admit(_ installationID: HandoffInstallationID, at time: TimeInterval) -> Bool {
+        recentAdmissions.removeAll { time - $0 >= 1 || $0 > time }
+        lastAdmissionByInstallationID = lastAdmissionByInstallationID.filter {
+            time - $0.value < Self.peerCooldown && $0.value <= time
+        }
+
+        guard pendingInstallationIDs.count < Self.maximumPendingInvitations,
+              !pendingInstallationIDs.contains(installationID),
+              lastAdmissionByInstallationID[installationID] == nil,
+              recentAdmissions.count < Self.maximumAdmissionsPerSecond else { return false }
+
+        pendingInstallationIDs.insert(installationID)
+        lastAdmissionByInstallationID[installationID] = time
+        recentAdmissions.append(time)
+        return true
+    }
+
+    mutating func release(_ installationID: HandoffInstallationID) {
+        pendingInstallationIDs.remove(installationID)
+    }
+}
+
 public enum HandoffFailureCode: String, Codable, Sendable {
     case unsupportedProtocol
     case untrustedPeer
@@ -176,6 +208,8 @@ public struct HandoffResourceDescriptor: Codable, Equatable, Sendable {
 public enum HandoffResourceAdmissionPolicy {
     public static let maximumResourceBytes: Int64 = 4 * 1_024 * 1_024 * 1_024
     public static let maximumConcurrentResources = 2
+    static let maximumQueuedResourceCount = 2
+    static let maximumAggregateQueuedBytes: Int64 = 8 * 1_024 * 1_024 * 1_024
 
     public static func admits(
         isAuthenticated: Bool,
@@ -186,11 +220,29 @@ public enum HandoffResourceAdmissionPolicy {
         isAuthenticated
             && hasRegisteredReceiver
             && activeResourceCount < maximumConcurrentResources
+            && advertisedByteCount > 0
             && !exceedsSizeLimit(advertisedByteCount)
     }
 
     public static func exceedsSizeLimit(_ byteCount: Int64) -> Bool {
         byteCount > maximumResourceBytes
+    }
+
+    static func admitsQueuedResource(
+        queuedResourceCount: Int,
+        queuedByteCount: Int64,
+        activeByteCount: Int64,
+        incomingByteCount: Int64
+    ) -> Bool {
+        guard queuedResourceCount >= 0,
+              queuedResourceCount < maximumQueuedResourceCount,
+              queuedByteCount >= 0,
+              activeByteCount >= 0,
+              incomingByteCount > 0,
+              !exceedsSizeLimit(incomingByteCount) else { return false }
+        let (existingByteCount, existingOverflow) = queuedByteCount.addingReportingOverflow(activeByteCount)
+        let (aggregateByteCount, incomingOverflow) = existingByteCount.addingReportingOverflow(incomingByteCount)
+        return !existingOverflow && !incomingOverflow && aggregateByteCount <= maximumAggregateQueuedBytes
     }
 }
 

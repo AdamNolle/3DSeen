@@ -95,6 +95,7 @@ public final class NetworkHandoffManager: NSObject, ObservableObject {
     }
     public var onSendError: ((Error) -> Void)?
     private let progressLock = NSLock()
+    private let invitationAdmissionLimiter = HandoffInvitationAdmissionLimiter()
     private var activeProgress: [UUID: Progress] = [:]
     private var progressObservations: [UUID: [NSKeyValueObservation]] = [:]
     private var incomingTransferIDs: [IncomingTransferKey: [UUID]] = [:]
@@ -191,6 +192,7 @@ public final class NetworkHandoffManager: NSObject, ObservableObject {
     public func respond(to invitationID: UUID, accept: Bool) {
         guard let record = invitationRecords.removeValue(forKey: invitationID) else { return }
         pendingInvitations.removeAll { $0.id == invitationID }
+        invitationAdmissionLimiter.release(record.invitation.peer.installationID)
         record.handler(accept, accept ? session : nil)
     }
 
@@ -638,6 +640,7 @@ extension NetworkHandoffManager {
     private func expireInvitation(_ invitationID: UUID) {
         guard let record = invitationRecords.removeValue(forKey: invitationID) else { return }
         pendingInvitations.removeAll { $0.id == invitationID }
+        invitationAdmissionLimiter.release(record.invitation.peer.installationID)
         record.handler(false, nil)
     }
 
@@ -813,13 +816,19 @@ extension NetworkHandoffManager: MCNearbyServiceAdvertiserDelegate {
                            withContext context: Data?,
                            invitationHandler: @escaping (Bool, MCSession?) -> Void) {
         guard let context,
+              HandoffControlMessageAdmissionPolicy.accepts(byteCount: context.count),
               let peer = try? JSONDecoder().decode(HandoffPeer.self, from: context),
               (try? HandoffProtocolVersion.validate(peer.protocolVersion)) != nil else {
             invitationHandler(false, nil)
             return
         }
+        guard invitationAdmissionLimiter.admit(peer.installationID, at: ProcessInfo.processInfo.systemUptime) else {
+            invitationHandler(false, nil)
+            return
+        }
         DispatchQueue.main.async { [self] in
             guard self.register(peer, peerID: peerID) else {
+                self.invitationAdmissionLimiter.release(peer.installationID)
                 invitationHandler(false, nil)
                 return
             }

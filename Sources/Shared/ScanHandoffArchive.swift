@@ -5,6 +5,7 @@ import ZIPFoundation
 /// on iOS, but Multipeer handoff and macOS reconstruction both operate on a ZIP archive.
 public enum ScanHandoffArchive {
     private static let captureQualityReportFileName = "3dseen-capture-quality.json"
+    private static let maximumCaptureQualityReportBytes = 16 * 1_024
 
     public enum ArchiveError: LocalizedError {
         case missingCapture(URL)
@@ -41,8 +42,13 @@ public enum ScanHandoffArchive {
     /// and RoomPlan USDZ handoffs intentionally return `nil`.
     public static func captureQualityReport(in extractedArchive: URL) -> CaptureQualityReport? {
         let url = extractedArchive.appendingPathComponent(captureQualityReportFileName)
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? JSONDecoder().decode(CaptureQualityReport.self, from: data)
+        guard let data = try? BoundedArchiveExtractor.readMetadataFile(
+            at: url,
+            maximumByteCount: maximumCaptureQualityReportBytes
+        ),
+        let report = try? JSONDecoder().decode(CaptureQualityReport.self, from: data),
+        report.isWithinTransferLimits else { return nil }
+        return report
     }
 
     private static func append(_ report: CaptureQualityReport, to packageURL: URL) throws {

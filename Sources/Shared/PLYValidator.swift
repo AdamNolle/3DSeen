@@ -8,6 +8,8 @@ public enum PLYPayloadKind: Sendable {
 /// Structural validation for PLY files crossing the device trust boundary. Geometry previews may
 /// be ASCII or binary little-endian; trained splats must use finite float32 Gaussian properties.
 public enum PLYValidator {
+    public static let maximumVertexCount = 500_000
+    public static let maximumFileByteCount: Int64 = 128 * 1_024 * 1_024
     private static let maximumASCIIVertexRowBytes = 1_048_576
 
     private struct Property {
@@ -32,10 +34,23 @@ public enum PLYValidator {
         "double": 8, "float64": 8,
     ]
 
-    public static func isValid(_ url: URL, kind: PLYPayloadKind) -> Bool {
-        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe),
+    /// Checks the allocation bounds used by the splat viewer before handing a PLY file to
+    /// MetalSplatter, whose reader trusts the vertex count in the header.
+    public static func isWithinImportLimits(_ url: URL) -> Bool {
+        guard let data = boundedData(at: url),
               let header = parseHeader(data),
-              header.vertexCount > 0 else { return false }
+              header.vertexCount <= maximumVertexCount,
+              header.vertexStride > 0,
+              header.payloadOffset <= data.count else { return false }
+        if header.format == "ascii" { return true }
+        return header.vertexCount <= (data.count - header.payloadOffset) / header.vertexStride
+    }
+
+    public static func isValid(_ url: URL, kind: PLYPayloadKind) -> Bool {
+        guard let data = boundedData(at: url),
+              let header = parseHeader(data),
+              header.vertexCount > 0,
+              header.vertexCount <= maximumVertexCount else { return false }
         let properties = Dictionary(uniqueKeysWithValues: header.properties.map { ($0.name, $0) })
         guard Set(["x", "y", "z"]).isSubset(of: Set(properties.keys)) else { return false }
 
@@ -45,6 +60,16 @@ public enum PLYValidator {
         case .trainedSplat:
             return validateTrainedSplat(data, header: header, properties: properties)
         }
+    }
+
+    private static func boundedData(at url: URL) -> Data? {
+        guard let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
+              let fileSize = values.fileSize,
+              fileSize > 0,
+              Int64(fileSize) <= maximumFileByteCount,
+              let data = try? Data(contentsOf: url, options: .mappedIfSafe),
+              Int64(data.count) <= maximumFileByteCount else { return nil }
+        return data
     }
 
     private static func parseHeader(_ data: Data) -> Header? {

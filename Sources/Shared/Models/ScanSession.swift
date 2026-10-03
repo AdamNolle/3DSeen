@@ -258,6 +258,8 @@ public enum SplatPreviewKind: String, Codable, CaseIterable, Sendable {
 
 public struct ScanAssetManifest: Codable, Equatable, Sendable {
     public static let currentSchemaVersion = 2
+    public static let maximumTransferMetadataBytes = 1_048_576
+    public static let maximumTransferMeasurementCount = 4_096
 
     public var schemaVersion: Int?
     public var scanID: UUID
@@ -298,6 +300,41 @@ public struct ScanAssetManifest: Codable, Equatable, Sendable {
 
     public var captureMode: CaptureMode {
         CaptureMode(rawValue: captureModeRaw) ?? .object
+    }
+
+    public var isWithinTransferLimits: Bool {
+        func isShort(_ value: String?, maximumBytes: Int) -> Bool {
+            value.map { $0.utf8.count <= maximumBytes } ?? true
+        }
+
+        let urls = [rawArchiveURL, sourceModelURL, usdzFileURL, previewPLYURL, thumbnailURL].compactMap { $0 }
+        guard captureModeRaw.utf8.count <= 64,
+              detailTier.utf8.count <= 128,
+              isShort(previewPLYKindRaw, maximumBytes: 64),
+              urls.allSatisfy({ $0.absoluteString.utf8.count <= 4_096 }),
+              isShort(displayName, maximumBytes: 512),
+              isShort(toneRaw, maximumBytes: 128),
+              isShort(triangles, maximumBytes: 256),
+              isShort(captureStatusRaw, maximumBytes: 64),
+              isShort(computeStatusRaw, maximumBytes: 64),
+              isShort(appliedMaterialRaw, maximumBytes: 128),
+              isShort(lastExportedFileName, maximumBytes: 255),
+              frameCount >= 0,
+              frameCount <= CaptureQualityReport.maximumTransferFrameCount,
+              (0...100).contains(coveragePercent),
+              weakSpotCount >= 0,
+              sizeMB.map({ $0 >= 0 }) != false,
+              creationDate?.timeIntervalSince1970.isFinite != false,
+              lastExportedAt?.timeIntervalSince1970.isFinite != false,
+              (measurements?.count ?? 0) <= Self.maximumTransferMeasurementCount,
+              measurements?.allSatisfy({ measurement in
+                  measurement.label.utf8.count <= 256
+                      && [measurement.start.x, measurement.start.y, measurement.start.z,
+                          measurement.end.x, measurement.end.y, measurement.end.z].allSatisfy(\.isFinite)
+                      && measurement.meters.isFinite
+              }) != false,
+              captureQualityReport?.isWithinTransferLimits != false else { return false }
+        return true
     }
 
     public init(scanID: UUID,
@@ -403,6 +440,7 @@ public struct ScanAssetStore: Sendable {
     public enum StoreError: LocalizedError {
         case applicationSupportUnavailable
         case missingCaptureMode
+        case invalidManifest
         case manifestIdentityMismatch(expected: UUID, actual: UUID)
 
         public var errorDescription: String? {
@@ -411,6 +449,8 @@ public struct ScanAssetStore: Sendable {
                 "Unable to locate the application support directory."
             case .missingCaptureMode:
                 "The scan does not have a valid capture mode."
+            case .invalidManifest:
+                "The scan manifest is invalid or exceeds its metadata limits."
             case .manifestIdentityMismatch(let expected, let actual):
                 "Manifest \(actual.uuidString) cannot be registered on scan \(expected.uuidString)."
             }
@@ -529,8 +569,12 @@ public struct ScanAssetStore: Sendable {
     }
 
     public func loadManifest(for scanID: UUID) throws -> ScanAssetManifest {
-        let data = try Data(contentsOf: manifestURL(for: scanID))
+        let data = try BoundedArchiveExtractor.readMetadataFile(
+            at: manifestURL(for: scanID),
+            maximumByteCount: ScanAssetManifest.maximumTransferMetadataBytes
+        )
         let manifest = try JSONDecoder.scanManifest.decode(ScanAssetManifest.self, from: data)
+        guard manifest.isWithinTransferLimits else { throw StoreError.invalidManifest }
         guard manifest.scanID == scanID else {
             throw StoreError.manifestIdentityMismatch(expected: scanID, actual: manifest.scanID)
         }

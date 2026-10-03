@@ -26,6 +26,13 @@ final class CompactSplatFileTests: XCTestCase {
         XCTAssertThrowsError(try file.point(at: 1))
     }
 
+    func testRejectsPointCloudOverDevicePreviewLimitBeforeParsingRecords() {
+        let data = Data(repeating: 0, count: CompactSplatFile.maximumFileByteCount + 32)
+        XCTAssertThrowsError(try CompactSplatFile(data: data)) { error in
+            XCTAssertEqual(error as? CompactSplatFile.ReadError, .tooManyPoints)
+        }
+    }
+
     func testValidatesEveryRecordAndRejectsInvalidScalesAndRotations() {
         for values in [[Float.nan, -2.5, 3.75, 0.25, 0.5, 1],
                        [1.25, -2.5, 3.75, 0, 0.5, 1],

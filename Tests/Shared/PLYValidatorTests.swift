@@ -26,6 +26,14 @@ final class PLYValidatorTests: XCTestCase {
         )))
     }
 
+    func testViewerImportRejectsPLYHeaderOverPointBudget() throws {
+        XCTAssertFalse(try validateImportLimits(Data(header(
+            properties: coordinates,
+            count: PLYValidator.maximumVertexCount + 1,
+            format: "binary_little_endian"
+        ).utf8)))
+    }
+
     func testNonFiniteVertexOutsideFormerSampleIsRejected() throws {
         var rows = Array(repeating: "0 0 0", count: 1_025)
         rows[100] = "nan 0 0"
@@ -78,5 +86,12 @@ final class PLYValidatorTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url) }
         try data.write(to: url)
         return PLYValidator.isValid(url, kind: kind)
+    }
+
+    private func validateImportLimits(_ data: Data) throws -> Bool {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("ply-import-limit-\(UUID()).ply")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try data.write(to: url)
+        return PLYValidator.isWithinImportLimits(url)
     }
 }

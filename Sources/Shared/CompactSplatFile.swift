@@ -4,6 +4,9 @@ import simd
 /// The headerless, 32-byte antimatter15 .splat format: little-endian position/scale,
 /// RGBA bytes, and a quantized quaternion in w,x,y,z order.
 struct CompactSplatFile {
+    static let maximumPointCount = 500_000
+    static let maximumFileByteCount = maximumPointCount * 32
+
     struct Point {
         let position: SIMD3<Float>
         let scale: SIMD3<Float>
@@ -19,14 +22,17 @@ struct CompactSplatFile {
         }
     }
 
-    enum ReadError: LocalizedError {
-        case incomplete, invalidPoint, invalidIndex
+    enum ReadError: LocalizedError, Equatable {
+        case incomplete, invalidPoint, invalidIndex, tooManyPoints, fileSizeUnavailable
 
         var errorDescription: String? {
             switch self {
             case .incomplete: return "The compact splat file is empty or has an incomplete 32-byte record."
             case .invalidPoint: return "The splat file contains invalid coordinates, scales, or rotation."
             case .invalidIndex: return "The requested splat is outside the file."
+            case .tooManyPoints:
+                return "This device can preview .splat files with up to \(CompactSplatFile.maximumPointCount.formatted()) points."
+            case .fileSizeUnavailable: return "The splat file size could not be checked safely."
             }
         }
     }
@@ -35,11 +41,18 @@ struct CompactSplatFile {
     let count: Int
 
     init(contentsOf url: URL) throws {
+        guard let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
+              let fileSize = values.fileSize,
+              fileSize >= 0 else {
+            throw ReadError.fileSizeUnavailable
+        }
+        guard fileSize <= Self.maximumFileByteCount else { throw ReadError.tooManyPoints }
         try self.init(data: Data(contentsOf: url, options: .mappedIfSafe))
     }
 
     init(data: Data) throws {
         guard !data.isEmpty, data.count.isMultiple(of: 32) else { throw ReadError.incomplete }
+        guard data.count <= Self.maximumFileByteCount else { throw ReadError.tooManyPoints }
         bytes = data
         count = data.count / 32
         // Reject the complete file before reserving GPU buffers or displaying a partial model.

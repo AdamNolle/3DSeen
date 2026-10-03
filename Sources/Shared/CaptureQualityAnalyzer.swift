@@ -17,6 +17,8 @@ public struct CaptureFrameMetrics: Equatable, Sendable {
 /// Persistable quality facts from a bounded sample of a captured image archive. This report does
 /// not claim subject coverage or reconstruction quality; it only records decoded frame evidence.
 public struct CaptureQualityReport: Codable, Equatable, Sendable {
+    public static let maximumTransferFrameCount = 10_000_000
+
     public let totalFrameCount: Int
     public let analyzedFrameCount: Int
     public let usableFrameCount: Int
@@ -39,6 +41,14 @@ public struct CaptureQualityReport: Codable, Equatable, Sendable {
     }
 
     public var warningCount: Int { darkFrameCount + brightFrameCount + blurryFrameCount }
+
+    public var isWithinTransferLimits: Bool {
+        let counts = [totalFrameCount, analyzedFrameCount, usableFrameCount, darkFrameCount, brightFrameCount, blurryFrameCount]
+        return counts.allSatisfy { (0...Self.maximumTransferFrameCount).contains($0) }
+            && analyzedFrameCount <= totalFrameCount
+            && usableFrameCount <= analyzedFrameCount
+            && darkFrameCount + brightFrameCount + blurryFrameCount <= analyzedFrameCount
+    }
 
     public var usablePercent: Int {
         guard analyzedFrameCount > 0 else { return 0 }
