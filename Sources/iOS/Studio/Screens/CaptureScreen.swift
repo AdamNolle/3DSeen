@@ -154,8 +154,8 @@ struct CaptureScreen: View {
             store = resolvedStore
             let persistedURL: URL
             var surfaceModelURL: URL?
-            if capturedMode == .space,
-               FileManager.default.fileExists(atPath: scanDataURL.appendingPathComponent(LiDARCaptureBundle.reportName).path) {
+            if capturedMode == .space || capturedMode == .object,
+                FileManager.default.fileExists(atPath: scanDataURL.appendingPathComponent(LiDARCaptureBundle.reportName).path) {
                 let scanID = session.id
                 let imported = try await Task.detached(priority: .userInitiated) {
                     try LiDARCaptureBundle.importCapture(from: scanDataURL, scanID: scanID, store: resolvedStore)
@@ -164,7 +164,7 @@ struct CaptureScreen: View {
                 persistedURL = imported.archiveURL
                 surfaceModelURL = imported.modelURL
                 session.rawArchiveURL = imported.archiveURL
-                session.frameCount = imported.report.textureFrameCount
+                session.frameCount = CaptureArchiveInspector.imageFrameCount(in: persistedURL)
             } else {
                 persistedURL = try resolvedStore.importCapture(from: scanDataURL, for: session.id)
             }
@@ -179,7 +179,7 @@ struct CaptureScreen: View {
                 try Task.checkCancellation()
             }
 
-            if capturedMode == .space, let modelURL = surfaceModelURL
+            if [.space, .object].contains(capturedMode), let modelURL = surfaceModelURL
                 ?? (persistedURL.pathExtension.lowercased() == "usdz" ? persistedURL : nil) {
                 session.markComputed(modelURL: modelURL, usdzURL: modelURL)
                 session.triangles = ModelGeometryInspector.inspect(modelURL: modelURL)?.formattedTriangleCount

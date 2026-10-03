@@ -13,16 +13,29 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
     }
 
     struct FrameCandidate {
+        let frame: ARFrame
         let pixelBuffer: CVPixelBuffer
         let pose: CapturePose
         let orientation: UIInterfaceOrientation
+        let sessionGeneration: Int
+        let surfaceMask: LiDARSurfaceMask?
         let trackingIsNormal: Bool
         let quality: FrameQualityMetrics
         let motionIsAcceptable: Bool
     }
 
+    struct FramePresentation {
+        let viewportSize: CGSize
+        let orientation: UIInterfaceOrientation
+        let acceptsFrames: Bool
+        let sessionGeneration: Int
+    }
+
     let session = ARSession()
     @Published private(set) var snapshot = GuidedScanSnapshot()
+    @Published private(set) var liveMeshPreview: LiveMeshPreview?
+    @Published private(set) var meshTriangleCount = 0
+    @Published private(set) var texturedMeshTriangleCount = 0
 
     let detector: ForegroundSubjectDetecting
     let gate: GuidedCaptureGate
@@ -31,6 +44,7 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
         label: "com.adamnolle.3DSeen.guided-object.frames",
         qos: .userInitiated
     )
+    let previewQueue = DispatchQueue(label: "com.adamnolle.3DSeen.guided-object.preview", qos: .utility)
     let analysisQueue = DispatchQueue(label: "com.adamnolle.3DSeen.guided-object.vision", qos: .userInitiated)
     let writerQueue = DispatchQueue(label: "com.adamnolle.3DSeen.guided-object.writer", qos: .userInitiated)
     let writerGroup = DispatchGroup()
@@ -58,6 +72,15 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
     var autoCaptureEnabled = true
     var finishing = false
     var sealed = false
+    // AR mesh anchors, texture frames, and preview scheduling are queue-confined.
+    var surfaceMeshes: [UUID: LiDARSurfaceMesh] = [:]
+    var textureFrames: [LiDARTextureFrame] = []
+    var previewBuildInFlight = false
+    var previewDirty = false
+    var lastPreviewBuildTime: TimeInterval = 0
+    var previewRevision: UInt64 = 0
+    var meshCaptureDisabled = false
+    private var publishedLiveMeshPreviewRevision: UInt64 = 0
 
     init(
         detector: ForegroundSubjectDetecting = VisionForegroundSubjectDetector(),
@@ -82,9 +105,20 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
     }
 
     func start() {
+        let previousCapture = lock.withLock { () -> (URL, Bool) in
+            acceptsFrames = false
+            return (captureFolder, sealed)
+        }
+        let newCaptureFolder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("guided-object-\(UUID().uuidString)", isDirectory: true)
         do {
-            try FileManager.default.createDirectory(at: captureFolder, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: newCaptureFolder, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                at: newCaptureFolder.appendingPathComponent("surface-frames", isDirectory: true),
+                withIntermediateDirectories: true
+            )
         } catch {
+            try? FileManager.default.removeItem(at: newCaptureFolder)
             publishFailure("Capture storage could not be prepared: \(error.localizedDescription)")
             return
         }
@@ -100,6 +134,7 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
             configuration.frameSemantics.insert(.sceneDepth)
         }
         lock.withLock {
+            captureFolder = newCaptureFolder
             sessionGeneration += 1
             acceptsFrames = true
             finishing = false
@@ -110,19 +145,41 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
             lastAcceptedPose = nil
             lastDetectionTime = -.infinity
             detectionInFlight = false
+            latestFrame = nil
+            nextFrameIndex = 0
             surfaceCoverage.reset()
             snapshotPublicationGate.reset()
             lastPublishedSurfaceCount = 0
             lastSurfacePublicationTime = -.infinity
         }
+        if !previousCapture.1 {
+            writerGroup.notify(queue: writerQueue) {
+                try? FileManager.default.removeItem(at: previousCapture.0)
+            }
+        }
+        let resetPreviewRevision = frameProcessingQueue.sync { () -> UInt64 in
+            surfaceMeshes.removeAll(keepingCapacity: false)
+            textureFrames.removeAll(keepingCapacity: false)
+            previewBuildInFlight = false
+            previewDirty = false
+            lastPreviewBuildTime = 0
+            previewRevision &+= 1
+            meshCaptureDisabled = false
+            return previewRevision
+        }
         publish {
             $0.phase = .seekingSubject
             $0.instruction = "Point at one object and keep it inside the frame."
+            $0.frameCount = 0
             $0.points = []
             $0.surfacePoints = []
             $0.surfacePointCount = 0
             $0.coverageHapticMilestone = 0
             $0.isFinishing = false
+        }
+        DispatchQueue.main.async { [weak self] in
+            self?.publishLiveMeshPreview(nil, revision: resetPreviewRevision)
+            self?.meshTriangleCount = 0
         }
         session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
     }
@@ -130,9 +187,13 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
     func stop(discardUnsealedCapture: Bool) {
         lock.withLock { acceptsFrames = false }
         session.pause()
-        if discardUnsealedCapture && !lock.withLock({ sealed }) {
-            writerGroup.notify(queue: writerQueue) { [captureFolder] in
-                try? FileManager.default.removeItem(at: captureFolder)
+        let folderToDiscard = lock.withLock { () -> URL? in
+            guard discardUnsealedCapture, !sealed else { return nil }
+            return captureFolder
+        }
+        if let folderToDiscard {
+            writerGroup.notify(queue: writerQueue) {
+                try? FileManager.default.removeItem(at: folderToDiscard)
             }
         }
     }
@@ -152,32 +213,45 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
     }
 
     func finish(completion: @escaping (Result<URL, GuidedObjectCaptureError>) -> Void) {
-        let shouldFinish = lock.withLock { () -> Bool in
-            guard !finishing else { return false }
+        let folder = lock.withLock { () -> URL? in
+            guard !finishing else { return nil }
             finishing = true
             acceptsFrames = false
-            return true
+            return captureFolder
         }
-        guard shouldFinish else { return }
+        guard let folder else { return }
         session.pause()
         publish {
             $0.phase = .finalizing
-            $0.instruction = "Saving the last photos…"
+            $0.instruction = "Finishing the live object mesh…"
             $0.isFinishing = true
         }
-        writerGroup.notify(queue: .main) { [weak self] in
+        frameProcessingQueue.async { [weak self] in
             guard let self else { return }
-            let hasFrames = CaptureArchiveInspector.containsImageFrames(in: self.captureFolder)
-            self.lock.withLock {
-                self.finishing = false
-                self.sealed = hasFrames
-            }
-            self.snapshot.isFinishing = false
-            if hasFrames {
-                completion(.success(self.captureFolder))
-            } else {
-                self.snapshot.phase = .failed
-                completion(.failure(.noFramesCaptured))
+            let meshSnapshot = Array(self.surfaceMeshes.values)
+            self.writerGroup.notify(queue: self.writerQueue) { [weak self] in
+                guard let self else { return }
+                let textureSnapshot = self.frameProcessingQueue.sync { self.textureFrames }
+            let exported = self.finalizeObjectBundle(meshes: meshSnapshot, frames: textureSnapshot, in: folder)
+                DispatchQueue.main.async {
+                let hasFrames = CaptureArchiveInspector.containsImageFrames(in: folder)
+                    self.lock.withLock {
+                        self.finishing = false
+                        self.sealed = hasFrames
+                    }
+                    self.snapshot.isFinishing = false
+                    guard hasFrames else {
+                        self.snapshot.phase = .failed
+                        completion(.failure(.noFramesCaptured))
+                        return
+                    }
+                    if exported {
+                        self.snapshot.instruction = "Object mesh saved with \(textureSnapshot.count) depth-aligned texture views."
+                    } else if !meshSnapshot.isEmpty {
+                        self.snapshot.instruction = "Kept the photo scan; add more object views for a textured mesh next time."
+                    }
+                completion(.success(folder))
+                }
             }
         }
     }
@@ -193,6 +267,21 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
         publish {
             $0.phase = .failed
             $0.instruction = message
+        }
+    }
+
+    func publishLiveMeshPreview(_ preview: LiveMeshPreview?, revision: UInt64) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, revision >= self.publishedLiveMeshPreviewRevision else { return }
+            self.publishedLiveMeshPreviewRevision = revision
+            self.liveMeshPreview = preview
+            self.texturedMeshTriangleCount = preview?.texturedTriangleCount ?? 0
+        }
+    }
+
+    func publishMeshTriangleCount(_ count: Int) {
+        DispatchQueue.main.async { [weak self] in
+            self?.meshTriangleCount = count
         }
     }
 }

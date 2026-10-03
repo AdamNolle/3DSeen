@@ -101,6 +101,106 @@ final class LiDARSurfaceTests: XCTestCase {
         XCTAssertTrue(positions.contains { abs($0 + 4) < 0.001 })
     }
 
+    func testForegroundMaskMapsRawCameraPointsIntoCapturedOrientation() {
+        let rawPoint = SIMD2<Float>(0.25, 0.25)
+        let cases: [(LiDARCaptureImageOrientation, Int)] = [
+            (.portrait, 1),
+            (.portraitUpsideDown, 2),
+            (.landscapeLeft, 0),
+            (.landscapeRight, 3)
+        ]
+        for (orientation, selectedIndex) in cases {
+            var labels = [UInt8](repeating: 0, count: 4)
+            labels[selectedIndex] = 1
+            let mask = LiDARSurfaceMask(
+                labels: labels,
+                width: 2,
+                height: 2,
+                selectedLabel: 1,
+                orientation: orientation
+            )
+            XCTAssertTrue(mask.contains(rawNormalizedPoint: rawPoint))
+        }
+    }
+
+    func testForegroundMaskRejectsMeshFacesOutsideSelectedObject() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let image = try texture(in: directory)
+        let labels = (0..<4).flatMap { _ in [UInt8](repeating: 1, count: 2) + [0, 0] }
+        let mask = LiDARSurfaceMask(
+            labels: labels,
+            width: 4,
+            height: 4,
+            selectedLabel: 1,
+            orientation: .landscapeLeft
+        )
+        let frame = LiDARTextureFrame(imageURL: image, camera: camera(depth: 2), surfaceMask: mask)
+        let mesh = LiDARSurfaceMesh(
+            vertices: [
+                SIMD3(-1.2, -0.5, -2), SIMD3(-0.6, -0.5, -2), SIMD3(-0.9, 0.5, -2),
+                SIMD3(0.6, -0.5, -2), SIMD3(1.2, -0.5, -2), SIMD3(0.9, 0.5, -2)
+            ],
+            indices: [0, 1, 2, 3, 4, 5]
+        )
+
+        let output = directory.appendingPathComponent("object.usdz")
+        let result = try LiDARTextureExporter.export(
+            meshes: [mesh],
+            frames: [frame],
+            to: output,
+            requireForegroundMask: true
+        )
+
+        XCTAssertEqual(result.triangleCount, 1)
+        XCTAssertEqual(result.texturedTriangleCount, 1)
+        XCTAssertEqual(ModelGeometryInspector.inspect(modelURL: output)?.triangleCount, 1)
+    }
+
+    func testObjectCaptureBundleImportsItsDeclaredModelName() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = directory.appendingPathComponent("object-capture", isDirectory: true)
+        let archive = source.appendingPathComponent(LiDARCaptureBundle.framesName, isDirectory: true)
+        try FileManager.default.createDirectory(at: archive, withIntermediateDirectories: true)
+        let image = try texture(in: directory)
+        try FileManager.default.copyItem(at: image, to: archive.appendingPathComponent("frame_0000.png"))
+        let labels = [UInt8](repeating: 1, count: 16)
+        let mask = LiDARSurfaceMask(
+            labels: labels,
+            width: 4,
+            height: 4,
+            selectedLabel: 1,
+            orientation: .landscapeLeft
+        )
+        let frame = LiDARTextureFrame(imageURL: image, camera: camera(depth: 2), surfaceMask: mask)
+        _ = try LiDARTextureExporter.export(
+            meshes: [meshIncludingUnobservedFace()],
+            frames: [frame],
+            to: source.appendingPathComponent(LiDARCaptureBundle.objectModelName),
+            requireForegroundMask: true
+        )
+        let report = LiDARCaptureReport(
+            schemaVersion: 2,
+            triangleCount: 1,
+            texturedTriangleCount: 1,
+            textureFrameCount: 1,
+            textureSnapshotCount: 0,
+            surfaceCounts: ["Unclassified": 1],
+            modelFileName: LiDARCaptureBundle.objectModelName
+        )
+        try JSONEncoder().encode(report).write(to: source.appendingPathComponent(LiDARCaptureBundle.reportName))
+
+        let imported = try LiDARCaptureBundle.importCapture(
+            from: source,
+            scanID: UUID(),
+            store: ScanAssetStore(rootDirectory: directory.appendingPathComponent("store"))
+        )
+
+        XCTAssertEqual(imported.modelURL.lastPathComponent, LiDARCaptureBundle.objectModelName)
+        XCTAssertEqual(CaptureArchiveInspector.imageFrameCount(in: imported.archiveURL), 1)
+    }
+
     func testInvalidMeshAndUnavailableCameraImagesFailWithoutPublishingModel() throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

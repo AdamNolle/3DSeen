@@ -116,8 +116,7 @@ final class GuidedScannerTests: XCTestCase {
         let projection = SubjectImageProjection(
             subject: subject,
             imageToViewTransform: transform,
-            viewportSize: CGSize(width: 400, height: 800),
-            orientation: .portrait
+            viewportSize: CGSize(width: 400, height: 800)
         )
         let rawSubjectPoint = CGPoint(x: 0.25, y: 0.25)
         let viewPoint = rawSubjectPoint.applying(transform)
@@ -125,6 +124,23 @@ final class GuidedScannerTests: XCTestCase {
 
         XCTAssertTrue(projection.contains(screenPoint: screenPoint))
         XCTAssertFalse(projection.contains(screenPoint: CGPoint(x: 40, y: 160)))
+    }
+
+    func testSubjectMaskKeepsDetectionOrientationAfterDeviceRotation() {
+        let subject = DetectedSubject(
+            normalizedBounds: CGRect(x: 0.5, y: 0, width: 0.5, height: 0.5),
+            timestamp: 1,
+            instanceLabel: 1,
+            mask: SubjectInstanceMask(labels: [0, 1, 0, 0], width: 2, height: 2, selectedLabel: 1),
+            imageOrientation: .portrait
+        )
+        let projection = SubjectImageProjection(
+            subject: subject,
+            imageToViewTransform: .identity,
+            viewportSize: CGSize(width: 400, height: 800)
+        )
+
+        XCTAssertTrue(projection.contains(rawImagePoint: CGPoint(x: 0.25, y: 0.25)))
     }
 
     func testScannerOrientationPointMappingRoundTrips() {

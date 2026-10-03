@@ -43,10 +43,18 @@ extension GuidedObjectCaptureController {
     }
 
     func session(_ session: ARSession, didUpdate frame: ARFrame) {
-        let presentation = lock.withLock { () -> (CGSize, UIInterfaceOrientation, Bool) in
-            (viewportSize, interfaceOrientation, acceptsFrames)
+        let presentation = lock.withLock {
+            FramePresentation(
+                viewportSize: viewportSize,
+                orientation: interfaceOrientation,
+                acceptsFrames: acceptsFrames,
+                sessionGeneration: sessionGeneration
+            )
         }
-        guard presentation.2, presentation.0.width > 0, presentation.0.height > 0 else { return }
+        guard presentation.acceptsFrames,
+              presentation.viewportSize.width > 0,
+              presentation.viewportSize.height > 0
+        else { return }
         let pose = CapturePose(transform: frame.camera.transform, timestamp: frame.timestamp)
         let previousPose = lock.withLock { () -> CapturePose? in
             defer { previousObservedPose = pose }
@@ -58,35 +66,47 @@ extension GuidedObjectCaptureController {
         } else {
             trackingIsNormal = false
         }
+        scheduleDetection(for: frame, orientation: presentation.orientation)
+        let subject = lock.withLock { latestSubject }
+        let surfaceMask = subject.flatMap { subject -> LiDARSurfaceMask? in
+            guard subject.isFresh(at: frame.timestamp, maximumAge: 0.7) else { return nil }
+            return LiDARSurfaceMask(
+                labels: subject.mask.labels,
+                width: subject.mask.width,
+                height: subject.mask.height,
+                selectedLabel: subject.mask.selectedLabel,
+                orientation: subject.imageOrientation
+            )
+        }
         let candidate = FrameCandidate(
+            frame: frame,
             pixelBuffer: frame.capturedImage,
             pose: pose,
-            orientation: presentation.1,
+            orientation: presentation.orientation,
+            sessionGeneration: presentation.sessionGeneration,
+            surfaceMask: surfaceMask,
             trackingIsNormal: trackingIsNormal,
             quality: CameraFrameQualityAnalyzer.analyze(frame.capturedImage),
             motionIsAcceptable: CameraMotionGate.isAcceptable(current: pose, previous: previousPose)
         )
         lock.withLock { latestFrame = candidate }
-        scheduleDetection(for: frame, orientation: presentation.1)
 
-        let subject = lock.withLock { latestSubject }
         let subjectProjection = subject.flatMap { subject -> SubjectImageProjection? in
             guard subject.isFresh(at: frame.timestamp, maximumAge: 0.7) else { return nil }
             return SubjectImageProjection(
                 subject: subject,
                 imageToViewTransform: frame.displayTransform(
-                    for: presentation.1,
-                    viewportSize: presentation.0
+                    for: presentation.orientation,
+                    viewportSize: presentation.viewportSize
                 ),
-                viewportSize: presentation.0,
-                orientation: presentation.1
+                viewportSize: presentation.viewportSize
             )
         }
         let pointResult = trackedPoints(
             in: frame,
             subjectProjection: subjectProjection,
-            viewport: presentation.0,
-            orientation: presentation.1
+            viewport: presentation.viewportSize,
+            orientation: presentation.orientation
         )
         let coverageState = lock.withLock { () -> CoverageFramePublication in
             _ = surfaceCoverage.insert(pointResult.surfacePoints)
@@ -137,6 +157,93 @@ extension GuidedObjectCaptureController {
             }
         }
         evaluateAndCapture(candidate, manual: false)
+    }
+
+    func session(_ session: ARSession, didAdd anchors: [ARAnchor]) {
+        updateObjectMesh(anchors)
+    }
+
+    func session(_ session: ARSession, didUpdate anchors: [ARAnchor]) {
+        updateObjectMesh(anchors)
+    }
+
+    func session(_ session: ARSession, didRemove anchors: [ARAnchor]) {
+        guard lock.withLock({ acceptsFrames }), !meshCaptureDisabled else { return }
+        for anchor in anchors {
+            surfaceMeshes[anchor.identifier] = nil
+        }
+        publishMeshTriangleCount()
+        scheduleLiveMeshPreview()
+    }
+
+    private func updateObjectMesh(_ anchors: [ARAnchor]) {
+        guard lock.withLock({ acceptsFrames }), !meshCaptureDisabled else { return }
+        do {
+            for anchor in anchors.compactMap({ $0 as? ARMeshAnchor }) {
+                let priorCount = surfaceMeshes[anchor.identifier]?.triangleCount ?? 0
+                let total = surfaceMeshes.values.reduce(0) { $0 + $1.triangleCount }
+                guard total - priorCount + anchor.geometry.faces.count <= 500_000 else {
+                    throw LiDARSurfaceError.tooLarge
+                }
+                surfaceMeshes[anchor.identifier] = try LiDARCaptureFrames.mesh(anchor)
+            }
+        } catch {
+            meshCaptureDisabled = true
+            surfaceMeshes.removeAll(keepingCapacity: false)
+            previewRevision &+= 1
+            publishLiveMeshPreview(nil, revision: previewRevision)
+            logger.error("Object mesh capture stopped: \(error.localizedDescription)")
+            publish {
+                $0.instruction = "The live mesh reached its safe size limit. Photos are still being saved."
+            }
+        }
+        publishMeshTriangleCount()
+        scheduleLiveMeshPreview()
+    }
+
+    private func publishMeshTriangleCount() {
+        let count = surfaceMeshes.values.reduce(0) { $0 + $1.triangleCount }
+        publishMeshTriangleCount(count)
+    }
+
+    func scheduleLiveMeshPreview() {
+        guard !meshCaptureDisabled, lock.withLock({ acceptsFrames }) else { return }
+        guard !surfaceMeshes.isEmpty else {
+            previewRevision &+= 1
+            previewDirty = false
+            publishLiveMeshPreview(nil, revision: previewRevision)
+            return
+        }
+        previewDirty = true
+        guard !previewBuildInFlight else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now - lastPreviewBuildTime >= 1.25 else { return }
+        previewBuildInFlight = true
+        previewDirty = false
+        lastPreviewBuildTime = now
+        previewRevision &+= 1
+        let revision = previewRevision
+        let meshSnapshot = Array(surfaceMeshes.values)
+        let frameSnapshot = textureFrames
+        previewQueue.async { [weak self] in
+            guard let self else { return }
+            let preview = LiveMeshPreviewBuilder.build(
+                meshes: meshSnapshot,
+                frames: frameSnapshot,
+                revision: revision,
+                requireForegroundMask: true,
+                isCancelled: { !self.lock.withLock { self.acceptsFrames } }
+            )
+            DispatchQueue.main.async {
+                if let preview, self.lock.withLock({ self.acceptsFrames }) {
+                    self.publishLiveMeshPreview(preview, revision: preview.revision)
+                }
+                self.frameProcessingQueue.async {
+                    self.previewBuildInFlight = false
+                    if self.previewDirty { self.scheduleLiveMeshPreview() }
+                }
+            }
+        }
     }
 
     private func scheduleDetection(for frame: ARFrame, orientation: UIInterfaceOrientation) {

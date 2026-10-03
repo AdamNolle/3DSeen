@@ -1,4 +1,5 @@
 import ARKit
+import Combine
 import RealityKit
 import SwiftUI
 import UIKit
@@ -20,7 +21,8 @@ struct ObjectCaptureEngine: View {
         ZStack {
             GuidedObjectARView(
                 controller: capture,
-                surfacePoints: capture.snapshot.surfacePoints
+                surfacePoints: capture.snapshot.surfacePoints,
+                liveMeshPreview: capture.liveMeshPreview
             )
             .ignoresSafeArea()
             GuidedTrackingOverlay(
@@ -75,6 +77,27 @@ struct ObjectCaptureEngine: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(surfacePointStatus)
             .accessibilityValue("\(capture.snapshot.surfacePointCount) spatial samples")
+
+            if capture.meshTriangleCount > 0 {
+                VStack(spacing: 5) {
+                    HStack {
+                        Label("Live surface", systemImage: "cube")
+                        Spacer()
+                        if capture.texturedMeshTriangleCount > 0 {
+                            Text("\(capture.texturedMeshTriangleCount.formatted()) textured preview faces")
+                                .monospacedDigit()
+                        } else if capture.liveMeshPreview != nil {
+                            Text("Waiting for a clean texture view…")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("Building the object surface…")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .font(.caption.weight(.medium))
+                .accessibilityElement(children: .combine)
+            }
 
             VStack(spacing: 4) {
                 ProgressView(value: captureProgress)
@@ -242,6 +265,7 @@ private struct GuidedTrackingOverlay: View {
 private struct GuidedObjectARView: UIViewRepresentable {
     let controller: GuidedObjectCaptureController
     let surfacePoints: [SIMD3<Float>]
+    let liveMeshPreview: LiveMeshPreview?
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -259,7 +283,7 @@ private struct GuidedObjectARView: UIViewRepresentable {
             viewportSize: view.bounds.size,
             orientation: view.window?.windowScene?.interfaceOrientation ?? .portrait
         )
-        context.coordinator.update(points: surfacePoints)
+        context.coordinator.update(points: surfacePoints, preview: liveMeshPreview)
     }
 
     static func dismantleUIView(_ view: ARView, coordinator: Coordinator) {
@@ -273,10 +297,16 @@ private struct GuidedObjectARView: UIViewRepresentable {
         private let dotMaterial = UnlitMaterial(
             color: UIColor(red: 0.20, green: 0.72, blue: 1.0, alpha: 1)
         )
+        private weak var view: ARView?
+        private var meshAnchor: AnchorEntity?
+        private var meshRequests = Set<AnyCancellable>()
+        private var meshTextures: [URL: TextureResource] = [:]
+        private var installedMeshRevision: UInt64 = 0
         private var dots: [ModelEntity] = []
         private var previousPoints: [SIMD3<Float>] = []
 
         func attach(to view: ARView) {
+            self.view = view
             if ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) {
                 view.environment.sceneUnderstanding.options.insert(.occlusion)
             }
@@ -285,28 +315,113 @@ private struct GuidedObjectARView: UIViewRepresentable {
             }
         }
 
-        func update(points: [SIMD3<Float>]) {
-            guard points != previousPoints else { return }
-            previousPoints = points
+        func update(points: [SIMD3<Float>], preview: LiveMeshPreview?) {
+            if points != previousPoints {
+                previousPoints = points
 
-            while dots.count < points.count {
-                let dot = ModelEntity(mesh: dotMesh, materials: [dotMaterial])
-                dot.isEnabled = false
-                anchor.addChild(dot)
-                dots.append(dot)
-            }
-
-            for (index, dot) in dots.enumerated() {
-                guard index < points.count else {
+                while dots.count < points.count {
+                    let dot = ModelEntity(mesh: dotMesh, materials: [dotMaterial])
                     dot.isEnabled = false
-                    continue
+                    anchor.addChild(dot)
+                    dots.append(dot)
                 }
-                dot.position = points[index]
-                dot.isEnabled = true
+
+                for (index, dot) in dots.enumerated() {
+                    guard index < points.count else {
+                        dot.isEnabled = false
+                        continue
+                    }
+                    dot.position = points[index]
+                    dot.isEnabled = true
+                }
+            }
+            if let preview {
+                install(preview)
+            } else if let meshAnchor {
+                meshRequests.removeAll()
+                view?.scene.anchors.remove(meshAnchor)
+                self.meshAnchor = nil
+                installedMeshRevision = 0
             }
         }
 
+        private func install(_ preview: LiveMeshPreview) {
+            guard preview.revision > installedMeshRevision, let view else { return }
+            installedMeshRevision = preview.revision
+            meshRequests.removeAll()
+            meshTextures = meshTextures.filter { preview.textureURLs.contains($0.key) }
+            if let meshAnchor { view.scene.anchors.remove(meshAnchor) }
+            let nextAnchor = AnchorEntity(world: .zero)
+            meshAnchor = nextAnchor
+            view.scene.anchors.append(nextAnchor)
+
+            for batch in preview.batches {
+                var descriptor = MeshDescriptor(name: "LiveObjectSurface")
+                descriptor.positions = MeshBuffers.Positions(batch.positions)
+                descriptor.normals = MeshBuffers.Normals(batch.normals)
+                descriptor.textureCoordinates = MeshBuffers.TextureCoordinates(batch.textureCoordinates)
+                descriptor.primitives = .triangles(batch.indices)
+                MeshResource.generateAsync(from: [descriptor])
+                    .receive(on: DispatchQueue.main)
+                    .sink(
+                        receiveCompletion: { _ in },
+                        receiveValue: { [weak self, weak nextAnchor] mesh in
+                        guard let self, let nextAnchor,
+                              self.installedMeshRevision == preview.revision else { return }
+                        let entity = ModelEntity(mesh: mesh, materials: [Self.blueprintMaterial()])
+                        nextAnchor.addChild(entity)
+                        guard let textureURL = batch.textureURL else { return }
+                        if let texture = self.meshTextures[textureURL] {
+                            entity.model?.materials = [Self.texturedMaterial(texture)]
+                            return
+                        }
+                        TextureResource.loadAsync(
+                            contentsOf: textureURL,
+                            withName: "object-\(preview.revision)-\(textureURL.lastPathComponent)"
+                        )
+                            .receive(on: DispatchQueue.main)
+                            .sink(
+                                receiveCompletion: { _ in },
+                                receiveValue: { [weak self, weak entity] texture in
+                                guard let self, let entity,
+                                      self.installedMeshRevision == preview.revision else { return }
+                                self.meshTextures[textureURL] = texture
+                                entity.model?.materials = [Self.texturedMaterial(texture)]
+                                }
+                            )
+                            .store(in: &self.meshRequests)
+                        }
+                    )
+                    .store(in: &meshRequests)
+            }
+        }
+
+        private static func blueprintMaterial() -> PhysicallyBasedMaterial {
+            var material = PhysicallyBasedMaterial()
+            material.baseColor = .init(
+                tint: UIColor.systemBlue.withAlphaComponent(0.42),
+                texture: nil
+            )
+            material.roughness = 0.85
+            material.faceCulling = .none
+            material.blending = .transparent(opacity: 0.42)
+            return material
+        }
+
+        private static func texturedMaterial(_ texture: TextureResource) -> PhysicallyBasedMaterial {
+            var material = PhysicallyBasedMaterial()
+            material.baseColor = .init(tint: .white, texture: .init(texture))
+            material.roughness = 0.85
+            material.faceCulling = .none
+            return material
+        }
+
         func detach(from view: ARView) {
+            meshRequests.removeAll()
+            meshTextures.removeAll()
+            if let meshAnchor { view.scene.anchors.remove(meshAnchor) }
+            self.meshAnchor = nil
+            self.view = nil
             view.scene.removeAnchor(anchor)
             dots.removeAll(keepingCapacity: false)
             previousPoints.removeAll(keepingCapacity: false)

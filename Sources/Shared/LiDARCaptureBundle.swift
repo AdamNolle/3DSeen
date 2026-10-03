@@ -7,21 +7,25 @@ struct LiDARCaptureReport: Codable, Sendable {
     let textureFrameCount: Int
     let textureSnapshotCount: Int
     let surfaceCounts: [String: Int]?
+    let modelFileName: String?
 
     init(schemaVersion: Int, triangleCount: Int, texturedTriangleCount: Int,
-         textureFrameCount: Int, textureSnapshotCount: Int, surfaceCounts: [String: Int]? = nil) {
+         textureFrameCount: Int, textureSnapshotCount: Int, surfaceCounts: [String: Int]? = nil,
+         modelFileName: String? = nil) {
         self.schemaVersion = schemaVersion
         self.triangleCount = triangleCount
         self.texturedTriangleCount = texturedTriangleCount
         self.textureFrameCount = textureFrameCount
         self.textureSnapshotCount = textureSnapshotCount
         self.surfaceCounts = surfaceCounts
+        self.modelFileName = modelFileName
     }
 }
 
 /// Keep reusable textures and the finished model outside the removable source-photo archive.
 enum LiDARCaptureBundle {
     static let modelName = "space.usdz"
+    static let objectModelName = "object.usdz"
     static let reportName = "surface-capture.json"
     static let framesName = "capture"
     static let texturesName = "textures"
@@ -34,6 +38,10 @@ enum LiDARCaptureBundle {
 
     static func importCapture(from source: URL, scanID: UUID, store: ScanAssetStore) throws -> Imported {
         let report = try JSONDecoder().decode(LiDARCaptureReport.self, from: Data(contentsOf: source.appendingPathComponent(reportName)))
+        let modelName = report.modelFileName ?? Self.modelName
+        guard [Self.modelName, Self.objectModelName].contains(modelName) else {
+            throw LiDARSurfaceError.invalidGeometry
+        }
         let model = source.appendingPathComponent(modelName)
         let frames = source.appendingPathComponent(framesName)
         guard (1...2).contains(report.schemaVersion), report.triangleCount > 0,

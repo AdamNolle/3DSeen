@@ -438,7 +438,7 @@ struct RoomSurfaceARView: UIViewRepresentable {
     func updateUIView(_ uiView: ARView, context: Context) {}
 }
 
-private struct LiveMeshPreview: Sendable {
+struct LiveMeshPreview: Sendable {
     struct Batch: Sendable {
         let positions: [SIMD3<Float>]
         let normals: [SIMD3<Float>]
@@ -456,7 +456,7 @@ private struct LiveMeshPreview: Sendable {
 
 /// Projects only a small, spatially distributed set of captured views for the live overlay.
 /// The final USDZ exporter still considers the complete frame set for higher texture coverage.
-private enum LiveMeshPreviewBuilder {
+enum LiveMeshPreviewBuilder {
     private struct MutableBatch {
         var positions: [SIMD3<Float>] = []
         var normals: [SIMD3<Float>] = []
@@ -475,6 +475,7 @@ private enum LiveMeshPreviewBuilder {
         meshes: [LiDARSurfaceMesh],
         frames: [LiDARTextureFrame],
         revision: UInt64,
+        requireForegroundMask: Bool = false,
         isCancelled: () -> Bool
     ) -> LiveMeshPreview? {
         let previewMeshes = meshes.filter {
@@ -518,10 +519,16 @@ private enum LiveMeshPreviewBuilder {
                 for index in candidates {
                     guard let projection = frames[index].camera.projection(of: triangle),
                           projection.score > bestScore else { continue }
+                    if requireForegroundMask,
+                       frames[index].surfaceMask?.containsProjectedTriangle(projection.coordinates) != true {
+                        continue
+                    }
                     bestIndex = index
                     bestScore = projection.score
                     coordinates = projection.coordinates
                 }
+
+                if requireForegroundMask, bestIndex < 0 { continue }
 
                 var batch = batches[bestIndex, default: MutableBatch()]
                 if bestIndex >= 0 { batch.textureURL = frames[bestIndex].imageURL }

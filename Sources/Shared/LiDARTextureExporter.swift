@@ -25,6 +25,7 @@ enum LiDARTextureExporter {
 
     static func export(
         meshes: [LiDARSurfaceMesh], frames: [LiDARTextureFrame], to outputURL: URL,
+        requireForegroundMask: Bool = false,
         isCancelled: @escaping () -> Bool = { false }
     ) throws -> Result {
         try validate(meshes: meshes, frames: frames)
@@ -56,10 +57,15 @@ enum LiDARTextureExporter {
                     if rank >= 32, bestIndex >= 0 { break }
                     guard let projection = frames[index].camera.projection(of: triangle),
                           projection.score > bestScore else { continue }
+                    if requireForegroundMask,
+                       frames[index].surfaceMask?.containsProjectedTriangle(projection.coordinates) != true {
+                        continue
+                    }
                     bestIndex = index
                     bestScore = projection.score
                     coordinates = projection.coordinates
                 }
+                if requireForegroundMask, bestIndex < 0 { continue }
                 let normal = SCNVector3(simd_normalize(cross))
                 let key = BatchKey(frameIndex: bestIndex, classification: classification)
                 var batch = batches[key, default: Batch()]

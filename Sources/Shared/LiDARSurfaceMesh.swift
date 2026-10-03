@@ -109,6 +109,62 @@ struct LiDARTextureCamera: Sendable {
 struct LiDARTextureFrame: Sendable {
     let imageURL: URL
     let camera: LiDARTextureCamera
+    let surfaceMask: LiDARSurfaceMask?
+
+    init(imageURL: URL, camera: LiDARTextureCamera, surfaceMask: LiDARSurfaceMask? = nil) {
+        self.imageURL = imageURL
+        self.camera = camera
+        self.surfaceMask = surfaceMask
+    }
+}
+
+enum LiDARCaptureImageOrientation: Equatable, Sendable {
+    case portrait
+    case portraitUpsideDown
+    case landscapeLeft
+    case landscapeRight
+}
+
+/// The Vision-selected foreground instance corresponding to a captured color/depth frame.
+/// Coordinates are stored in the image orientation Vision used, then queried with raw camera UVs.
+struct LiDARSurfaceMask: Sendable {
+    let labels: [UInt8]
+    let width: Int
+    let height: Int
+    let selectedLabel: UInt8
+    let orientation: LiDARCaptureImageOrientation
+
+    func contains(rawNormalizedPoint point: SIMD2<Float>) -> Bool {
+        let (pixelCount, didOverflow) = width.multipliedReportingOverflow(by: height)
+        guard width > 0, height > 0, !didOverflow, labels.count == pixelCount,
+              point.x.isFinite, point.y.isFinite,
+              point.x >= 0, point.x < 1, point.y >= 0, point.y < 1 else { return false }
+        let oriented: SIMD2<Float>
+        switch orientation {
+        case .portrait:
+            oriented = SIMD2(1 - point.y, point.x)
+        case .portraitUpsideDown:
+            oriented = SIMD2(point.y, 1 - point.x)
+        case .landscapeLeft:
+            oriented = point
+        case .landscapeRight:
+            oriented = SIMD2(1 - point.x, 1 - point.y)
+        }
+        guard oriented.x >= 0, oriented.x < 1, oriented.y >= 0, oriented.y < 1 else { return false }
+        let x = min(Int(oriented.x * Float(width)), width - 1)
+        let y = min(Int(oriented.y * Float(height)), height - 1)
+        return labels[y * width + x] == selectedLabel
+    }
+
+    /// Keep a triangle only when its center and most corners belong to the selected instance.
+    /// This trims segmentation edges without allowing a single foreground pixel to admit a face.
+    func containsProjectedTriangle(_ textureCoordinates: [SIMD2<Float>]) -> Bool {
+        guard textureCoordinates.count == 3 else { return false }
+        let imagePoints = textureCoordinates.map { SIMD2($0.x, 1 - $0.y) }
+        let center = (imagePoints[0] + imagePoints[1] + imagePoints[2]) / 3
+        return imagePoints.filter(contains(rawNormalizedPoint:)).count >= 2
+            && contains(rawNormalizedPoint: center)
+    }
 }
 
 enum LiDARSurfaceError: LocalizedError {

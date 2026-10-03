@@ -66,7 +66,17 @@ final class VisionForegroundSubjectDetector: ForegroundSubjectDetecting {
                 width: width,
                 height: height,
                 selectedLabel: selection.label
-            )
+            ),
+            imageOrientation: Self.captureOrientation(for: orientation)
         )
+    }
+
+    private static func captureOrientation(for orientation: CGImagePropertyOrientation) -> LiDARCaptureImageOrientation {
+        switch orientation {
+        case .left: return .portraitUpsideDown
+        case .up: return .landscapeLeft
+        case .down: return .landscapeRight
+        default: return .portrait
+        }
     }
 }

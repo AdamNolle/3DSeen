@@ -5,7 +5,13 @@ import UniformTypeIdentifiers
 
 /// Copies depth and camera data while the ARFrame is valid; no ARFrames are retained.
 enum LiDARCaptureFrames {
-    static func save(_ frame: ARFrame, index: Int, folder: URL, context: CIContext) throws -> LiDARTextureFrame {
+    static func save(
+        _ frame: ARFrame,
+        index: Int,
+        folder: URL,
+        context: CIContext,
+        surfaceMask: LiDARSurfaceMask? = nil
+    ) throws -> LiDARTextureFrame {
         guard let depth = frame.smoothedSceneDepth ?? frame.sceneDepth else { throw LiDARSurfaceError.noTextures }
         let depthMap = depth.depthMap
         let width = CVPixelBufferGetWidth(depthMap)
@@ -48,7 +54,7 @@ enum LiDARCaptureFrames {
             depthWidth: width, depthHeight: height, depths: values
         )
         try values.withUnsafeBytes { try Data($0).write(to: url.appendingPathExtension("depth.f32"), options: .atomic) }
-        return LiDARTextureFrame(imageURL: url, camera: camera)
+        return LiDARTextureFrame(imageURL: url, camera: camera, surfaceMask: surfaceMask)
     }
 
     static func saveTexture(_ frame: ARFrame, index: Int, folder: URL, context: CIContext) throws {

@@ -26,6 +26,21 @@ struct DetectedSubject: Equatable, Sendable {
     let timestamp: TimeInterval
     let instanceLabel: UInt8
     let mask: SubjectInstanceMask
+    let imageOrientation: LiDARCaptureImageOrientation
+
+    init(
+        normalizedBounds: CGRect,
+        timestamp: TimeInterval,
+        instanceLabel: UInt8,
+        mask: SubjectInstanceMask,
+        imageOrientation: LiDARCaptureImageOrientation = .portrait
+    ) {
+        self.normalizedBounds = normalizedBounds
+        self.timestamp = timestamp
+        self.instanceLabel = instanceLabel
+        self.mask = mask
+        self.imageOrientation = imageOrientation
+    }
 
     func isFresh(at frameTimestamp: TimeInterval, maximumAge: TimeInterval) -> Bool {
         frameTimestamp >= timestamp && frameTimestamp - timestamp <= maximumAge
@@ -138,6 +153,16 @@ enum SubjectMaskSelector {
 }
 
 enum ScannerOrientation {
+    static func captureOrientation(for orientation: UIInterfaceOrientation) -> LiDARCaptureImageOrientation {
+        switch orientation {
+        case .portrait: return .portrait
+        case .portraitUpsideDown: return .portraitUpsideDown
+        case .landscapeLeft: return .landscapeLeft
+        case .landscapeRight: return .landscapeRight
+        default: return .portrait
+        }
+    }
+
     static func imageProperty(for interfaceOrientation: UIInterfaceOrientation) -> CGImagePropertyOrientation {
         switch interfaceOrientation {
         case .portrait: return .right
@@ -149,6 +174,10 @@ enum ScannerOrientation {
     }
 
     static func orientedPoint(fromRaw point: CGPoint, orientation: UIInterfaceOrientation) -> CGPoint {
+        orientedPoint(fromRaw: point, orientation: captureOrientation(for: orientation))
+    }
+
+    static func orientedPoint(fromRaw point: CGPoint, orientation: LiDARCaptureImageOrientation) -> CGPoint {
         switch orientation {
         case .portrait: return CGPoint(x: 1 - point.y, y: point.x)
         case .portraitUpsideDown: return CGPoint(x: point.y, y: 1 - point.x)
@@ -158,6 +187,10 @@ enum ScannerOrientation {
     }
 
     static func rawPoint(fromOriented point: CGPoint, orientation: UIInterfaceOrientation) -> CGPoint {
+        rawPoint(fromOriented: point, orientation: captureOrientation(for: orientation))
+    }
+
+    static func rawPoint(fromOriented point: CGPoint, orientation: LiDARCaptureImageOrientation) -> CGPoint {
         switch orientation {
         case .portrait: return CGPoint(x: point.y, y: 1 - point.x)
         case .portraitUpsideDown: return CGPoint(x: 1 - point.y, y: point.x)
@@ -181,12 +214,11 @@ struct SubjectImageProjection {
     let subject: DetectedSubject
     let imageToViewTransform: CGAffineTransform
     let viewportSize: CGSize
-    let orientation: UIInterfaceOrientation
 
     func contains(rawImagePoint: CGPoint) -> Bool {
         subject.mask.contains(normalizedPoint: ScannerOrientation.orientedPoint(
             fromRaw: rawImagePoint,
-            orientation: orientation
+            orientation: subject.imageOrientation
         ))
     }
 
@@ -211,7 +243,10 @@ struct SubjectImageProjection {
             CGPoint(x: bounds.maxX, y: bounds.maxY)
         ]
         let screenCorners = orientedCorners.map {
-            let raw = ScannerOrientation.rawPoint(fromOriented: $0, orientation: orientation)
+                let raw = ScannerOrientation.rawPoint(
+                    fromOriented: $0,
+                    orientation: subject.imageOrientation
+                )
             let view = raw.applying(imageToViewTransform)
             return CGPoint(x: view.x * viewportSize.width, y: view.y * viewportSize.height)
         }
