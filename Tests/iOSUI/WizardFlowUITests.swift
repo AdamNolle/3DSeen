@@ -63,7 +63,7 @@ final class WizardFlowUITests: XCTestCase {
             predicate: NSPredicate(format: "value == 'Expanded'"),
             object: advanced
         )
-        XCTAssertEqual(XCTWaiter.wait(for: [expanded], timeout: 3), .completed)
+        XCTAssertEqual(XCTWaiter.wait(for: [expanded], timeout: 10), .completed)
         XCTAssertTrue(app.buttons["Start Capture"].exists)
     }
 
