@@ -8,34 +8,44 @@ extension ComputeCoordinator {
             addLog("Rejected unauthenticated scan resource from \(peer.displayName)")
             return
         }
+        guard let jobID = metadata.jobID, let scanID = metadata.scanID else {
+            network.removeReceivedResource(archive)
+            addLog("Rejected scan resource without a matching job offer")
+            return
+        }
         let expiredOfferIDs = pruneExpiredPendingOffers()
-        if let jobID = metadata.jobID, expiredOfferIDs.contains(jobID) {
+        if expiredOfferIDs.contains(jobID) {
             network.removeReceivedResource(archive)
             return
         }
-        if let jobID = metadata.jobID {
-            guard let offer = pendingOffers[jobID],
-                  offer.peerID == peerID,
-                  offer.scanID == metadata.scanID,
-                  (try? HandoffResourceDescriptor.inspect(archive)) == offer.offer.resource else {
-                network.removeReceivedResource(archive)
-                if let scanID = metadata.scanID,
-                   remoteJobJournal.records[jobID]?.peerID == peerID,
-                   remoteJobJournal.records[jobID]?.scanID == scanID {
-                    recordRemoteJob(jobID: jobID, scanID: scanID, peerID: peerID, state: .failed, progress: 0)
-                }
-                send(
-                    .failed(HandoffFailure(code: .corruptArchive, detail: "The offered resource digest did not match.")),
-                    jobID: jobID,
-                    scanID: metadata.scanID,
-                    to: peerID
-                )
-                addLog("Rejected uncorrelated or corrupt job resource")
-                return
+        guard let offer = pendingOffers[jobID],
+              offer.peerID == peerID,
+              offer.scanID == scanID,
+              HandoffResourceAdmissionPolicy.matchesScanOfferMetadata(
+                metadata,
+                captureMode: offer.offer.captureMode,
+                detailTier: offer.offer.detailTier
+              ),
+              (try? HandoffResourceDescriptor.inspect(archive)) == offer.offer.resource else {
+            network.removeReceivedResource(archive)
+            if remoteJobJournal.records[jobID]?.peerID == peerID,
+               remoteJobJournal.records[jobID]?.scanID == scanID {
+                recordRemoteJob(jobID: jobID, scanID: scanID, peerID: peerID, state: .failed, progress: 0)
             }
-            pendingOffers.removeValue(forKey: jobID)
-            updateQueueProjection()
+            send(
+                .failed(HandoffFailure(
+                    code: .corruptArchive,
+                    detail: "The offered scan metadata or resource digest did not match."
+                )),
+                jobID: jobID,
+                scanID: scanID,
+                to: peerID
+            )
+            addLog("Rejected uncorrelated or corrupt job resource")
+            return
         }
+        pendingOffers.removeValue(forKey: jobID)
+        updateQueueProjection()
         await enqueueHandoff(archive: archive, peer: peer, peerID: peerID, metadata: metadata)
     }
 

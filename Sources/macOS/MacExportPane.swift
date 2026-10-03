@@ -67,7 +67,7 @@ struct MacExportPane: View {
 
                 StRule().padding(.vertical, 20)
                 StLabel(text: "Destination").padding(.bottom, 8)
-                Text(destination.path(percentEncoded: false))
+                Text(selectedExportDirectory.path(percentEncoded: false))
                     .font(.mono(11)).foregroundStyle(theme.text3).textSelection(.enabled)
 
                 if !status.isEmpty {
@@ -115,6 +115,11 @@ struct MacExportPane: View {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Exports/3DSeen", isDirectory: true)
     }
 
+    private var selectedExportDirectory: URL {
+        guard let scan else { return destination }
+        return ScanExportLocation.formattedDirectory(for: scan.id, format: format, under: destination)
+    }
+
     private func formatDescription(_ format: ExportFormat) -> String {
         switch format {
         case .usdz: return "Apple USDZ"
@@ -140,7 +145,7 @@ struct MacExportPane: View {
         let scanName = scan.name
         let manifest = scan.manifest
         let converter = blenderConverter
-        let directory = destination.appendingPathComponent(scanID.uuidString, isDirectory: true)
+        let directory = ScanExportLocation.formattedDirectory(for: scanID, format: selectedFormat, under: destination)
         let request = ModelExportRequest(
             scanID: scanID,
             sourceModelURL: source,

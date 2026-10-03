@@ -2,6 +2,12 @@
 
 Last updated: 2026-10-03
 
+## October 3 archive and handoff hardening
+
+Capture image processing now rejects image sets with unreadable or over-budget frames before quality decoding, thumbnails, or RealityKit reconstruction. Limits are 1,024 frames, 16,384 pixels per side, 67,108,864 pixels per image, and 2 billion aggregate pixels; AppleDouble sidecars are ignored. Mac scan imports require job/scan correlation, metadata matching the pending offer, and the offered archive digest. Legacy uncorrelated resources are rejected. Mac exports are isolated under `~/Exports/3DSeen/<scan-id>/<format>/`, and the pane shows the selected format directory.
+
+On Xcode 27.0.1, the full iPhone 16 Pro/iOS 18.5 suite passed 218 tests with one existing skip; the macOS suite passed 83 tests; and both iPad Pro 13-inch/iOS 18.5 accessibility UI tests passed. Strict SwiftLint, `git diff --check`, XcodeGen drift, icon-catalog validation, action-pin validation, and the credential-free Release Dry Run also passed. This local verification does not cover physical LiDAR alignment, haptic feel, notarization, or installation on the paired iPhone.
+
 ## October 3 live room object feedback
 
 Rooms & Spaces overlays persistent white object points and blue room-surface points from world-space LiDAR samples. The HUD now reports object-dot totals separately. A newly tracked object produces a medium haptic immediately; later room/object coverage milestones produce a lighter haptic, coalesced through a 1.1-second rate limit so quick discoveries do not buzz in bursts. The narrow HUD switches to a two-column metric layout when its full row does not fit. `CaptureHapticScheduler` tests cover first-object feedback, coalescing, and retained rate-limited milestones.

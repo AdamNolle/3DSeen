@@ -317,10 +317,12 @@ public final class NetworkHandoffManager: NSObject, ObservableObject {
     }
 
     public func sendScan(fileURL: URL, to peer: MCPeerID, metadata: ScanHandoffMetadata = .init()) {
+        guard HandoffResourceAdmissionPolicy.hasCompleteScanMetadata(metadata) else {
+            reportResourceSendFailure(HandoffProtocolError.invalidScanMetadata, completion: nil)
+            return
+        }
         logger.debug("Sending scan to \(peer.displayName)...")
-        let resourceName = metadata.captureMode == nil
-            ? fileURL.lastPathComponent
-            : Self.handoffResourceName(for: fileURL, metadata: metadata)
+        let resourceName = Self.handoffResourceName(for: fileURL, metadata: metadata)
         sendResource(fileURL: fileURL, named: resourceName, to: peer)
     }
 
@@ -330,6 +332,10 @@ public final class NetworkHandoffManager: NSObject, ObservableObject {
         to peerID: HandoffInstallationID,
         metadata: ScanHandoffMetadata = .init()
     ) -> Bool {
+        guard HandoffResourceAdmissionPolicy.hasCompleteScanMetadata(metadata) else {
+            reportResourceSendFailure(HandoffProtocolError.invalidScanMetadata, completion: nil)
+            return false
+        }
         guard let peer = peerIDsByInstallationID[peerID], session.connectedPeers.contains(peer) else {
             logger.warning("The selected handoff peer is not connected.")
             return false
@@ -338,16 +344,6 @@ public final class NetworkHandoffManager: NSObject, ObservableObject {
         return true
     }
 
-    /// Legacy convenience retained while the macOS result path migrates to stable peer IDs.
-    @discardableResult
-    public func sendScanToFirstPeer(_ fileURL: URL, metadata: ScanHandoffMetadata = .init()) -> Bool {
-        guard let peer = session.connectedPeers.first else {
-            logger.warning("No connected peer to hand off to.")
-            return false
-        }
-        sendScan(fileURL: fileURL, to: peer, metadata: metadata)
-        return true
-    }
 }
 
 @MainActor

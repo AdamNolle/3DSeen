@@ -37,6 +37,22 @@ final class MeasurementExporterTests: XCTestCase {
         XCTAssertEqual(ScanExportLocation.fileBaseName(for: ".../", fallback: "scan"), "scan")
     }
 
+    func testFormattedExportDirectorySeparatesFormatsAndSupportsMacDestination() {
+        let scanID = UUID()
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("3DSeen-format-export-tests", isDirectory: true)
+
+        XCTAssertEqual(
+            ScanExportLocation.formattedDirectory(for: scanID, format: .usdz, under: root),
+            root.appendingPathComponent(scanID.uuidString, isDirectory: true)
+                .appendingPathComponent("usdz", isDirectory: true)
+        )
+        XCTAssertNotEqual(
+            ScanExportLocation.formattedDirectory(for: scanID, format: .usdz, under: root),
+            ScanExportLocation.formattedDirectory(for: scanID, format: .obj, under: root)
+        )
+    }
+
     func testCSVQuotesCarriageReturnsCommasAndQuotes() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("measurement-csv-\(UUID())")
         defer { try? FileManager.default.removeItem(at: root) }

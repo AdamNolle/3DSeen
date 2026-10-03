@@ -208,6 +208,17 @@ public enum ScanExportLocation {
     public static func directory(for scanID: UUID, fileManager: FileManager = .default) -> URL {
         rootDirectory(fileManager: fileManager).appendingPathComponent(scanID.uuidString, isDirectory: true)
     }
+
+    public static func formattedDirectory(
+        for scanID: UUID,
+        format: ExportFormat,
+        under root: URL? = nil,
+        fileManager: FileManager = .default
+    ) -> URL {
+        let scanDirectory = (root ?? rootDirectory(fileManager: fileManager))
+            .appendingPathComponent(scanID.uuidString, isDirectory: true)
+        return scanDirectory.appendingPathComponent(format.fileExtension, isDirectory: true)
+    }
 }
 
 @MainActor
@@ -248,8 +259,7 @@ public final class ModelExporter {
         to format: ExportFormat,
         outputDirectory: URL? = nil
     ) throws -> URL {
-        let directory = outputDirectory ?? ScanExportLocation.directory(for: request.scanID)
-            .appendingPathComponent(format.fileExtension, isDirectory: true)
+        let directory = outputDirectory ?? ScanExportLocation.formattedDirectory(for: request.scanID, format: format)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let outputURL = directory
             .appendingPathComponent(request.fileBaseName)

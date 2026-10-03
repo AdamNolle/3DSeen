@@ -70,7 +70,7 @@ public enum CaptureQualityAnalyzer {
     public static let minimumEdgeContrast = 0.025
 
     public static func analyze(archive: URL, maximumFrames: Int = 80) -> CaptureQualityReport {
-        let frameURLs = imageFrameURLs(in: archive)
+        let frameURLs = CaptureArchiveInspector.validatedImageURLs(in: archive) ?? []
         let samples = sampledURLs(frameURLs, maximumFrames: maximumFrames)
         let metrics = samples.compactMap(frameMetrics(from:))
         return report(from: metrics, totalFrameCount: frameURLs.count)
@@ -113,14 +113,6 @@ public enum CaptureQualityAnalyzer {
         if metric.meanLuma > brightLumaThreshold { return .bright }
         if metric.edgeContrast < minimumEdgeContrast { return .blurry }
         return .usable
-    }
-
-    private static func imageFrameURLs(in archive: URL) -> [URL] {
-        let imageExtensions: Set<String> = ["jpg", "jpeg", "heic", "png"]
-        guard let files = FileManager.default.enumerator(at: archive, includingPropertiesForKeys: nil) else { return [] }
-        return files.compactMap { $0 as? URL }
-            .filter { imageExtensions.contains($0.pathExtension.lowercased()) }
-            .sorted { $0.path < $1.path }
     }
 
     private static func sampledURLs(_ urls: [URL], maximumFrames: Int) -> [URL] {

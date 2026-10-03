@@ -16,11 +16,14 @@ public enum HandoffProtocolVersion {
 
 public enum HandoffProtocolError: LocalizedError, Equatable {
     case unsupportedVersion(Int)
+    case invalidScanMetadata
 
     public var errorDescription: String? {
         switch self {
         case .unsupportedVersion(let version):
             return "Handoff protocol version \(version) is not supported."
+        case .invalidScanMetadata:
+            return "A scan transfer requires job, scan, and capture-mode metadata."
         }
     }
 }
@@ -210,6 +213,24 @@ public enum HandoffResourceAdmissionPolicy {
     public static let maximumConcurrentResources = 2
     static let maximumQueuedResourceCount = 2
     static let maximumAggregateQueuedBytes: Int64 = 8 * 1_024 * 1_024 * 1_024
+
+    public static func hasJobCorrelation(jobID: UUID?, scanID: UUID?) -> Bool {
+        jobID != nil && scanID != nil
+    }
+
+    public static func hasCompleteScanMetadata(_ metadata: ScanHandoffMetadata) -> Bool {
+        hasJobCorrelation(jobID: metadata.jobID, scanID: metadata.scanID)
+            && metadata.captureMode != nil
+            && metadata.detailTier != nil
+    }
+
+    public static func matchesScanOfferMetadata(
+        _ metadata: ScanHandoffMetadata,
+        captureMode: CaptureMode,
+        detailTier: String
+    ) -> Bool {
+        metadata.captureMode == captureMode && metadata.detailTier == detailTier
+    }
 
     public static func admits(
         isAuthenticated: Bool,

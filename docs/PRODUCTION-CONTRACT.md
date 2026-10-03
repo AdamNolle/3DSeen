@@ -1,6 +1,6 @@
 # 3DSeen Production Contract
 
-Last updated: 2026-10-02
+Last updated: 2026-10-03
 
 This document is the canonical repository-level definition of production behavior. Source code and automated tests are the implementation authority; `docs/VERIFICATION-STATUS.md` records evidence and external gates. Files under `docs/design-spec/`, `docs/design-ref/`, `docs/review/`, and `docs/audit/`, plus `docs/EXECUTION-PLAN.md`, are historical design and review inputs. They may explain intent but do not override this contract.
 
@@ -13,6 +13,7 @@ This document is the canonical repository-level definition of production behavio
 - Minimum deployment targets are iOS/iPadOS 17 and macOS 14. Local verification currently uses Xcode 27.0.1; hosted CI selects exact Xcode 26.6 for reproducibility.
 
 ## Capture
+- Image capture archives are admitted for reconstruction only when they contain at most 1,024 valid image frames, each no larger than 16,384 pixels per side or 64 megapixels, and no more than 2 billion pixels in total. These limits are checked before quality sampling, thumbnail decoding, and photogrammetry.
 
 - Object capture uses one custom ARKit session plus Vision foreground-instance detection. Guidance points must be real LiDAR depth samples or ARKit tracked feature points projected into the selected subject mask; synthetic coverage is prohibited.
 - Object photos are admitted only from current normal tracking plus measured subject-lock freshness, luminance/edge contrast, motion, interval, translation novelty, and bounded writer backlog. Manual capture remains available.
@@ -27,6 +28,8 @@ This document is the canonical repository-level definition of production behavio
 - Review metrics may only display retained-frame measurements or explicit unavailable states. Geometry coverage, dimensions, lighting, or thermal claims must be tied to measured APIs.
 
 ## Compute and handoff
+
+- Incoming Mac scan archives must carry job and scan identifiers and match that peer's unexpired offer and resource digest before entering the compute queue. Legacy uncorrelated scan resources are discarded.
 
 - On-device image reconstruction uses RealityKit photogrammetry and is labeled Reduced where that is the actual request.
 - Completed textured LiDAR USDZ proceeds directly to Viewer and Export. Mac room-model import preserves embedded USDZ geometry and textures without photogrammetry.

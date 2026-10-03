@@ -2,6 +2,37 @@ import XCTest
 @testable import ThreeDSeen
 
 final class HandoffAdmissionPolicyTests: XCTestCase {
+    func testScanResourcesRequireJobAndScanCorrelation() {
+        XCTAssertFalse(HandoffResourceAdmissionPolicy.hasJobCorrelation(jobID: nil, scanID: nil))
+        XCTAssertFalse(HandoffResourceAdmissionPolicy.hasJobCorrelation(jobID: UUID(), scanID: nil))
+        XCTAssertFalse(HandoffResourceAdmissionPolicy.hasJobCorrelation(jobID: nil, scanID: UUID()))
+        XCTAssertTrue(HandoffResourceAdmissionPolicy.hasJobCorrelation(jobID: UUID(), scanID: UUID()))
+        XCTAssertFalse(HandoffResourceAdmissionPolicy.hasCompleteScanMetadata(
+            ScanHandoffMetadata(jobID: UUID(), scanID: UUID())
+        ))
+        XCTAssertFalse(HandoffResourceAdmissionPolicy.hasCompleteScanMetadata(
+            ScanHandoffMetadata(jobID: UUID(), scanID: UUID(), captureMode: .object)
+        ))
+        XCTAssertTrue(HandoffResourceAdmissionPolicy.hasCompleteScanMetadata(
+            ScanHandoffMetadata(jobID: UUID(), scanID: UUID(), captureMode: .object, detailTier: "Full")
+        ))
+        XCTAssertTrue(HandoffResourceAdmissionPolicy.matchesScanOfferMetadata(
+            ScanHandoffMetadata(jobID: UUID(), scanID: UUID(), captureMode: .object, detailTier: "Full"),
+            captureMode: .object,
+            detailTier: "Full"
+        ))
+        XCTAssertFalse(HandoffResourceAdmissionPolicy.matchesScanOfferMetadata(
+            ScanHandoffMetadata(jobID: UUID(), scanID: UUID(), captureMode: .object, detailTier: "Full"),
+            captureMode: .space,
+            detailTier: "Full"
+        ))
+        XCTAssertFalse(HandoffResourceAdmissionPolicy.matchesScanOfferMetadata(
+            ScanHandoffMetadata(jobID: UUID(), scanID: UUID(), captureMode: .object, detailTier: "Preview"),
+            captureMode: .object,
+            detailTier: "Full"
+        ))
+    }
+
     func testInvitationAdmissionBoundsPendingInvitationsAndRateLimitsPeers() {
         var gate = HandoffInvitationAdmissionGate()
         let firstPeers = (0..<4).map { _ in HandoffInstallationID() }

@@ -20,6 +20,19 @@ final class ModelExporterTests: XCTestCase {
         XCTAssertEqual(CaptureArchiveInspector.firstDecodableImageFrame(in: root), capturedFrame)
     }
 
+    func testCaptureArchiveInspectorRejectsBadFramesBeforeQualityAnalysis() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CaptureArchiveInspectorTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try writePNG(red: 128, green: 128, blue: 128, to: root.appendingPathComponent("frame.png"))
+        try Data([0x00]).write(to: root.appendingPathComponent("corrupt.jpg"))
+
+        XCTAssertFalse(CaptureArchiveInspector.containsImageFrames(in: root))
+        XCTAssertEqual(CaptureArchiveInspector.decodableImageFrameCount(in: root), 0)
+        XCTAssertEqual(CaptureQualityAnalyzer.analyze(archive: root).totalFrameCount, 0)
+    }
+
     func testCaptureArchiveInspectorRejectsMissingOrEmptyFolders() throws {
         let empty = FileManager.default.temporaryDirectory
             .appendingPathComponent("CaptureArchiveInspectorTests-\(UUID().uuidString)", isDirectory: true)
@@ -35,6 +48,24 @@ final class ModelExporterTests: XCTestCase {
         XCTAssertEqual(CaptureArchiveInspector.decodableImageFrameCount(in: empty), 0)
         XCTAssertFalse(CaptureArchiveInspector.containsImageFrames(in: empty))
         XCTAssertNil(CaptureArchiveInspector.firstDecodableImageFrame(in: empty))
+    }
+
+    func testCaptureArchiveInspectorBoundsImageDimensionsAndAggregatePixels() {
+        XCTAssertEqual(CaptureArchiveInspector.pixelCountIfWithinLimits(width: 4_032, height: 3_024), 12_192_768)
+        XCTAssertNil(CaptureArchiveInspector.pixelCountIfWithinLimits(width: 50_000, height: 1))
+        XCTAssertNil(CaptureArchiveInspector.pixelCountIfWithinLimits(width: 8_193, height: 8_192))
+        XCTAssertNil(CaptureArchiveInspector.pixelCountIfWithinLimits(width: UInt64.max, height: 2))
+
+        XCTAssertTrue(CaptureArchiveInspector.isWithinImageResourceLimits(frameCount: 1, totalPixelCount: 1))
+        XCTAssertTrue(CaptureArchiveInspector.isWithinImageResourceLimits(
+            frameCount: CaptureArchiveInspector.maximumImageFrameCount,
+            totalPixelCount: CaptureArchiveInspector.maximumTotalPixels
+        ))
+        XCTAssertFalse(CaptureArchiveInspector.isWithinImageResourceLimits(
+            frameCount: CaptureArchiveInspector.maximumImageFrameCount + 1,
+            totalPixelCount: 1
+        ))
+        XCTAssertFalse(CaptureArchiveInspector.isWithinImageResourceLimits(frameCount: 1, totalPixelCount: .max))
     }
 
     func testCaptureQualityReportCountsMeasuredExposureAndSharpnessWarnings() {

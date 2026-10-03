@@ -196,8 +196,13 @@ public struct ScanMeasurement: Codable, Equatable, Identifiable, Sendable {
 public enum CaptureArchiveInspector {
     private static let imageExtensions: Set<String> = ["jpg", "jpeg", "heic", "png"]
 
+    static let maximumImageFrameCount = 1_024
+    static let maximumImageDimension: UInt64 = 16_384
+    static let maximumPixelsPerImage: UInt64 = 64 * 1_024 * 1_024
+    static let maximumTotalPixels: UInt64 = 2_000_000_000
+
     public static func containsImageFrames(in archive: URL) -> Bool {
-        imageURLs(in: archive).contains(where: isDecodableImage)
+        validatedImageURLs(in: archive) != nil
     }
 
     public static func imageFrameCount(in archive: URL) -> Int {
@@ -205,14 +210,41 @@ public enum CaptureArchiveInspector {
     }
 
     public static func decodableImageFrameCount(in archive: URL) -> Int {
-        imageURLs(in: archive).filter(isDecodableImage).count
+        validatedImageURLs(in: archive)?.count ?? 0
     }
 
     /// Returns a stable, real captured frame for Library presentation; no synthetic thumbnail is substituted.
     public static func firstDecodableImageFrame(in archive: URL) -> URL? {
-        imageURLs(in: archive)
-            .sorted { $0.path < $1.path }
-            .first(where: isDecodableImage)
+        validatedImageURLs(in: archive)?.first
+    }
+
+    static func validatedImageURLs(in archive: URL) -> [URL]? {
+        let urls = imageURLs(in: archive)
+        guard isWithinImageResourceLimits(frameCount: urls.count, totalPixelCount: 0) else { return nil }
+
+        var totalPixelCount: UInt64 = 0
+        for url in urls {
+            guard let pixelCount = imagePixelCount(for: url) else { return nil }
+            let (nextTotal, overflow) = totalPixelCount.addingReportingOverflow(pixelCount)
+            guard !overflow,
+                  isWithinImageResourceLimits(frameCount: urls.count, totalPixelCount: nextTotal) else { return nil }
+            totalPixelCount = nextTotal
+        }
+        return urls.sorted { $0.path < $1.path }
+    }
+
+    static func isWithinImageResourceLimits(frameCount: Int, totalPixelCount: UInt64) -> Bool {
+        frameCount > 0
+            && frameCount <= maximumImageFrameCount
+            && totalPixelCount <= maximumTotalPixels
+    }
+
+    static func pixelCountIfWithinLimits(width: UInt64, height: UInt64) -> UInt64? {
+        guard width > 0, height > 0,
+              width <= maximumImageDimension, height <= maximumImageDimension else { return nil }
+        let (pixelCount, overflow) = width.multipliedReportingOverflow(by: height)
+        guard !overflow, pixelCount <= maximumPixelsPerImage else { return nil }
+        return pixelCount
     }
 
     private static func imageURLs(in archive: URL) -> [URL] {
@@ -220,16 +252,19 @@ public enum CaptureArchiveInspector {
             return []
         }
         return files.compactMap { $0 as? URL }
-            .filter { imageExtensions.contains($0.pathExtension.lowercased()) }
+            .filter {
+                imageExtensions.contains($0.pathExtension.lowercased())
+                    && !$0.lastPathComponent.hasPrefix("._")
+            }
     }
 
-    private static func isDecodableImage(_ url: URL) -> Bool {
+    private static func imagePixelCount(for url: URL) -> UInt64? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               CGImageSourceGetCount(source) > 0,
               let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
               let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
-              let height = properties[kCGImagePropertyPixelHeight] as? NSNumber else { return false }
-        return width.intValue > 0 && height.intValue > 0
+              let height = properties[kCGImagePropertyPixelHeight] as? NSNumber else { return nil }
+        return pixelCountIfWithinLimits(width: width.uint64Value, height: height.uint64Value)
     }
 }
 
