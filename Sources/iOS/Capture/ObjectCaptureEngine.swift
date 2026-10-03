@@ -22,6 +22,7 @@ struct ObjectCaptureEngine: View {
             GuidedObjectARView(
                 controller: capture,
                 surfacePoints: capture.snapshot.surfacePoints,
+                surfacePointRevision: capture.snapshot.surfacePointRevision,
                 liveMeshPreview: capture.liveMeshPreview
             )
             .ignoresSafeArea()
@@ -303,6 +304,7 @@ private struct GuidedTrackingOverlay: View {
 private struct GuidedObjectARView: UIViewRepresentable {
     let controller: GuidedObjectCaptureController
     let surfacePoints: [SIMD3<Float>]
+    let surfacePointRevision: UInt64
     let liveMeshPreview: LiveMeshPreview?
 
     func makeCoordinator() -> Coordinator {
@@ -321,7 +323,11 @@ private struct GuidedObjectARView: UIViewRepresentable {
             viewportSize: view.bounds.size,
             orientation: view.window?.windowScene?.interfaceOrientation ?? .portrait
         )
-        context.coordinator.update(points: surfacePoints, preview: liveMeshPreview)
+        context.coordinator.update(
+            points: surfacePoints,
+            pointRevision: surfacePointRevision,
+            preview: liveMeshPreview
+        )
     }
 
     static func dismantleUIView(_ view: ARView, coordinator: Coordinator) {
@@ -345,7 +351,7 @@ private struct GuidedObjectARView: UIViewRepresentable {
         private var dotRevision: UInt64 = 0
         private var dotBuildInFlight = false
         private var pendingDotPoints: [SIMD3<Float>]?
-        private var previousPoints: [SIMD3<Float>] = []
+        private var previousPointRevision: UInt64?
 
         func attach(to view: ARView) {
             self.view = view
@@ -360,9 +366,9 @@ private struct GuidedObjectARView: UIViewRepresentable {
             }
         }
 
-        func update(points: [SIMD3<Float>], preview: LiveMeshPreview?) {
-            if points != previousPoints {
-                previousPoints = points
+        func update(points: [SIMD3<Float>], pointRevision: UInt64, preview: LiveMeshPreview?) {
+            if pointRevision != previousPointRevision {
+                previousPointRevision = pointRevision
                 rebuildDotMesh(with: points)
             }
             if let preview {
@@ -509,7 +515,7 @@ private struct GuidedObjectARView: UIViewRepresentable {
             self.meshAnchor = nil
             self.view = nil
             view.scene.removeAnchor(anchor)
-            previousPoints.removeAll(keepingCapacity: false)
+            previousPointRevision = nil
         }
     }
 }

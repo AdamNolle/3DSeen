@@ -7,7 +7,9 @@ import ARKit
 struct RoomSurfaceARView: UIViewRepresentable {
     let controller: RoomCaptureController
     let surfacePoints: [SIMD3<Float>]
+    let surfacePointRevision: UInt64
     let objectPoints: [SIMD3<Float>]
+    let objectPointRevision: UInt64
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -22,7 +24,12 @@ struct RoomSurfaceARView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: ARView, context: Context) {
-        context.coordinator.update(surfacePoints: surfacePoints, objectPoints: objectPoints)
+        context.coordinator.update(
+            surfacePoints: surfacePoints,
+            surfaceRevision: surfacePointRevision,
+            objectPoints: objectPoints,
+            objectRevision: objectPointRevision
+        )
     }
 
     static func dismantleUIView(_ uiView: ARView, coordinator: Coordinator) {
@@ -40,8 +47,8 @@ struct RoomSurfaceARView: UIViewRepresentable {
         private weak var view: ARView?
         private var meshRequests = Set<AnyCancellable>()
         private var revision: UInt64 = 0
-        private var previousPoints: [SIMD3<Float>] = []
-        private var previousObjectPoints: [SIMD3<Float>] = []
+        private var previousSurfaceRevision: UInt64?
+        private var previousObjectRevision: UInt64?
         private var pendingPoints: (surface: [SIMD3<Float>], objects: [SIMD3<Float>])?
         private var buildInFlight = false
 
@@ -61,10 +68,15 @@ struct RoomSurfaceARView: UIViewRepresentable {
             }
         }
 
-        func update(surfacePoints: [SIMD3<Float>], objectPoints: [SIMD3<Float>]) {
-            guard surfacePoints != previousPoints || objectPoints != previousObjectPoints else { return }
-            previousPoints = surfacePoints
-            previousObjectPoints = objectPoints
+        func update(
+            surfacePoints: [SIMD3<Float>],
+            surfaceRevision: UInt64,
+            objectPoints: [SIMD3<Float>],
+            objectRevision: UInt64
+        ) {
+            guard surfaceRevision != previousSurfaceRevision || objectRevision != previousObjectRevision else { return }
+            previousSurfaceRevision = surfaceRevision
+            previousObjectRevision = objectRevision
             revision &+= 1
             guard !surfacePoints.isEmpty || !objectPoints.isEmpty else {
                 pendingPoints = nil
@@ -81,6 +93,8 @@ struct RoomSurfaceARView: UIViewRepresentable {
             meshRequests.removeAll()
             pendingPoints = nil
             revision &+= 1
+            previousSurfaceRevision = nil
+            previousObjectRevision = nil
             view.scene.anchors.remove(anchor)
             self.view = nil
         }

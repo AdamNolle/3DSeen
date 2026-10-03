@@ -137,6 +137,7 @@ extension GuidedObjectCaptureController {
                 snapshot.surfaceCoverageLimitReached = coverageState.isAtSampleLimit
                 if let surfacePoints = coverageState.points {
                     snapshot.surfacePoints = surfacePoints
+                    snapshot.surfacePointRevision &+= 1
                 }
                 snapshot.phase = subjectProjection == nil ? .seekingSubject : .capturing
                 if coverageState.isAtSampleLimit {

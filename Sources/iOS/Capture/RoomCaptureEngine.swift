@@ -12,9 +12,14 @@ struct RoomCaptureEngine: View {
 
     var body: some View {
         ZStack {
-            RoomSurfaceARView(controller: controller, surfacePoints: controller.surfacePoints,
-                              objectPoints: controller.objectSurfacePoints)
-                .ignoresSafeArea()
+            RoomSurfaceARView(
+                controller: controller,
+                surfacePoints: controller.surfacePoints,
+                surfacePointRevision: controller.surfacePointRevision,
+                objectPoints: controller.objectSurfacePoints,
+                objectPointRevision: controller.objectPointRevision
+            )
+            .ignoresSafeArea()
             LiveCaptureHUD(
                 status: LiveCaptureStatus(
                     mode: .space,
@@ -67,6 +72,8 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
     @Published private(set) var objectDiscoveryHapticRevision = 0
     @Published private(set) var surfacePoints: [SIMD3<Float>] = []
     @Published private(set) var objectSurfacePoints: [SIMD3<Float>] = []
+    private(set) var surfacePointRevision: UInt64 = 0
+    private(set) var objectPointRevision: UInt64 = 0
     @Published private(set) var detectedObjectCount: Int?
     @Published private(set) var objectSurfaceSampleCount = 0
     @Published private(set) var isProcessing = false
@@ -467,7 +474,10 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
 
         publish { controller in
             if let sampleCount { controller.surfaceSampleCount = sampleCount }
-            if let publishedPoints { controller.surfacePoints = publishedPoints }
+            if let publishedPoints {
+                controller.surfacePoints = publishedPoints
+                controller.surfacePointRevision &+= 1
+            }
             if let hapticPulse { controller.registerHapticPulse(hapticPulse) }
             controller.captureGuidanceOverride = self.captureGuidanceOverrideText
         }
@@ -527,7 +537,10 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
 
         publish { controller in
             if let sampleCount { controller.objectSurfaceSampleCount = sampleCount }
-            if let publishedPoints { controller.objectSurfacePoints = publishedPoints }
+            if let publishedPoints {
+                controller.objectSurfacePoints = publishedPoints
+                controller.objectPointRevision &+= 1
+            }
             controller.detectedObjectCount = objectCount
             controller.status = statusMessage
             if let hapticPulse { controller.registerHapticPulse(hapticPulse) }

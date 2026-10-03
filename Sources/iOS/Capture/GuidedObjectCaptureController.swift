@@ -174,6 +174,7 @@ final class GuidedObjectCaptureController: NSObject, ObservableObject, ARSession
             $0.frameCount = 0
             $0.points = []
             $0.surfacePoints = []
+            $0.surfacePointRevision &+= 1
             $0.surfacePointCount = 0
             $0.coverageHapticMilestone = 0
             $0.surfaceCoverageLimitReached = false

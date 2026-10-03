@@ -61,6 +61,8 @@ This document is the canonical repository-level definition of production behavio
 ## Bounded real-time LiDAR coverage
 Room scans retain accepted mesh geometry up to the 500,000-triangle export budget and guide users to save a section when the mesh, 256-frame, or dot-coverage budget is reached. Per-anchor mesh and face-category totals are incrementally maintained for capture feedback. Over-budget anchor updates are skipped without deleting valid partial geometry. Object segmentation and world-space object dots continue to update from live camera frames after stored texture-frame capture reaches its limit; haptic feedback remains rate-limited to discovery and coverage milestones.
 
+The object and room AR views receive monotonically increasing point-cloud revisions alongside their arrays. They use these scalar revisions to skip unchanged dot meshes during SwiftUI updates; point-cloud geometry generation remains off the main thread.
+
 ## Change policy
 
 A behavior change must update this contract, relevant tests, and `docs/VERIFICATION-STATUS.md` in the same release work. Historical design documents should not be silently rewritten to imply they describe current production behavior.
