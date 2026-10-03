@@ -2,6 +2,12 @@
 
 Last updated: 2026-10-03
 
+## October 3 live scanner feedback and latest CI
+
+Commit `3f3b6aa` clarifies the object-scan HUD: LiDAR dots are described as world-pinned, light haptics are explained as new-surface cues, and devices without LiDAR are explicitly identified as using screen-space feature guidance. The live point count uses a short numeric transition without implying a coverage percentage. The iPhone 16 Pro/iOS 18.5 simulator build succeeds with no Xcode warnings, and strict SwiftLint reports zero violations. Hosted CI run [37097111517](https://github.com/AdamNolle/3DSeen/actions/runs/37097111517) passes SwiftLint and the full macOS, iPhone, and iPad suites.
+
+The paired iPhone 15 Pro Max still has the older installed 1.0.0 (1) build. The local Mac app at `/Applications/3DSeen.app` is also the older 1.0.0 (1) build and is notarized; current source 1.0.0 (2) has not been signed for installation or notarized. The iPhone is currently paired but not connected. Physical LiDAR alignment, haptic feel, room texture quality, and sustained scanning remain unverified on this source revision.
+
 ## October 3 notarized-release gate
 
 The prior tag-driven Release run published unsigned iOS and macOS app archives while skipping both signing jobs. The workflow now keeps unsigned builds as workflow artifacts and attaches a public GitHub Release asset only from the Developer ID job, after notarization, stapling, signature validation, and Gatekeeper assessment succeed. Current GitHub release secrets/variables and the local `3DSeenNotary` Keychain profile are absent, so this guarded path has not produced a new notarized build yet. A valid Developer ID certificate is installed locally, but Xcode still has no signed-in iOS team account or matching provisioning profile.
