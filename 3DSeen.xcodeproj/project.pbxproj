@@ -83,6 +83,7 @@
 		72E22D3B6EDC55E670C46DB5 /* LiDARSurfaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DC3BC3C83E93C06B3ECD3AA /* LiDARSurfaceTests.swift */; };
 		73EBDAC4C609843473DF511A /* NerfstudioRuntimeInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4744A87B322A5AC2A6E1CAD5 /* NerfstudioRuntimeInstallerTests.swift */; };
 		7469DDB0A2A2D530D32E528A /* MeasurementExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 140DFCB52913AB99BFE9BF97 /* MeasurementExporterTests.swift */; };
+		74CB397955A16576EFAA6E3D /* LiveMeshPreviewBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18038D29DFA67B66AA6AA9FA /* LiveMeshPreviewBuilder.swift */; };
 		771520BE586627B4103B57DF /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8C95CA27A7E1E731D0B34517 /* Assets.xcassets */; };
 		7755BF522C59EB3393F6E31E /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 855FF907514F5220109067B2 /* Theme.swift */; };
 		777FCF8F2A3B4628558342BC /* HandoffProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60DF3F918AC67A5FC851F598 /* HandoffProtocol.swift */; };
@@ -211,6 +212,7 @@
 		140DFCB52913AB99BFE9BF97 /* MeasurementExporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementExporterTests.swift; sourceTree = "<group>"; };
 		14FA47AE7BE7007CA657F167 /* ReviewScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewScreen.swift; sourceTree = "<group>"; };
 		17A99EDAB0502DBA8088D72E /* 3DSeen-iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "3DSeen-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		18038D29DFA67B66AA6AA9FA /* LiveMeshPreviewBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveMeshPreviewBuilder.swift; sourceTree = "<group>"; };
 		1867E16CD3C9B0B46E98823F /* PBRMaterialTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PBRMaterialTests.swift; sourceTree = "<group>"; };
 		191E7FBB3A8060C3A0D4F62D /* Primitives.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Primitives.swift; sourceTree = "<group>"; };
 		197D3A95570EDF2EBDC4AE03 /* HandoffTrustTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffTrustTests.swift; sourceTree = "<group>"; };
@@ -395,6 +397,7 @@
 				D699E59014BAC0A8CD7BF80F /* LandscapeCaptureEngine.swift */,
 				4461CB2D25A6C72D95D52207 /* LiDARCaptureFrames.swift */,
 				F85DDBDD6E873DC5AAF7C124 /* LiveCaptureHUD.swift */,
+				18038D29DFA67B66AA6AA9FA /* LiveMeshPreviewBuilder.swift */,
 				C0DE453E975B978103D45FAD /* ObjectCaptureEngine.swift */,
 				9DAD8A7ADE795A2D03C0A5C7 /* RoomCaptureEngine.swift */,
 				F72A179EEFE8649E62398935 /* RoomSurfaceARView.swift */,
@@ -947,6 +950,7 @@
 				FD79DA653B95A876C02427EB /* LiquidGlass.swift in Sources */,
 				3B1475DB7A4A31A8A491AC70 /* LiveCaptureHUD.swift in Sources */,
 				395F0F279197F6BDE8505E66 /* LiveCaptureStatus.swift in Sources */,
+				74CB397955A16576EFAA6E3D /* LiveMeshPreviewBuilder.swift in Sources */,
 				EB2C0D73EEDCA21A965BA071 /* LocalQueueManager.swift in Sources */,
 				383F4B63670447CFCD1B1E6C /* MaterialOverrideLibrary.swift in Sources */,
 				9E55AEFAD19B5B699CDB4281 /* ModePickerScreen.swift in Sources */,

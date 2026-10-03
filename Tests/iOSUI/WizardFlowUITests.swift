@@ -59,11 +59,7 @@ final class WizardFlowUITests: XCTestCase {
         for _ in 0..<3 { app.swipeUp() }
         XCTAssertTrue(advanced.isHittable)
         advanced.tap()
-        let expanded = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "value == 'Expanded'"),
-            object: advanced
-        )
-        XCTAssertEqual(XCTWaiter.wait(for: [expanded], timeout: 10), .completed)
+        XCTAssertTrue(app.staticTexts["Exact reconstruction request"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Start Capture"].exists)
     }
 

@@ -2,11 +2,19 @@
 
 Last updated: 2026-10-03
 
+## October 3 live room object feedback
+
+Rooms & Spaces overlays persistent white object points and blue room-surface points from world-space LiDAR samples. The HUD now reports object-dot totals separately. A newly tracked object produces a medium haptic immediately; later room/object coverage milestones produce a lighter haptic, coalesced through a 1.1-second rate limit so quick discoveries do not buzz in bursts. The narrow HUD switches to a two-column metric layout when its full row does not fit. `CaptureHapticScheduler` tests cover first-object feedback, coalescing, and retained rate-limited milestones.
+
+After the live-preview builder extraction, the full iPhone 16 Pro/iOS 18.5 suite passes 198 tests, the iPad Pro 11-inch/iOS 18.5 suite passes 197 tests with one existing skip, and the full macOS suite passes 77 tests with `CODE_SIGNING_ALLOWED=NO`. Strict SwiftLint and XcodeGen pass. The hosted CI run on prior commit `205ee42` failed only the accessibility-size Quality disclosure test because it waited for the button's changing accessibility value; the test now waits for the expanded control content itself. Hosted CI for this revision is pending.
+
+The simulator cannot verify tactile output or real LiDAR alignment. A room walkthrough on the paired iPhone 15 Pro Max is still required to validate object masks, dot placement/occlusion, live-mesh texture alignment, pulse strength, sustained performance, and thermal behavior.
+
 ## October 3 live scanner feedback and latest CI
 
 Commit `3f3b6aa` clarifies the object-scan HUD: LiDAR dots are described as world-pinned, light haptics are explained as new-surface cues, and devices without LiDAR are explicitly identified as using screen-space feature guidance. The live point count uses a short numeric transition without implying a coverage percentage. The iPhone 16 Pro/iOS 18.5 simulator build succeeds with no Xcode warnings, and strict SwiftLint reports zero violations. Hosted CI run [37098563455](https://github.com/AdamNolle/3DSeen/actions/runs/37098563455) passed SwiftLint and the full macOS, iPhone, and iPad suites on commit `1f15447`; after the verification-note update, run [37099513377](https://github.com/AdamNolle/3DSeen/actions/runs/37099513377) passed all four jobs on `b0488d4`. Credential-free Release Dry Run [37099913854](https://github.com/AdamNolle/3DSeen/actions/runs/37099913854) also passed for version 1.0.0 (2) and retained both unsigned validation bundles as a workflow artifact.
 
-The paired iPhone 15 Pro Max still has the older installed 1.0.0 (1) build. The local Mac app at `/Applications/3DSeen.app` is also the older 1.0.0 (1) build and is notarized; current source 1.0.0 (2) has not been signed for installation or notarized. The iPhone is currently paired but not connected. Physical LiDAR alignment, haptic feel, room texture quality, and sustained scanning remain unverified on this source revision.
+The paired iPhone 15 Pro Max still has the older installed 1.0.0 (1) build. The local Mac app at `/Applications/3DSeen.app` is also the older 1.0.0 (1) build and is notarized; current source 1.0.0 (2) has not been signed for installation or notarized. The iPhone is paired and available over the local network, but the current-source install attempt requires Xcode to sign in with the iOS developer account and create a matching provisioning profile. Physical LiDAR alignment, haptic feel, room texture quality, and sustained scanning remain unverified on this source revision.
 
 ## October 3 notarized-release gate
 

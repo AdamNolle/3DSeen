@@ -72,21 +72,45 @@ struct LiveCaptureHUD: View {
 
     @ViewBuilder
     private var factsPill: some View {
-        if !status.primaryFacts.isEmpty {
-            HStack(spacing: 0) {
-                ForEach(Array(status.primaryFacts.enumerated()), id: \.offset) { index, fact in
-                    Text(fact.uppercased())
-                        .font(.mono(10.5, .semibold))
-                        .foregroundStyle(.white.opacity(0.9))
-                        .padding(.horizontal, 12)
-                        .overlay(alignment: .leading) {
-                            if index > 0 { Rectangle().fill(.white.opacity(0.18)).frame(width: 0.5, height: 16) }
-                        }
+        let facts = status.primaryFacts
+        if !facts.isEmpty {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 0) {
+                    ForEach(Array(facts.enumerated()), id: \.offset) { index, fact in
+                        metric(fact)
+                            .padding(.horizontal, 12)
+                            .overlay(alignment: .leading) {
+                                if index > 0 {
+                                    Rectangle().fill(.white.opacity(0.18)).frame(width: 0.5, height: 16)
+                                }
+                            }
+                    }
                 }
+                LazyVGrid(
+                    columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)],
+                    alignment: .leading,
+                    spacing: 4
+                ) {
+                    ForEach(Array(facts.enumerated()), id: \.offset) { _, fact in
+                        metric(fact)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.vertical, 13)
             .liquidGlass(radius: 15, tone: .dark)
         }
+    }
+
+    private func metric(_ fact: String) -> some View {
+        Text(fact.uppercased())
+            .font(.mono(10.5, .semibold))
+            .foregroundStyle(.white.opacity(0.9))
     }
 
     private var bottomPanel: some View {

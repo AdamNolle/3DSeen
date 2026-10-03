@@ -17,6 +17,7 @@ public struct LiveCaptureStatus: Equatable, Sendable {
     public let trackingStatus: String?
     public let surfaceTriangleCount: Int?
     public let surfaceSampleCount: Int?
+    public let objectSurfaceSampleCount: Int?
     public let trackedObjectCount: Int?
     public let texturedTriangleCount: Int?
     public let textureCoveragePercent: Int?
@@ -32,7 +33,8 @@ public struct LiveCaptureStatus: Equatable, Sendable {
         textureCoveragePercent: Int? = nil,
         surfaceClassificationSummary: String? = nil,
         surfaceSampleCount: Int? = nil,
-        trackedObjectCount: Int? = nil
+        trackedObjectCount: Int? = nil,
+        objectSurfaceSampleCount: Int? = nil
     ) {
         self.mode = mode
         self.phase = phase
@@ -41,6 +43,7 @@ public struct LiveCaptureStatus: Equatable, Sendable {
         self.surfaceTriangleCount = surfaceTriangleCount.map { max(0, $0) }
         self.surfaceSampleCount = surfaceSampleCount.map { max(0, $0) }
         self.trackedObjectCount = trackedObjectCount.map { max(0, $0) }
+        self.objectSurfaceSampleCount = objectSurfaceSampleCount.map { max(0, $0) }
         self.texturedTriangleCount = texturedTriangleCount.map { max(0, $0) }
         self.textureCoveragePercent = textureCoveragePercent.map { min(100, max(0, $0)) }
         self.surfaceClassificationSummary = surfaceClassificationSummary?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -78,6 +81,9 @@ public struct LiveCaptureStatus: Equatable, Sendable {
             let label = trackedObjectCount == 1 ? "object" : "objects"
             facts.append("\(trackedObjectCount) tracked \(label)")
         }
+        if mode == .space, let objectSurfaceSampleCount {
+            facts.append("\(objectSurfaceSampleCount.formatted()) object dots")
+        }
         if let textureCoveragePercent {
             facts.append("\(textureCoveragePercent)% preview textured")
         } else if let texturedTriangleCount {
@@ -103,7 +109,7 @@ public struct LiveCaptureStatus: Equatable, Sendable {
             return "Building the measured LiDAR surface and embedding captured camera textures in your model."
         case (.space, _):
             return "Move slowly around furniture and keep each object in view as you circle it. " +
-                "Bright dots mark Vision-segmented objects in LiDAR space; a light tap confirms new object detail. " +
+                "Bright dots mark measured LiDAR points on detected objects; a short haptic marks a newly detected object and light taps mark new surface detail. " +
                 "Blue dots continue to mark room surfaces. " +
                 "The live mesh is a responsive preview; the saved model uses all captured geometry and camera textures. " +
                 "Only visible, well-tracked surfaces can be captured."

@@ -203,6 +203,46 @@ struct GuidedSurfaceCoverage: Sendable {
     }
 }
 
+/// Coalesces room-coverage milestones and object discoveries into one tactile event stream.
+/// Pending events survive rate limiting so fast coverage updates are not silently discarded.
+enum CaptureHapticKind: Equatable, Sendable {
+    case surfaceCoverage
+    case objectDiscovery
+}
+
+struct CaptureHapticScheduler: Sendable {
+    private let minimumInterval: TimeInterval
+    private var lastCoverageMilestone = 0
+    private var lastPulseTimestamp = -Double.infinity
+    private var hasPendingCoveragePulse = false
+    private var hasPendingObjectPulse = false
+
+    init(minimumInterval: TimeInterval = 1.1) {
+        self.minimumInterval = max(0, minimumInterval)
+    }
+
+    mutating func nextPulse(
+        at timestamp: TimeInterval,
+        coverageMilestone: Int,
+        objectWasDiscovered: Bool = false
+    ) -> CaptureHapticKind? {
+        guard timestamp.isFinite else { return nil }
+        if coverageMilestone > lastCoverageMilestone {
+            hasPendingCoveragePulse = true
+        }
+        hasPendingObjectPulse = hasPendingObjectPulse || objectWasDiscovered
+        guard hasPendingCoveragePulse || hasPendingObjectPulse,
+              timestamp - lastPulseTimestamp >= minimumInterval else { return nil }
+
+        lastCoverageMilestone = max(lastCoverageMilestone, coverageMilestone)
+        lastPulseTimestamp = timestamp
+        let kind: CaptureHapticKind = hasPendingObjectPulse ? .objectDiscovery : .surfaceCoverage
+        hasPendingCoveragePulse = false
+        hasPendingObjectPulse = false
+        return kind
+    }
+}
+
 /// One camera-view object hypothesis backed by measured LiDAR points.
 struct RoomObjectObservation: Sendable {
     let instanceLabel: UInt8

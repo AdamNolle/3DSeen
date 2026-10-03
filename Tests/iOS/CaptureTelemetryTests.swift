@@ -32,9 +32,12 @@ final class CaptureTelemetryTests: XCTestCase {
             frameCount: 3,
             surfaceTriangleCount: 400,
             surfaceSampleCount: 1_250,
- trackedObjectCount: 3
+            trackedObjectCount: 3,
+            objectSurfaceSampleCount: 240
         )
-        XCTAssertEqual(status.primaryFacts, ["3 frames", "400 faces", "1,250 surface dots", "3 tracked objects"])
+        XCTAssertEqual(status.primaryFacts, [
+            "3 frames", "400 faces", "1,250 surface dots", "3 tracked objects", "240 object dots"
+        ])
     }
 
     func testSpaceCaptureGuidesDotsAndHapticCoverage() {
@@ -43,7 +46,7 @@ final class CaptureTelemetryTests: XCTestCase {
         XCTAssertEqual(
             status.guidance,
             "Move slowly around furniture and keep each object in view as you circle it. " +
-                "Bright dots mark Vision-segmented objects in LiDAR space; a light tap confirms new object detail. " +
+            "Bright dots mark measured LiDAR points on detected objects; a short haptic marks a newly detected object and light taps mark new surface detail. " +
                 "Blue dots continue to mark room surfaces. " +
                 "The live mesh is a responsive preview; the saved model uses all captured geometry and camera textures. " +
                 "Only visible, well-tracked surfaces can be captured."
@@ -57,5 +60,18 @@ final class CaptureTelemetryTests: XCTestCase {
         XCTAssertEqual(status.phaseLabel, "Building room model")
         XCTAssertEqual(status.guidance, "Building the measured LiDAR surface and embedding captured camera textures in your model.")
         XCTAssertNil(status.finishActionTitle)
+    }
+
+    func testCaptureHapticsPulseOnObjectDiscoveryAndCoalesceCoverageMilestones() {
+        var scheduler = CaptureHapticScheduler(minimumInterval: 1.1)
+
+        XCTAssertEqual(
+            scheduler.nextPulse(at: 1, coverageMilestone: 0, objectWasDiscovered: true),
+            .objectDiscovery
+        )
+        XCTAssertNil(scheduler.nextPulse(at: 1.4, coverageMilestone: 1))
+        XCTAssertEqual(scheduler.nextPulse(at: 2.2, coverageMilestone: 1), .surfaceCoverage)
+        XCTAssertNil(scheduler.nextPulse(at: 3.1, coverageMilestone: 1))
+        XCTAssertEqual(scheduler.nextPulse(at: 3.31, coverageMilestone: 2), .surfaceCoverage)
     }
 }
