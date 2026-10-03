@@ -241,6 +241,7 @@ struct RoomObjectTrackRegistry: Sendable {
         let identifier: Int
         var center: SIMD3<Float>
         var cells: Set<Cell>
+        var lastSeen: TimeInterval
     }
 
     private(set) var count = 0
@@ -250,12 +251,16 @@ struct RoomObjectTrackRegistry: Sendable {
     private static let maximumTrackCount = 64
     private static let maximumCellsPerTrack = 2_048
     private static let maximumAssociationDistance: Float = 0.30
+    private static let trackRetentionInterval: TimeInterval = 30
 
     mutating func update(
         observations: [RoomObjectObservation],
         timestamp: TimeInterval
     ) -> [TrackedRoomObject] {
         guard timestamp.isFinite else { return [] }
+        tracks.removeAll { track in
+            timestamp > track.lastSeen && timestamp - track.lastSeen > Self.trackRetentionInterval
+        }
         var matched = Set<Int>()
         var output: [TrackedRoomObject] = []
 
@@ -281,6 +286,7 @@ struct RoomObjectTrackRegistry: Sendable {
             if let match {
                 trackIndex = match
                 matched.insert(match)
+                tracks[match].lastSeen = timestamp
                 tracks[match].center = tracks[match].center * 0.65 + center * 0.35
                 for cell in observationCells where tracks[match].cells.count < Self.maximumCellsPerTrack {
                     tracks[match].cells.insert(cell)
@@ -293,7 +299,8 @@ struct RoomObjectTrackRegistry: Sendable {
                 tracks.append(Track(
                     identifier: identifier,
                     center: center,
-                    cells: Set(observationCells.prefix(Self.maximumCellsPerTrack))
+                    cells: Set(observationCells.prefix(Self.maximumCellsPerTrack)),
+                    lastSeen: timestamp
                 ))
                 matched.insert(trackIndex)
             }

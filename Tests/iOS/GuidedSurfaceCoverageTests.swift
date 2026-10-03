@@ -41,6 +41,69 @@ final class GuidedSurfaceCoverageTests: XCTestCase {
         XCTAssertEqual(tracker.count, 2)
     }
 
+    func testRoomObjectTracksReleaseSlotsAfterObjectsHaveBeenAbsent() {
+        var tracker = RoomObjectTrackRegistry()
+        let observations = (0..<64).map { index in
+            RoomObjectObservation(
+                instanceLabel: UInt8(index + 1),
+                points: objectPoints(origin: SIMD3<Float>(Float(index) * 0.5, 0, 0))
+            )
+        }
+
+        _ = tracker.update(observations: observations, timestamp: 1)
+        XCTAssertEqual(tracker.count, 64)
+
+        _ = tracker.update(observations: [observations[0]], timestamp: 30)
+        let newlyDiscovered = RoomObjectObservation(
+            instanceLabel: 65,
+            points: objectPoints(origin: SIMD3<Float>(40, 0, 0))
+        )
+        let tracked = tracker.update(observations: [newlyDiscovered], timestamp: 32)
+
+        XCTAssertEqual(tracked.map(\.identifier), [65])
+        XCTAssertEqual(tracker.count, 2)
+    }
+
+    func testLiveRoomPreviewSeparatesTrackedObjectMeshAndTexture() throws {
+        let textureURL = URL(fileURLWithPath: "/tmp/live-object-texture.jpg")
+        let camera = LiDARTextureCamera(
+            worldToCamera: matrix_identity_float4x4,
+            intrinsics: simd_float3x3(columns: (
+                SIMD3<Float>(100, 0, 0),
+                SIMD3<Float>(0, 100, 0),
+                SIMD3<Float>(100, 100, 1)
+            )),
+            imageWidth: 200,
+            imageHeight: 200,
+            depthWidth: 4,
+            depthHeight: 4,
+            depths: [Float](repeating: 2, count: 16)
+        )
+        let objectMask = LiDARTrackedInstanceMask(
+            labels: (0..<16).map { $0 % 4 < 2 ? UInt8(1) : UInt8(0) },
+            width: 4,
+            height: 4,
+            objectIdentifiersByLabel: [1: 47],
+            orientation: .landscapeLeft
+        )
+        let mesh = LiDARSurfaceMesh(
+            vertices: [SIMD3(-1.2, -0.5, -2), SIMD3(-0.6, -0.5, -2), SIMD3(-0.9, 0.5, -2)],
+            indices: [0, 1, 2]
+        )
+        let preview = try XCTUnwrap(LiveMeshPreviewBuilder.build(
+            meshes: [mesh],
+            frames: [LiDARTextureFrame(imageURL: textureURL, camera: camera, objectMask: objectMask)],
+            revision: 1,
+            isCancelled: { false }
+        ))
+
+        XCTAssertEqual(preview.sampledTriangleCount, 1)
+        XCTAssertEqual(preview.texturedTriangleCount, 1)
+        XCTAssertEqual(preview.batches.map(\.objectIdentifier), [47])
+        XCTAssertEqual(preview.batches.first?.textureURL, textureURL)
+        XCTAssertEqual(preview.batches.first?.indices.count, 3)
+    }
+
     private func objectPoints(origin: SIMD3<Float>) -> [SIMD3<Float>] {
         (0..<4).flatMap { x in
             (0..<4).map { y in

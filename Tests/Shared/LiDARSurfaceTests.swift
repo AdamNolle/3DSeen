@@ -101,6 +101,36 @@ final class LiDARSurfaceTests: XCTestCase {
         XCTAssertTrue(positions.contains { abs($0 + 4) < 0.001 })
     }
 
+    func testObjectMaskFramesBeyondRoomTextureCandidatesCanStillTextureObjects() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let image = try texture(in: directory)
+        let mask = LiDARTrackedInstanceMask(
+            labels: (0..<16).map { $0 % 4 < 2 ? UInt8(1) : UInt8(0) },
+            width: 4,
+            height: 4,
+            objectIdentifiersByLabel: [1: 65],
+            orientation: .landscapeLeft
+        )
+        let frames = Array(
+            repeating: LiDARTextureFrame(imageURL: image, camera: camera(depth: 2)),
+            count: 32
+        ) + [LiDARTextureFrame(imageURL: image, camera: camera(depth: 2), objectMask: mask)]
+        let mesh = LiDARSurfaceMesh(
+            vertices: [SIMD3(-1.2, -0.5, -2), SIMD3(-0.6, -0.5, -2), SIMD3(-0.9, 0.5, -2)],
+            indices: [0, 1, 2]
+        )
+        let result = try LiDARTextureExporter.export(
+            meshes: [mesh],
+            frames: frames,
+            to: directory.appendingPathComponent("late-object-mask.usdz")
+        )
+
+        XCTAssertEqual(result.triangleCount, 1)
+        XCTAssertEqual(result.texturedTriangleCount, 1)
+        XCTAssertEqual(result.trackedObjectCount, 1)
+    }
+
     func testRoomExportSeparatesTrackedForegroundObjectsIntoEditableUSDZNodes() throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

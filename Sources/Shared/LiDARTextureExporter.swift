@@ -31,6 +31,12 @@ enum LiDARTextureExporter {
         let coordinates: [SIMD2<Float>]
     }
 
+    private struct TextureCandidates {
+        let room: [Int]
+        let foreground: [Int]
+        let objects: [Int]
+    }
+
     static func export(
         meshes: [LiDARSurfaceMesh], frames: [LiDARTextureFrame], to outputURL: URL,
         requireForegroundMask: Bool = false,
@@ -51,6 +57,11 @@ enum LiDARTextureExporter {
                 simd_distance_squared(cameraPositions[$0], center)
                     < simd_distance_squared(cameraPositions[$1], center)
             }
+            let textureCandidates = TextureCandidates(
+                room: candidates,
+                foreground: candidates.filter { frames[$0].surfaceMask != nil },
+                objects: candidates.filter { frames[$0].objectMask != nil }
+            )
             for offset in stride(from: 0, to: mesh.indices.count, by: 3) {
                 if offset.isMultiple(of: 192), isCancelled() { throw CancellationError() }
                 let triangle = (0..<3).map { mesh.vertices[Int(mesh.indices[offset + $0])] }
@@ -60,7 +71,7 @@ enum LiDARTextureExporter {
                 let classification = mesh.classifications.isEmpty ? 0 : mesh.classifications[faceIndex]
                 guard let selection = Self.bestTextureSelection(
                     for: triangle,
-                    candidates: candidates,
+                    candidates: textureCandidates,
                     frames: frames,
                     requireForegroundMask: requireForegroundMask
                 ) else { continue }
@@ -157,7 +168,7 @@ enum LiDARTextureExporter {
 
     private static func bestTextureSelection(
         for triangle: [SIMD3<Float>],
-        candidates: [Int],
+        candidates: TextureCandidates,
         frames: [LiDARTextureFrame],
         requireForegroundMask: Bool
     ) -> TextureSelection? {
@@ -169,8 +180,9 @@ enum LiDARTextureExporter {
         var bestRoomScore: Float = 0
         var roomCoordinates = [SIMD2<Float>](repeating: .zero, count: 3)
 
-        for (rank, index) in candidates.enumerated() {
-            if rank >= 32, bestRoomIndex >= 0 || bestObjectIndex >= 0 { break }
+        let roomFrames = requireForegroundMask ? candidates.foreground : candidates.room
+        for (rank, index) in roomFrames.enumerated() {
+            if rank >= 32, bestRoomIndex >= 0 { break }
             guard let projection = frames[index].camera.projection(of: triangle) else { continue }
             if requireForegroundMask {
                 guard projection.score > bestRoomScore,
@@ -179,18 +191,25 @@ enum LiDARTextureExporter {
                 bestRoomIndex = index
                 bestRoomScore = projection.score
                 roomCoordinates = projection.coordinates
-            } else if let identifier = frames[index].objectMask?.objectIdentifier(
-                containingProjectedTriangle: projection.coordinates
-            ) {
+            } else if projection.score > bestRoomScore {
+                bestRoomIndex = index
+                bestRoomScore = projection.score
+                roomCoordinates = projection.coordinates
+            }
+        }
+
+        if !requireForegroundMask {
+            for (rank, index) in candidates.objects.enumerated() {
+                if rank >= 32, bestObjectIndex >= 0 { break }
+                guard let projection = frames[index].camera.projection(of: triangle),
+                      let identifier = frames[index].objectMask?.objectIdentifier(
+                        containingProjectedTriangle: projection.coordinates
+                      ) else { continue }
                 guard projection.score > bestObjectScore else { continue }
                 bestObjectIndex = index
                 bestObjectIdentifier = identifier
                 bestObjectScore = projection.score
                 objectCoordinates = projection.coordinates
-            } else if projection.score > bestRoomScore {
-                bestRoomIndex = index
-                bestRoomScore = projection.score
-                roomCoordinates = projection.coordinates
             }
         }
 

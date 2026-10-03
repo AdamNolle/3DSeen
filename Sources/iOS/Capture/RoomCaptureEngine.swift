@@ -116,6 +116,7 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
     private var previewAnchor: AnchorEntity?
     private var previewRequests = Set<AnyCancellable>()
     private var previewTextures: [URL: TextureResource] = [:]
+    private var previewObjectNodes: [Int: Entity] = [:]
     private var installedPreviewRevision: UInt64 = 0
 
     override init() {
@@ -558,6 +559,7 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
         let anchor = AnchorEntity(world: .zero)
         previewView.scene.anchors.append(anchor)
         previewAnchor = anchor
+        previewObjectNodes.removeAll()
 
         for batch in preview.batches {
             var descriptor = MeshDescriptor(name: "LiveSurface")
@@ -573,7 +575,20 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
                         guard let self, let anchor, self.installedPreviewRevision == preview.revision,
                               !self.isCancelled else { return }
                         let entity = ModelEntity(mesh: mesh, materials: [Self.blueprintMeshMaterial()])
-                        anchor.addChild(entity)
+                        if let objectIdentifier = batch.objectIdentifier {
+                            let objectNode = self.previewObjectNodes[objectIdentifier] ?? {
+                                let node = Entity()
+                                node.name = "LiveObject_\(objectIdentifier)"
+                                anchor.addChild(node)
+                                self.previewObjectNodes[objectIdentifier] = node
+                                return node
+                            }()
+                            entity.name = "LiveObjectSurface_\(objectIdentifier)"
+                            objectNode.addChild(entity)
+                        } else {
+                            entity.name = "LiveRoomSurface"
+                            anchor.addChild(entity)
+                        }
                         guard let textureURL = batch.textureURL else { return }
                         if let cached = self.previewTextures[textureURL] {
                             entity.model?.materials = [Self.texturedMeshMaterial(cached)]
@@ -602,6 +617,7 @@ final class RoomCaptureController: NSObject, ObservableObject, ARSessionDelegate
     private func clearLivePreview() {
         previewRequests.removeAll()
         previewTextures.removeAll()
+        previewObjectNodes.removeAll()
         installedPreviewRevision &+= 1
         if let previewAnchor, let previewView { previewView.scene.anchors.remove(previewAnchor) }
         previewAnchor = nil
@@ -656,6 +672,7 @@ struct LiveMeshPreview: Sendable {
         let textureCoordinates: [SIMD2<Float>]
         let indices: [UInt32]
         let textureURL: URL?
+        let objectIdentifier: Int?
     }
 
     let revision: UInt64
@@ -668,6 +685,17 @@ struct LiveMeshPreview: Sendable {
 /// Projects only a small, spatially distributed set of captured views for the live overlay.
 /// The final USDZ exporter still considers the complete frame set for higher texture coverage.
 enum LiveMeshPreviewBuilder {
+    private struct BatchKey: Hashable {
+        let frameIndex: Int
+        let objectIdentifier: Int?
+    }
+
+    private struct Selection {
+        let frameIndex: Int
+        let objectIdentifier: Int?
+        let coordinates: [SIMD2<Float>]
+    }
+
     private struct MutableBatch {
         var positions: [SIMD3<Float>] = []
         var normals: [SIMD3<Float>] = []
@@ -694,7 +722,7 @@ enum LiveMeshPreviewBuilder {
         }
         guard !previewMeshes.isEmpty else { return nil }
         let selectedFrameIndices = spatiallyDistributedFrameIndices(count: frames.count)
-        var batches: [Int: MutableBatch] = [:]
+        var batches: [BatchKey: MutableBatch] = [:]
         var sampledTriangles = 0
         var textured = 0
         var remainingTriangles = maximumPreviewTriangles
@@ -709,61 +737,124 @@ enum LiveMeshPreviewBuilder {
             remainingMeshes -= 1
             let sampleStride = Double(meshTriangleCount) / Double(meshBudget)
             let center = mesh.vertices.reduce(SIMD3<Float>.zero, +) / Float(mesh.vertices.count)
-            let candidates = selectedFrameIndices.sorted {
+            let roomCandidates = Array(selectedFrameIndices.sorted {
                 simd_distance_squared(frames[$0].camera.position, center)
                     < simd_distance_squared(frames[$1].camera.position, center)
-            }.prefix(maximumProjectionCandidates)
+            }.prefix(maximumProjectionCandidates))
+            let objectCandidates = Array(frames.indices
+                .filter { frames[$0].objectMask != nil }
+                .sorted {
+                    simd_distance_squared(frames[$0].camera.position, center)
+                        < simd_distance_squared(frames[$1].camera.position, center)
+                }
+                .prefix(maximumProjectionCandidates))
 
             for sample in 0..<meshBudget {
                 if sample.isMultiple(of: 1_536), isCancelled() { return nil }
                 let triangleIndex = min(meshTriangleCount - 1, Int((Double(sample) + 0.5) * sampleStride))
                 let offset = triangleIndex * 3
                 let triangle = (0..<3).map { mesh.vertices[Int(mesh.indices[offset + $0])] }
-                guard triangle.allSatisfy({ $0.x.isFinite && $0.y.isFinite && $0.z.isFinite }) else { continue }
+                guard triangle.allSatisfy({ $0.x.isFinite && $0.y.isFinite && $0.z.isFinite }) else {
+                    continue
+                }
                 let cross = simd_cross(triangle[1] - triangle[0], triangle[2] - triangle[0])
                 guard simd_length_squared(cross) > 0.0000000001 else { continue }
                 sampledTriangles += 1
                 let normal = simd_normalize(cross)
-                var bestIndex = -1
-                var bestScore: Float = 0
-                var coordinates = [SIMD2<Float>](repeating: .zero, count: 3)
-                for index in candidates {
-                    guard let projection = frames[index].camera.projection(of: triangle),
-                          projection.score > bestScore else { continue }
-                    if requireForegroundMask,
-                       frames[index].surfaceMask?.containsProjectedTriangle(projection.coordinates) != true {
-                        continue
-                    }
-                    bestIndex = index
-                    bestScore = projection.score
-                    coordinates = projection.coordinates
-                }
-
-                if requireForegroundMask, bestIndex < 0 { continue }
-
-                var batch = batches[bestIndex, default: MutableBatch()]
-                if bestIndex >= 0 { batch.textureURL = frames[bestIndex].imageURL }
+                guard let selection = bestSelection(
+                    for: triangle,
+                    roomCandidates: roomCandidates,
+                    objectCandidates: objectCandidates,
+                    frames: frames,
+                    requireForegroundMask: requireForegroundMask
+                ) else { continue }
+                let key = BatchKey(frameIndex: selection.frameIndex, objectIdentifier: selection.objectIdentifier)
+                var batch = batches[key, default: MutableBatch()]
+                if selection.frameIndex >= 0 { batch.textureURL = frames[selection.frameIndex].imageURL }
                 let base = UInt32(batch.positions.count)
                 batch.positions.append(contentsOf: triangle)
                 batch.normals.append(contentsOf: [normal, normal, normal])
-                batch.textureCoordinates.append(contentsOf: coordinates)
+                batch.textureCoordinates.append(contentsOf: selection.coordinates)
                 batch.indices.append(contentsOf: [base, base + 1, base + 2])
-                batches[bestIndex] = batch
-                if bestIndex >= 0 { textured += 1 }
+                batches[key] = batch
+                if selection.frameIndex >= 0 { textured += 1 }
             }
         }
 
-        let output = batches.keys.sorted().compactMap { index -> LiveMeshPreview.Batch? in
-            guard let batch = batches[index], !batch.indices.isEmpty else { return nil }
-            return LiveMeshPreview.Batch(positions: batch.positions, normals: batch.normals,
-                                         textureCoordinates: batch.textureCoordinates,
-                                         indices: batch.indices,
-                                         textureURL: index >= 0 ? batch.textureURL : nil)
+        let output = batches.keys.sorted {
+            let leftObject = $0.objectIdentifier ?? 0
+            let rightObject = $1.objectIdentifier ?? 0
+            return leftObject == rightObject
+                ? $0.frameIndex < $1.frameIndex
+                : leftObject < rightObject
+        }.compactMap { key -> LiveMeshPreview.Batch? in
+            guard let batch = batches[key], !batch.indices.isEmpty else { return nil }
+            return LiveMeshPreview.Batch(
+                positions: batch.positions,
+                normals: batch.normals,
+                textureCoordinates: batch.textureCoordinates,
+                indices: batch.indices,
+                textureURL: key.frameIndex >= 0 ? batch.textureURL : nil,
+                objectIdentifier: key.objectIdentifier
+            )
         }
-        return LiveMeshPreview(revision: revision, batches: output,
-                               textureURLs: Set(output.compactMap(\.textureURL)),
-                               sampledTriangleCount: sampledTriangles,
-                               texturedTriangleCount: textured)
+        return LiveMeshPreview(
+            revision: revision,
+            batches: output,
+            textureURLs: Set(output.compactMap(\.textureURL)),
+            sampledTriangleCount: sampledTriangles,
+            texturedTriangleCount: textured
+        )
+    }
+
+    private static func bestSelection(
+        for triangle: [SIMD3<Float>],
+        roomCandidates: [Int],
+        objectCandidates: [Int],
+        frames: [LiDARTextureFrame],
+        requireForegroundMask: Bool
+    ) -> Selection? {
+        var bestRoomIndex = -1
+        var bestRoomScore: Float = 0
+        var roomCoordinates = [SIMD2<Float>](repeating: .zero, count: 3)
+        for index in roomCandidates {
+            guard let projection = frames[index].camera.projection(of: triangle),
+                  projection.score > bestRoomScore else { continue }
+            if requireForegroundMask,
+               frames[index].surfaceMask?.containsProjectedTriangle(projection.coordinates) != true {
+                continue
+            }
+            bestRoomIndex = index
+            bestRoomScore = projection.score
+            roomCoordinates = projection.coordinates
+        }
+
+        guard !requireForegroundMask || bestRoomIndex >= 0 else { return nil }
+        var bestObjectIndex = -1
+        var bestObjectIdentifier: Int?
+        var bestObjectScore: Float = 0
+        var objectCoordinates = [SIMD2<Float>](repeating: .zero, count: 3)
+        if !requireForegroundMask {
+            for index in objectCandidates {
+                guard let projection = frames[index].camera.projection(of: triangle),
+                      let identifier = frames[index].objectMask?.objectIdentifier(
+                        containingProjectedTriangle: projection.coordinates
+                      ), projection.score > bestObjectScore else { continue }
+                bestObjectIndex = index
+                bestObjectIdentifier = identifier
+                bestObjectScore = projection.score
+                objectCoordinates = projection.coordinates
+            }
+        }
+
+        if bestObjectIndex >= 0 {
+            return Selection(
+                frameIndex: bestObjectIndex,
+                objectIdentifier: bestObjectIdentifier,
+                coordinates: objectCoordinates
+            )
+        }
+        return Selection(frameIndex: bestRoomIndex, objectIdentifier: nil, coordinates: roomCoordinates)
     }
 
     private static func spatiallyDistributedFrameIndices(count: Int) -> [Int] {

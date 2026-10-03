@@ -136,20 +136,18 @@ enum LiDARCaptureImageOrientation: Equatable, Sendable {
     case landscapeRight
 }
 
-/// The Vision-selected foreground instance corresponding to a captured color/depth frame.
-/// Coordinates are stored in the image orientation Vision used, then queried with raw camera UVs.
-struct LiDARSurfaceMask: Sendable {
-    let labels: [UInt8]
-    let width: Int
-    let height: Int
-    let selectedLabel: UInt8
-    let orientation: LiDARCaptureImageOrientation
-
-    func contains(rawNormalizedPoint point: SIMD2<Float>) -> Bool {
+private enum LiDARMaskSampler {
+    static func label(
+        atRawNormalizedPoint point: SIMD2<Float>,
+        labels: [UInt8],
+        width: Int,
+        height: Int,
+        orientation: LiDARCaptureImageOrientation
+    ) -> UInt8? {
         let (pixelCount, didOverflow) = width.multipliedReportingOverflow(by: height)
         guard width > 0, height > 0, !didOverflow, labels.count == pixelCount,
               point.x.isFinite, point.y.isFinite,
-              point.x >= 0, point.x < 1, point.y >= 0, point.y < 1 else { return false }
+              point.x >= 0, point.x < 1, point.y >= 0, point.y < 1 else { return nil }
         let oriented: SIMD2<Float>
         switch orientation {
         case .portrait:
@@ -161,10 +159,30 @@ struct LiDARSurfaceMask: Sendable {
         case .landscapeRight:
             oriented = SIMD2(1 - point.x, 1 - point.y)
         }
-        guard oriented.x >= 0, oriented.x < 1, oriented.y >= 0, oriented.y < 1 else { return false }
+        guard oriented.x >= 0, oriented.x < 1, oriented.y >= 0, oriented.y < 1 else { return nil }
         let x = min(Int(oriented.x * Float(width)), width - 1)
         let y = min(Int(oriented.y * Float(height)), height - 1)
-        return labels[y * width + x] == selectedLabel
+        return labels[y * width + x]
+    }
+}
+
+/// The Vision-selected foreground instance corresponding to a captured color/depth frame.
+/// Coordinates are stored in the image orientation Vision used, then queried with raw camera UVs.
+struct LiDARSurfaceMask: Sendable {
+    let labels: [UInt8]
+    let width: Int
+    let height: Int
+    let selectedLabel: UInt8
+    let orientation: LiDARCaptureImageOrientation
+
+    func contains(rawNormalizedPoint point: SIMD2<Float>) -> Bool {
+        LiDARMaskSampler.label(
+            atRawNormalizedPoint: point,
+            labels: labels,
+            width: width,
+            height: height,
+            orientation: orientation
+        ) == selectedLabel
     }
 
     /// Keep a triangle only when its center and most corners belong to the selected instance.
@@ -203,25 +221,13 @@ struct LiDARTrackedInstanceMask: Sendable {
     }
 
     private func label(atRawNormalizedPoint point: SIMD2<Float>) -> UInt8? {
-        let (pixelCount, didOverflow) = width.multipliedReportingOverflow(by: height)
-        guard width > 0, height > 0, !didOverflow, labels.count == pixelCount,
-              point.x.isFinite, point.y.isFinite,
-              point.x >= 0, point.x < 1, point.y >= 0, point.y < 1 else { return nil }
-        let oriented: SIMD2<Float>
-        switch orientation {
-        case .portrait:
-            oriented = SIMD2(1 - point.y, point.x)
-        case .portraitUpsideDown:
-            oriented = SIMD2(point.y, 1 - point.x)
-        case .landscapeLeft:
-            oriented = point
-        case .landscapeRight:
-            oriented = SIMD2(1 - point.x, 1 - point.y)
-        }
-        guard oriented.x >= 0, oriented.x < 1, oriented.y >= 0, oriented.y < 1 else { return nil }
-        let x = min(Int(oriented.x * Float(width)), width - 1)
-        let y = min(Int(oriented.y * Float(height)), height - 1)
-        return labels[y * width + x]
+        LiDARMaskSampler.label(
+            atRawNormalizedPoint: point,
+            labels: labels,
+            width: width,
+            height: height,
+            orientation: orientation
+        )
     }
 }
 

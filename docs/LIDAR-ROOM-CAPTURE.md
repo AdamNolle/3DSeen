@@ -8,7 +8,9 @@ Finish pauses capture and projects camera images onto the captured triangles, us
 
 ## Live object coverage
 
-During room capture, Vision separates noticeable foreground instances in the camera image and joins their depth samples to ARKit world coordinates. Bright white dots show measured points on those detected objects; blue dots continue to show room-surface coverage. Tracks persist across camera views by matching their 3D LiDAR samples, and light haptics mark newly measured object detail. The live HUD reports the current tracked-object count.
+During room capture, Vision separates noticeable foreground instances in the camera image and joins their depth samples to ARKit world coordinates. Bright white dots show measured points on those detected objects; blue dots continue to show room-surface coverage. Tracks persist across camera views by matching their 3D LiDAR samples, and light haptics mark newly measured object detail. The live HUD reports the current tracked-object count. Tracks unseen for more than 30 seconds are released to make room for new instances; a later revisit can receive a new object identifier.
+
+The live preview also separates sampled LiDAR triangles that align with a tracked object mask into per-object mesh nodes and applies the matching camera texture. These object meshes appear beside the room-surface mesh and refresh as capture continues. Preview work is throttled to roughly once every 1.25 seconds and samples at most 60,000 triangles; the finished USDZ is rebuilt from the full captured mesh and available texture frames.
 
 Foreground segmentation cannot promise to identify every object. Small, hidden, transparent, reflective, moving, or poorly lit items may be missed, and a visible segment only receives dots where LiDAR depth is available with sufficient confidence. At export, visible triangles assigned to these tracked masks are grouped under separate editable Object nodes in the USDZ. The remaining room surfaces stay available alongside them. Inspect the result before discarding source data.
 
