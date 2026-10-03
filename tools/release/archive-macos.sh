@@ -7,10 +7,18 @@ MODE=${1:-notarize}
 : "${MACOS_DEVELOPER_IDENTITY:?Missing Developer ID Application identity}"
 : "${MARKETING_VERSION:?Missing marketing version}"
 : "${CURRENT_PROJECT_VERSION:?Missing build number}"
-if [[ "$MODE" == notarize && -z "${NOTARYTOOL_KEYCHAIN_PROFILE:-}" ]]; then
-  : "${APP_STORE_CONNECT_KEY_ID:?Missing App Store Connect key ID or NOTARYTOOL_KEYCHAIN_PROFILE}"
+if [[ "$MODE" == notarize ]]; then
+  : "${APP_STORE_CONNECT_KEY_ID:?Missing App Store Connect key ID}"
   : "${APP_STORE_CONNECT_ISSUER_ID:?Missing App Store Connect issuer ID}"
-  : "${APP_STORE_CONNECT_PRIVATE_KEY_BASE64:?Missing App Store Connect private key}"
+  if [[ -n "${APP_STORE_CONNECT_PRIVATE_KEY_PATH:-}" ]]; then
+    [[ -f "$APP_STORE_CONNECT_PRIVATE_KEY_PATH" && -r "$APP_STORE_CONNECT_PRIVATE_KEY_PATH" ]] || {
+      echo 'APP_STORE_CONNECT_PRIVATE_KEY_PATH is not readable.' >&2
+      exit 1
+    }
+  elif [[ -z "${APP_STORE_CONNECT_PRIVATE_KEY_BASE64:-}" ]]; then
+    echo 'Set APP_STORE_CONNECT_PRIVATE_KEY_PATH or APP_STORE_CONNECT_PRIVATE_KEY_BASE64.' >&2
+    exit 1
+  fi
 fi
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -57,14 +65,14 @@ fi
 
 rm -f "$SUBMISSION_ZIP" "$FINAL_ZIP"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$SUBMISSION_ZIP"
-if [[ -n "${NOTARYTOOL_KEYCHAIN_PROFILE:-}" ]]; then
-  NOTARY_ARGUMENTS=(--keychain-profile "$NOTARYTOOL_KEYCHAIN_PROFILE")
+if [[ -n "${APP_STORE_CONNECT_PRIVATE_KEY_PATH:-}" ]]; then
+  NOTARY_KEY="$APP_STORE_CONNECT_PRIVATE_KEY_PATH"
 else
   KEY_DIRECTORY=$(mktemp -d "${RUNNER_TEMP:-/tmp}/3dseen-notary.XXXXXX")
   NOTARY_KEY="$KEY_DIRECTORY/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
   (umask 077; printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY_BASE64" | base64 --decode > "$NOTARY_KEY")
-  NOTARY_ARGUMENTS=(--key "$NOTARY_KEY" --key-id "$APP_STORE_CONNECT_KEY_ID" --issuer "$APP_STORE_CONNECT_ISSUER_ID")
 fi
+NOTARY_ARGUMENTS=(--key "$NOTARY_KEY" --key-id "$APP_STORE_CONNECT_KEY_ID" --issuer "$APP_STORE_CONNECT_ISSUER_ID")
 xcrun notarytool submit "$SUBMISSION_ZIP" "${NOTARY_ARGUMENTS[@]}" \
   --wait --output-format json > "$OUTPUT_ROOT/notarization.json"
 if ! python3 - "$OUTPUT_ROOT/notarization.json" <<'PY'

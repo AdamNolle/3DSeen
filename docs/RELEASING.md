@@ -22,7 +22,7 @@ A `vMAJOR.MINOR.PATCH` tag runs `.github/workflows/release.yml`. The normal `qua
 
 ## Signed iOS/TestFlight
 
-Set repository variable `ENABLE_SIGNED_IOS_RELEASE=true` and configure these encrypted secrets:
+Set repository variable `ENABLE_SIGNED_IOS_RELEASE=true` and configure these encrypted GitHub Actions secrets:
 
 - `APPLE_TEAM_ID`
 - `IOS_DISTRIBUTION_CERTIFICATE_P12_BASE64`
@@ -32,7 +32,7 @@ Set repository variable `ENABLE_SIGNED_IOS_RELEASE=true` and configure these enc
 - `APP_STORE_CONNECT_ISSUER_ID`
 - `APP_STORE_CONNECT_PRIVATE_KEY_BASE64`
 
-The profile must target `com.adamnolle.3DSeen-iOS`. The job imports credentials into an ephemeral keychain, creates and validates a signed IPA, uploads it through the App Store Connect API, stores workflow evidence, and removes signing material in an `always()` cleanup step.
+The provisioning profile must target `com.adamnolle.3DSeen-iOS`. CI imports the signing certificate into a short-lived keychain because Apple's signing tools require it, then removes the temporary `.p12` file and keychain during cleanup. The archive script accepts `SIGNING_CERTIFICATE_P12_PATH`, `IOS_PROVISIONING_PROFILE_PATH`, and `APP_STORE_CONNECT_PRIVATE_KEY_PATH` for local runs, so a password manager can supply files only for the duration of a release. App Store Connect `.p8` keys passed through a path are not copied to `$HOME/.private_keys`; base64 CI input is decoded into a restricted temporary directory and removed on exit.
 
 ## Developer ID and notarization
 
@@ -48,7 +48,26 @@ Set repository variable `ENABLE_SIGNED_MACOS_RELEASE=true` and configure:
 
 The macOS target uses hardened runtime but remains intentionally unsandboxed so its opt-in local COLMAP/Nerfstudio tools can execute. The signed job verifies the code signature/runtime flag, submits a ZIP to `notarytool`, waits for acceptance, staples and validates the ticket, runs Gatekeeper assessment, and uploads the final archive.
 
-For a local release with an installed Developer ID certificate, `NOTARYTOOL_KEYCHAIN_PROFILE` can replace the three App Store Connect API variables. Supply the name of a profile already stored by `notarytool`; do not put passwords in repository files. The script records the JSON submission result and requires `Accepted` before stapling.
+For local notarization, authenticate with an App Store Connect **team API key**. Apple does not permit individual API keys to use `notarytool`. Keep the `.p8` file in your password manager and provide it only for the release run with `APP_STORE_CONNECT_PRIVATE_KEY_PATH`, plus `APP_STORE_CONNECT_KEY_ID` and `APP_STORE_CONNECT_ISSUER_ID`. The script passes that path directly to `notarytool` and does not create a persistent Keychain profile. CI can continue to use the encrypted `APP_STORE_CONNECT_PRIVATE_KEY_BASE64` secret; the script decodes it into a restricted temporary directory and removes that directory on exit.
+
+With Apple Passwords, save the App Store Connect `.p8` text in the notes for a dedicated account. For a local notarization, copy it into a private temporary file without putting it in a command argument or chat:
+
+```bash
+set -euo pipefail
+umask 077
+NOTARY_KEY_DIR="$(mktemp -d)"
+chmod 700 "$NOTARY_KEY_DIR"
+trap 'rm -rf "$NOTARY_KEY_DIR"' EXIT
+cat > "$NOTARY_KEY_DIR/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+# Paste the key text from Passwords, then press Control-D.
+chmod 600 "$NOTARY_KEY_DIR/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+APP_STORE_CONNECT_PRIVATE_KEY_PATH="$NOTARY_KEY_DIR/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8" \
+  tools/release/archive-macos.sh
+```
+
+Set the API key ID and issuer, team ID, Developer ID identity, marketing version, and build number in the release environment as well. The The API key ID, issuer ID, team ID, and Developer ID identity are identifiers, not passwords. Keep the `.p8` private key and certificate import password in Passwords; store the binary `.p12` certificate in encrypted file storage or the CI secret store. Never paste secret values into chat or commit them. Passwords has no CLI connection in this environment, so local retrieval remains a deliberate manual step.
+
+Apple Passwords syncs through iCloud Keychain. This flow avoids a persistent `notarytool` profile in the Mac Keychain, while a short-lived keychain remains necessary for `codesign` to use the Developer ID certificate.
 
 `tools/release/archive-macos.sh --sign-only` prepares and verifies the signed archive without a submission. Its output explicitly reports `NOTARIZATION_STATUS=not-submitted`; it is not a notarized distribution. `MACOS_DERIVED_DATA` and `MACOS_ARCHIVE_PATH` override the build and archive locations. For an iCloud-backed Desktop checkout, keep both under `~/Library/Developer/Xcode/` to avoid file-provider attributes and launch stalls in generated products.
 
@@ -56,7 +75,7 @@ The Codex Run action uses `script/build_and_run.sh` with ad hoc Debug signing. U
 
 ## Local Xcode notarization
 
-When an Apple account is already signed in to Xcode, open the Developer ID archive in Organizer, select **Distribute App → Direct Distribution**, wait for **Notarization succeeded**, then export. Verify the exported app independently with `codesign --verify --deep --strict --all-architectures`, `xcrun stapler validate`, and `spctl --assess --type execute --verbose=4`; Gatekeeper must report `Notarized Developer ID`. The October 1 archive completed this path. Keep credentials in Xcode/Keychain; this local flow does not configure GitHub’s signed release secrets.
+When an Apple account is already signed in to Xcode, open the Developer ID archive in Organizer, select **Distribute App → Direct Distribution**, wait for **Notarization succeeded**, then export. Verify the exported app independently with `codesign --verify --deep --strict --all-architectures`, `xcrun stapler validate`, and `spctl --assess --type execute --verbose=4`; Gatekeeper must report `Notarized Developer ID`. The October 1 archive completed this path. The scripted release path supplies notarization credentials at runtime and keeps GitHub Actions release secrets configured separately.
 
 ## External gates
 

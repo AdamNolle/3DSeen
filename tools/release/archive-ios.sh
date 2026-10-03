@@ -2,11 +2,23 @@
 set -euo pipefail
 
 : "${APPLE_TEAM_ID:?Missing Apple team ID}"
-: "${IOS_PROVISIONING_PROFILE_BASE64:?Missing iOS provisioning profile}"
+if [[ -n "${IOS_PROVISIONING_PROFILE_PATH:-}" ]]; then
+  [[ -f "$IOS_PROVISIONING_PROFILE_PATH" && -r "$IOS_PROVISIONING_PROFILE_PATH" ]] || {
+    echo 'IOS_PROVISIONING_PROFILE_PATH is not a readable file.' >&2
+    exit 1
+  }
+else
+  : "${IOS_PROVISIONING_PROFILE_BASE64:?Set a provisioning profile path or base64 value}"
+fi
 : "${MARKETING_VERSION:?Missing marketing version}"
 : "${CURRENT_PROJECT_VERSION:?Missing build number}"
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+PRIVATE_KEY_DIRECTORY=""
+cleanup() {
+  if [[ -n "$PRIVATE_KEY_DIRECTORY" ]]; then rm -rf "$PRIVATE_KEY_DIRECTORY"; fi
+}
+trap cleanup EXIT
 OUTPUT_ROOT=${RELEASE_OUTPUT_ROOT:-"$ROOT/dist/signed-ios"}
 ARCHIVE_PATH="$OUTPUT_ROOT/3DSeen-iOS.xcarchive"
 EXPORT_PATH="$OUTPUT_ROOT/export"
@@ -15,7 +27,11 @@ PROFILE_PLIST="${RUNNER_TEMP:-/tmp}/3dseen-profile.plist"
 EXPORT_OPTIONS="${RUNNER_TEMP:-/tmp}/3dseen-export-options.plist"
 mkdir -p "$OUTPUT_ROOT" "$HOME/Library/MobileDevice/Provisioning Profiles"
 
-printf '%s' "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
+if [[ -n "${IOS_PROVISIONING_PROFILE_PATH:-}" ]]; then
+  cp "$IOS_PROVISIONING_PROFILE_PATH" "$PROFILE_PATH"
+else
+  printf '%s' "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
+fi
 security cms -D -i "$PROFILE_PATH" > "$PROFILE_PLIST"
 PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$PROFILE_PLIST")
 PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$PROFILE_PLIST")
@@ -70,11 +86,18 @@ fi
 if [[ "${UPLOAD_TO_APP_STORE:-false}" == "true" ]]; then
   : "${APP_STORE_CONNECT_KEY_ID:?Missing App Store Connect key ID}"
   : "${APP_STORE_CONNECT_ISSUER_ID:?Missing App Store Connect issuer ID}"
-  : "${APP_STORE_CONNECT_PRIVATE_KEY_BASE64:?Missing App Store Connect private key}"
-  mkdir -p "$HOME/.private_keys"
-  KEY_PATH="$HOME/.private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
-  printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY_BASE64" | base64 --decode > "$KEY_PATH"
-  chmod 600 "$KEY_PATH"
+  if [[ -n "${APP_STORE_CONNECT_PRIVATE_KEY_PATH:-}" ]]; then
+    [[ -f "$APP_STORE_CONNECT_PRIVATE_KEY_PATH" && -r "$APP_STORE_CONNECT_PRIVATE_KEY_PATH" ]] || {
+      echo 'APP_STORE_CONNECT_PRIVATE_KEY_PATH is not a readable file.' >&2
+      exit 1
+    }
+    KEY_PATH="$APP_STORE_CONNECT_PRIVATE_KEY_PATH"
+  else
+    : "${APP_STORE_CONNECT_PRIVATE_KEY_BASE64:?Set an App Store Connect key path or base64 value}"
+    PRIVATE_KEY_DIRECTORY=$(mktemp -d "${RUNNER_TEMP:-/tmp}/3dseen-appstore.XXXXXX")
+    KEY_PATH="$PRIVATE_KEY_DIRECTORY/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+    (umask 077; printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY_BASE64" | base64 --decode > "$KEY_PATH")
+  fi
   xcrun altool --upload-app --type ios --file "$IPA" \
     --apiKey "$APP_STORE_CONNECT_KEY_ID" \
     --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
