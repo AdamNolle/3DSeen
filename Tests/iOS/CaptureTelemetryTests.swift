@@ -31,9 +31,10 @@ final class CaptureTelemetryTests: XCTestCase {
             phase: .capturing,
             frameCount: 3,
             surfaceTriangleCount: 400,
-            surfaceSampleCount: 1_250
+            surfaceSampleCount: 1_250,
+ trackedObjectCount: 3
         )
-        XCTAssertEqual(status.primaryFacts, ["3 frames", "400 faces", "1,250 surface dots"])
+        XCTAssertEqual(status.primaryFacts, ["3 frames", "400 faces", "1,250 surface dots", "3 tracked objects"])
     }
 
     func testSpaceCaptureGuidesDotsAndHapticCoverage() {
@@ -41,10 +42,11 @@ final class CaptureTelemetryTests: XCTestCase {
 
         XCTAssertEqual(
             status.guidance,
-            "Move slowly around walls, floors, furniture, and corners. "
-                + "World-locked dots mark measured surfaces; a subtle tap confirms new coverage. "
-                + "The live mesh is a responsive preview; the saved model uses all captured geometry and camera textures. "
-                + "Only visible, well-tracked surfaces can be captured."
+            "Move slowly around furniture and keep each object in view as you circle it. " +
+                "Bright dots mark Vision-segmented objects in LiDAR space; a light tap confirms new object detail. " +
+                "Blue dots continue to mark room surfaces. " +
+                "The live mesh is a responsive preview; the saved model uses all captured geometry and camera textures. " +
+                "Only visible, well-tracked surfaces can be captured."
         )
     }
 

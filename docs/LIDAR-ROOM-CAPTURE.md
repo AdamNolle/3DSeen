@@ -4,7 +4,13 @@ Choose **Rooms & Spaces**, read the room checklist, and start capture on a LiDAR
 
 Tap **Save texture** while pointing the center of the camera at a material to save a reusable square PNG snapshot. These photographs include the lighting present during capture. They are not seamless textures or measured albedo, roughness, metallic, or normal maps.
 
-Finish pauses capture and projects camera images onto the captured triangles, using depth confidence and depth agreement to reject unrelated surfaces. The exporter embeds the images in USDZ and groups faces by texture view and available category. Faces without an acceptable view remain neutral gray rather than borrowing unrelated colors. No boxes or synthetic surfaces replace the captured mesh. Review reports texture coverage over the completed mesh and the detected face categories. Categories are approximate labels on triangles; they do not create unique, editable object identities.
+Finish pauses capture and projects camera images onto the captured triangles, using depth confidence and depth agreement to reject unrelated surfaces. The exporter embeds the images in USDZ and groups faces by texture view and available category. Faces without an acceptable view remain neutral gray rather than borrowing unrelated colors. No boxes or synthetic surfaces replace the captured mesh. Review reports texture coverage over the completed mesh and the detected face categories. Categories are approximate labels on triangles; they do not create unique, editable object identities. These category labels, together with the live object tracks, still do not create separate editable object meshes.
+
+## Live object coverage
+
+During room capture, Vision separates noticeable foreground instances in the camera image and joins their depth samples to ARKit world coordinates. Bright white dots show measured points on those detected objects; blue dots continue to show room-surface coverage. Tracks persist across camera views by matching their 3D LiDAR samples, and light haptics mark newly measured object detail. The live HUD reports the current tracked-object count.
+
+Foreground segmentation cannot promise to identify every object. Small, hidden, transparent, reflective, moving, or poorly lit items may be missed, and a visible segment only receives dots where LiDAR depth is available with sufficient confidence. The finished USDZ remains one textured room mesh; these live tracks do not create separate editable object meshes. Inspect the result before discarding source data.
 
 Inspect the model in Viewer using Original Texture, then share USDZ from Export. The optional captured surface texture section shares PNG snapshots separately. Deleting source capture frames leaves the model and saved snapshots intact.
 

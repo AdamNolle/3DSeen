@@ -17,6 +17,7 @@ public struct LiveCaptureStatus: Equatable, Sendable {
     public let trackingStatus: String?
     public let surfaceTriangleCount: Int?
     public let surfaceSampleCount: Int?
+    public let trackedObjectCount: Int?
     public let texturedTriangleCount: Int?
     public let textureCoveragePercent: Int?
     public let surfaceClassificationSummary: String?
@@ -30,7 +31,8 @@ public struct LiveCaptureStatus: Equatable, Sendable {
         texturedTriangleCount: Int? = nil,
         textureCoveragePercent: Int? = nil,
         surfaceClassificationSummary: String? = nil,
-        surfaceSampleCount: Int? = nil
+        surfaceSampleCount: Int? = nil,
+        trackedObjectCount: Int? = nil
     ) {
         self.mode = mode
         self.phase = phase
@@ -38,6 +40,7 @@ public struct LiveCaptureStatus: Equatable, Sendable {
         self.trackingStatus = trackingStatus?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.surfaceTriangleCount = surfaceTriangleCount.map { max(0, $0) }
         self.surfaceSampleCount = surfaceSampleCount.map { max(0, $0) }
+        self.trackedObjectCount = trackedObjectCount.map { max(0, $0) }
         self.texturedTriangleCount = texturedTriangleCount.map { max(0, $0) }
         self.textureCoveragePercent = textureCoveragePercent.map { min(100, max(0, $0)) }
         self.surfaceClassificationSummary = surfaceClassificationSummary?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -71,6 +74,10 @@ public struct LiveCaptureStatus: Equatable, Sendable {
         if let surfaceSampleCount {
             facts.append("\(surfaceSampleCount.formatted()) surface dots")
         }
+        if mode == .space, let trackedObjectCount {
+            let label = trackedObjectCount == 1 ? "object" : "objects"
+            facts.append("\(trackedObjectCount) tracked \(label)")
+        }
         if let textureCoveragePercent {
             facts.append("\(textureCoveragePercent)% preview textured")
         } else if let texturedTriangleCount {
@@ -95,8 +102,9 @@ public struct LiveCaptureStatus: Equatable, Sendable {
         case (.space, .processing):
             return "Building the measured LiDAR surface and embedding captured camera textures in your model."
         case (.space, _):
-            return "Move slowly around walls, floors, furniture, and corners. " +
-                "World-locked dots mark measured surfaces; a subtle tap confirms new coverage. " +
+            return "Move slowly around furniture and keep each object in view as you circle it. " +
+                "Bright dots mark Vision-segmented objects in LiDAR space; a light tap confirms new object detail. " +
+                "Blue dots continue to mark room surfaces. " +
                 "The live mesh is a responsive preview; the saved model uses all captured geometry and camera textures. " +
                 "Only visible, well-tracked surfaces can be captured."
         case (.landscape, .capturing):

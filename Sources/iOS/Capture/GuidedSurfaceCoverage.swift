@@ -203,6 +203,111 @@ struct GuidedSurfaceCoverage: Sendable {
     }
 }
 
+/// One camera-view object hypothesis backed by measured LiDAR points.
+struct RoomObjectObservation: Sendable {
+    let instanceLabel: UInt8
+    let points: [SIMD3<Float>]
+}
+
+struct TrackedRoomObject: Sendable {
+    let identifier: Int
+    let points: [SIMD3<Float>]
+}
+
+/// Associates Vision's frame-local instance labels through their world-space LiDAR samples.
+/// Labels from Vision are intentionally never treated as persistent object identities.
+struct RoomObjectTrackRegistry: Sendable {
+    private struct Cell: Hashable, Sendable {
+        let x: Int
+        let y: Int
+        let z: Int
+
+        init(_ point: SIMD3<Float>) {
+            x = Int(floor(point.x / Self.size))
+            y = Int(floor(point.y / Self.size))
+            z = Int(floor(point.z / Self.size))
+        }
+
+        private static let size: Float = 0.12
+    }
+
+    private struct Track: Sendable {
+        let identifier: Int
+        var center: SIMD3<Float>
+        var cells: Set<Cell>
+        var lastSeen: TimeInterval
+    }
+
+    private(set) var count = 0
+    private var tracks: [Track] = []
+    private var nextIdentifier = 1
+
+    private static let maximumTrackCount = 64
+    private static let maximumCellsPerTrack = 2_048
+    private static let maximumAssociationDistance: Float = 0.30
+
+    mutating func update(
+        observations: [RoomObjectObservation],
+        timestamp: TimeInterval
+    ) -> [TrackedRoomObject] {
+        guard timestamp.isFinite else { return [] }
+        tracks.removeAll { timestamp - $0.lastSeen > 20 }
+        var matched = Set<Int>()
+        var output: [TrackedRoomObject] = []
+
+        for observation in observations.sorted(by: { $0.points.count > $1.points.count }) {
+            let points = observation.points.filter(Self.isValid)
+            guard points.count >= 12 else { continue }
+            let center = points.reduce(SIMD3<Float>.zero, +) / Float(points.count)
+            let observationCells = Set(points.map(Cell.init))
+            let match = tracks.indices
+                .filter { !matched.contains($0) }
+                .compactMap { index -> (Int, Int, Float)? in
+                    let track = tracks[index]
+                    let overlap = observationCells.intersection(track.cells).count
+                    let distance = simd_distance(center, track.center)
+                    guard overlap >= 3 || distance <= Self.maximumAssociationDistance else { return nil }
+                    return (index, overlap, distance)
+                }
+                .min { lhs, rhs in
+                    lhs.1 == rhs.1 ? lhs.2 < rhs.2 : lhs.1 > rhs.1
+                }?.0
+
+            let trackIndex: Int
+            if let match {
+                trackIndex = match
+                matched.insert(match)
+                tracks[match].center = tracks[match].center * 0.65 + center * 0.35
+                tracks[match].lastSeen = timestamp
+                for cell in observationCells where tracks[match].cells.count < Self.maximumCellsPerTrack {
+                    tracks[match].cells.insert(cell)
+                }
+            } else {
+                guard tracks.count < Self.maximumTrackCount else { continue }
+                trackIndex = tracks.count
+                let identifier = nextIdentifier
+                nextIdentifier += 1
+                tracks.append(Track(
+                    identifier: identifier,
+                    center: center,
+                    cells: Set(observationCells.prefix(Self.maximumCellsPerTrack)),
+                    lastSeen: timestamp
+                ))
+                matched.insert(trackIndex)
+            }
+            output.append(TrackedRoomObject(identifier: tracks[trackIndex].identifier, points: points))
+        }
+
+        count = tracks.count
+        return output
+    }
+
+    private static func isValid(_ point: SIMD3<Float>) -> Bool {
+        point.x.isFinite && point.y.isFinite && point.z.isFinite
+            && abs(point.x) < 10_000 && abs(point.y) < 10_000 && abs(point.z) < 10_000
+    }
+}
+
 /// A single indexed mesh keeps RealityKit draw cost independent of point count.
 struct GuidedSurfaceDotMesh: Sendable {
     let positions: [SIMD3<Float>]

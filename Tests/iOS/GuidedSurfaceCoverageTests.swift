@@ -3,6 +3,42 @@ import simd
 @testable import ThreeDSeen
 
 final class GuidedSurfaceCoverageTests: XCTestCase {
+    func testRoomObjectTracksFollowWorldSpaceInsteadOfFrameLocalVisionLabels() {
+        var tracker = RoomObjectTrackRegistry()
+        let firstObject = objectPoints(origin: .zero)
+        let first = tracker.update(
+            observations: [RoomObjectObservation(instanceLabel: 1, points: firstObject)],
+            timestamp: 1
+        )
+        XCTAssertEqual(first.map(\.identifier), [1])
+
+        let shiftedObject = objectPoints(origin: SIMD3<Float>(0.03, 0, 0))
+        let sameObject = tracker.update(
+            observations: [RoomObjectObservation(instanceLabel: 7, points: shiftedObject)],
+            timestamp: 2
+        )
+        XCTAssertEqual(sameObject.map(\.identifier), [1])
+
+        let nearbyObject = objectPoints(origin: SIMD3<Float>(0.55, 0, 0))
+        let twoObjects = tracker.update(
+            observations: [
+                RoomObjectObservation(instanceLabel: 1, points: shiftedObject),
+                RoomObjectObservation(instanceLabel: 2, points: nearbyObject)
+            ],
+            timestamp: 3
+        )
+        XCTAssertEqual(Set(twoObjects.map(\.identifier)), [1, 2])
+        XCTAssertEqual(tracker.count, 2)
+    }
+
+    private func objectPoints(origin: SIMD3<Float>) -> [SIMD3<Float>] {
+        (0..<4).flatMap { x in
+            (0..<4).map { y in
+                origin + SIMD3<Float>(Float(x) * 0.08, Float(y) * 0.08, 0)
+            }
+        }
+    }
+
     func testDepthGridSamplingProjectsValidSurfacePointsIntoWorldSpace() {
         var depths = Array(repeating: Float(2), count: 16)
         depths[7] = .nan

@@ -163,6 +163,7 @@
 		EAD320028C8170FC7A2B9907 /* HandoffPairingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96BE68CCC1669D6127D359C5 /* HandoffPairingCoordinator.swift */; };
 		EB2C0D73EEDCA21A965BA071 /* LocalQueueManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D346EB2BD18E2A661B3BF1F /* LocalQueueManager.swift */; };
 		EE22AADD355AE96D66605E0F /* HandoffCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9756B2993AD4E297961CB3B2 /* HandoffCoordinator.swift */; };
+		F0F468A6319F4972C1C1D3DF /* RoomSurfaceARView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F72A179EEFE8649E62398935 /* RoomSurfaceARView.swift */; };
 		F6230FCC1FFE9C5BF31111DB /* SplatGeneratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7F1EBB08D5A1806B90E8DB7 /* SplatGeneratorTests.swift */; };
 		F7676F45F78678BDB30183AD /* ThemeAndRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68EF972E44A504A2F5E88083 /* ThemeAndRenderTests.swift */; };
 		FA8BAA7FC7C95B8FED5F61DA /* HandoffResourceCipherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 112B7B43B8BA5B2CA4C8A555 /* HandoffResourceCipherTests.swift */; };
@@ -316,6 +317,7 @@
 		F5890050AC3403EB4697B582 /* ModelExportSharePackage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelExportSharePackage.swift; sourceTree = "<group>"; };
 		F5CD56748A9DBC6EEF36004D /* ExportScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportScreen.swift; sourceTree = "<group>"; };
 		F61C5D857D6ED1840F11ADA5 /* 3DSeen-macOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "3DSeen-macOS.entitlements"; sourceTree = "<group>"; };
+		F72A179EEFE8649E62398935 /* RoomSurfaceARView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomSurfaceARView.swift; sourceTree = "<group>"; };
 		F7F1EBB08D5A1806B90E8DB7 /* SplatGeneratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplatGeneratorTests.swift; sourceTree = "<group>"; };
 		F859450B348E448505DB12BA /* 3DSeen-macOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "3DSeen-macOSTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		F85DDBDD6E873DC5AAF7C124 /* LiveCaptureHUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveCaptureHUD.swift; sourceTree = "<group>"; };
@@ -395,6 +397,7 @@
 				F85DDBDD6E873DC5AAF7C124 /* LiveCaptureHUD.swift */,
 				C0DE453E975B978103D45FAD /* ObjectCaptureEngine.swift */,
 				9DAD8A7ADE795A2D03C0A5C7 /* RoomCaptureEngine.swift */,
+				F72A179EEFE8649E62398935 /* RoomSurfaceARView.swift */,
 				5B652434F37ABC86A66913D4 /* VisionForegroundSubjectDetector.swift */,
 			);
 			path = Capture;
@@ -959,6 +962,7 @@
 				4CDD4ACDBAC038E47AB73678 /* QualityScreen.swift in Sources */,
 				0101DB6CF38114299790084E /* ReviewScreen.swift in Sources */,
 				EABE927EC6A92DE33514BC0E /* RoomCaptureEngine.swift in Sources */,
+				F0F468A6319F4972C1C1D3DF /* RoomSurfaceARView.swift in Sources */,
 				6AAFE9E26B2C68818F4D7B4B /* SampleData.swift in Sources */,
 				039573D722A29ED96B69B144 /* ScanHandoffArchive.swift in Sources */,
 				1B8BAB4E8B4D64F5B877C099 /* ScanLifecycleManager.swift in Sources */,

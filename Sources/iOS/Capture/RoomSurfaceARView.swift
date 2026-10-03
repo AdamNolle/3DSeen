@@ -1,0 +1,138 @@
+import SwiftUI
+import RealityKit
+import Combine
+import UIKit
+import ARKit
+
+struct RoomSurfaceARView: UIViewRepresentable {
+    let controller: RoomCaptureController
+    let surfacePoints: [SIMD3<Float>]
+    let objectPoints: [SIMD3<Float>]
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIView(context: Context) -> ARView {
+        let view = ARView(frame: .zero, cameraMode: .ar, automaticallyConfigureSession: false)
+        view.session = controller.session
+        controller.attachPreview(view)
+        context.coordinator.attach(to: view)
+        return view
+    }
+
+    func updateUIView(_ uiView: ARView, context: Context) {
+        context.coordinator.update(surfacePoints: surfacePoints, objectPoints: objectPoints)
+    }
+
+    static func dismantleUIView(_ uiView: ARView, coordinator: Coordinator) {
+        coordinator.detach(from: uiView)
+    }
+
+    @MainActor
+    final class Coordinator {
+        private let anchor = AnchorEntity(world: .zero)
+        private let dotEntity = ModelEntity()
+        private let objectDotEntity = ModelEntity()
+        private let dotMaterial = UnlitMaterial(color: UIColor(red: 0.20, green: 0.72, blue: 1, alpha: 1))
+        private let objectDotMaterial = UnlitMaterial(color: UIColor(white: 1, alpha: 1))
+        private let dotBuildQueue = DispatchQueue(label: "com.adamnolle.3DSeen.room-surface-dots", qos: .userInitiated)
+        private weak var view: ARView?
+        private var meshRequests = Set<AnyCancellable>()
+        private var revision: UInt64 = 0
+        private var previousPoints: [SIMD3<Float>] = []
+        private var previousObjectPoints: [SIMD3<Float>] = []
+        private var pendingPoints: (surface: [SIMD3<Float>], objects: [SIMD3<Float>])?
+        private var buildInFlight = false
+
+        func attach(to view: ARView) {
+            self.view = view
+            if ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) {
+                view.environment.sceneUnderstanding.options.insert(.occlusion)
+            }
+            if !view.scene.anchors.contains(where: { $0 === anchor }) {
+                view.scene.addAnchor(anchor)
+            }
+            if !anchor.children.contains(where: { $0 === dotEntity }) {
+                anchor.addChild(dotEntity)
+            }
+            if !anchor.children.contains(where: { $0 === objectDotEntity }) {
+                anchor.addChild(objectDotEntity)
+            }
+        }
+
+        func update(surfacePoints: [SIMD3<Float>], objectPoints: [SIMD3<Float>]) {
+            guard surfacePoints != previousPoints || objectPoints != previousObjectPoints else { return }
+            previousPoints = surfacePoints
+            previousObjectPoints = objectPoints
+            revision &+= 1
+            guard !surfacePoints.isEmpty || !objectPoints.isEmpty else {
+                pendingPoints = nil
+                meshRequests.removeAll()
+                dotEntity.model = nil
+                objectDotEntity.model = nil
+                return
+            }
+            pendingPoints = (surfacePoints, objectPoints)
+            scheduleDotMeshBuildIfNeeded()
+        }
+
+        func detach(from view: ARView) {
+            meshRequests.removeAll()
+            pendingPoints = nil
+            revision &+= 1
+            view.scene.anchors.remove(anchor)
+            self.view = nil
+        }
+
+        private func scheduleDotMeshBuildIfNeeded() {
+            guard !buildInFlight, let points = pendingPoints else { return }
+            pendingPoints = nil
+            buildInFlight = true
+            let buildRevision = revision
+            dotBuildQueue.async { [weak self] in
+                let surfaceGeometry = GuidedSurfaceDotMesh.build(points: points.surface)
+                let objectGeometry = GuidedSurfaceDotMesh.build(points: points.objects, radius: 0.0055)
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.buildInFlight = false
+                    if self.revision == buildRevision, self.view != nil {
+                        self.meshRequests.removeAll()
+                        self.installDotMesh(surfaceGeometry, on: self.dotEntity, material: self.dotMaterial,
+                                            name: "GuidedRoomSurfaceDots", revision: buildRevision)
+                        self.installDotMesh(objectGeometry, on: self.objectDotEntity, material: self.objectDotMaterial,
+                                            name: "TrackedObjectSurfaceDots", revision: buildRevision)
+                    }
+                    self.scheduleDotMeshBuildIfNeeded()
+                }
+            }
+        }
+
+        private func installDotMesh(
+            _ geometry: GuidedSurfaceDotMesh,
+            on entity: ModelEntity,
+            material: UnlitMaterial,
+            name: String,
+            revision: UInt64
+        ) {
+            guard !geometry.positions.isEmpty else {
+                entity.model = nil
+                return
+            }
+            var descriptor = MeshDescriptor(name: name)
+            descriptor.positions = MeshBuffers.Positions(geometry.positions)
+            descriptor.normals = MeshBuffers.Normals(geometry.normals)
+            descriptor.primitives = .triangles(geometry.triangleIndices)
+            MeshResource.generateAsync(from: [descriptor])
+                .receive(on: DispatchQueue.main)
+                .sink(
+                    receiveCompletion: { _ in },
+                    receiveValue: { [weak self, weak entity] mesh in
+                        guard let self, let entity, self.revision == revision, self.view != nil else { return }
+                        entity.model = ModelComponent(mesh: mesh, materials: [material])
+                    }
+                )
+                .store(in: &meshRequests)
+        }
+    }
+}
