@@ -99,6 +99,7 @@ if [[ "${UPLOAD_TO_APP_STORE:-false}" == "true" ]]; then
     (umask 077; printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY_BASE64" | base64 --decode > "$KEY_PATH")
   fi
   xcrun altool --upload-app --type ios --file "$IPA" \
-    --apiKey "$APP_STORE_CONNECT_KEY_ID" \
-    --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
+    --api-key "$APP_STORE_CONNECT_KEY_ID" \
+    --api-issuer "$APP_STORE_CONNECT_ISSUER_ID" \
+    --p8-file-path "$KEY_PATH"
 fi
