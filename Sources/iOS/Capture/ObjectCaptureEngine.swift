@@ -46,29 +46,34 @@ struct ObjectCaptureEngine: View {
     }
 
     private var controls: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: statusIcon)
-                    .font(.title3.weight(.semibold))
+                    .font(.sf(17, .semibold))
                     .foregroundStyle(statusColor)
                     .frame(width: 28)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(statusTitle).font(.headline)
+                    Text(statusTitle).font(.sf(16, .semibold))
                     Text(capture.snapshot.instruction)
-                        .font(.subheadline)
+                        .font(.sf(13.5))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 4)
                 Text("\(capture.snapshot.frameCount)")
-                    .font(.title2.monospacedDigit().weight(.semibold))
-                .accessibilityLabel("\(capture.snapshot.frameCount) photos saved")
+                    .font(.sf(18, .semibold).monospacedDigit())
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.white.opacity(0.12), in: Capsule())
+                    .accessibilityLabel("\(capture.snapshot.frameCount) photos saved")
             }
 
             HStack(spacing: 8) {
                 Image(systemName: "circle.grid.3x3.fill")
                     .foregroundStyle(Color(red: 0.30, green: 0.72, blue: 1.0))
                 Text(surfacePointStatus)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                 Spacer()
                 Text(capture.snapshot.surfacePointCount.formatted())
                     .monospacedDigit()
@@ -81,47 +86,15 @@ struct ObjectCaptureEngine: View {
             .accessibilityLabel(surfacePointStatus)
             .accessibilityValue("\(capture.snapshot.surfacePointCount) spatial samples")
 
-            HStack(alignment: .firstTextBaseline, spacing: 7) {
-                Image(systemName: surfacePointDetailIcon)
-                    .font(.caption2.weight(.semibold))
-                Text(surfacePointDetail)
-                    .font(.caption2)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
-            }
-            .foregroundStyle(.secondary)
-            .accessibilityElement(children: .combine)
-
-            if capture.meshTriangleCount > 0 {
-                VStack(spacing: 5) {
-                    HStack {
-                        Label("Live surface", systemImage: "cube")
-                        Spacer()
-                        if capture.texturedMeshTriangleCount > 0 {
-                            Text("\(capture.texturedMeshTriangleCount.formatted()) textured preview faces")
-                                .monospacedDigit()
-                        } else if capture.liveMeshPreview != nil {
-                            Text("Waiting for a clean texture view…")
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text("Building the object surface…")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .font(.caption.weight(.medium))
-                .accessibilityElement(children: .combine)
-            }
-
             VStack(spacing: 4) {
                 ProgressView(value: captureProgress)
                     .tint(Color(red: 0.38, green: 0.72, blue: 0.98))
                 HStack {
                     Text("Photo set")
                     Spacer()
-                    Text("\(capture.snapshot.frameCount) of \(capture.snapshot.recommendedFrameCount) recommended")
+                    Text("\(capture.snapshot.frameCount) / \(capture.snapshot.recommendedFrameCount) recommended")
                 }
-                .font(.caption)
+                .font(.sf(11.5, .medium))
                 .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .ignore)
@@ -129,18 +102,44 @@ struct ObjectCaptureEngine: View {
             .accessibilityValue("\(capture.snapshot.frameCount) of \(capture.snapshot.recommendedFrameCount) recommended photos")
 
             if showsDetails {
-                HStack {
-                    Label(
-                        capture.snapshot.isSubjectLocked ? "subject locked" : "finding subject",
-                        systemImage: capture.snapshot.isSubjectLocked ? "lock.fill" : "lock.open"
-                    )
-                    Spacer()
-                    Label(
-                        capture.snapshot.pointSource?.rawValue ?? capture.snapshot.trackingStatus,
-                        systemImage: "circle.grid.cross"
-                    )
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 7) {
+                        Image(systemName: surfacePointDetailIcon)
+                            .font(.caption2.weight(.semibold))
+                        Text(surfacePointDetail)
+                            .font(.caption2)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                    }
+
+                    if capture.meshTriangleCount > 0 {
+                        HStack {
+                            Label("Live surface", systemImage: "cube")
+                            Spacer()
+                            if capture.texturedMeshTriangleCount > 0 {
+                                Text("\(capture.texturedMeshTriangleCount.formatted()) textured faces")
+                                    .monospacedDigit()
+                            } else if capture.liveMeshPreview != nil {
+                                Text("Waiting for a clean texture view…")
+                            } else {
+                                Text("Building the object surface…")
+                            }
+                        }
+                    }
+
+                    HStack {
+                        Label(
+                            capture.snapshot.isSubjectLocked ? "subject locked" : "finding subject",
+                            systemImage: capture.snapshot.isSubjectLocked ? "lock.fill" : "lock.open"
+                        )
+                        Spacer()
+                        Label(
+                            capture.snapshot.pointSource?.rawValue ?? capture.snapshot.trackingStatus,
+                            systemImage: "circle.grid.cross"
+                        )
+                    }
                 }
-                .font(.caption)
+                .font(.caption2)
                 .foregroundStyle(.secondary)
             }
 
@@ -164,14 +163,23 @@ struct ObjectCaptureEngine: View {
             }
 
             Button(showsDetails ? "Hide scan details" : "Show scan details") {
-                withAnimation(.easeInOut(duration: 0.2)) { showsDetails.toggle() }
+                showsDetails.toggle()
             }
-            .font(.caption.weight(.semibold))
+            .font(.sf(12, .semibold))
+            .foregroundStyle(Color(red: 0.56, green: 0.78, blue: 1))
+            .frame(minHeight: 40)
+            .buttonStyle(.plain)
         }
-        .padding(16)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .padding(.horizontal, 12)
-        .padding(.bottom, 10)
+        .padding(14)
+        .frame(maxWidth: 520)
+        .background(.black.opacity(0.56), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(.white.opacity(0.14), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.24), radius: 18, y: 8)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 12)
         .accessibilityElement(children: .contain)
     }
 
