@@ -371,27 +371,34 @@ struct GuidedSurfaceDotMesh: Sendable {
         guard radius.isFinite, radius > 0 else {
             return Self(positions: [], normals: [], triangleIndices: [])
         }
-        let directions: [SIMD3<Float>] = [
-            SIMD3<Float>(radius, 0, 0), SIMD3<Float>(0, radius, 0),
-            SIMD3<Float>(-radius, 0, 0), SIMD3<Float>(0, -radius, 0),
-            SIMD3<Float>(0, 0, radius), SIMD3<Float>(0, 0, -radius)
+        let phi = (1 + sqrt(5.0)) / 2
+        let unitVertices: [SIMD3<Float>] = [
+            SIMD3(-1, Float(phi), 0), SIMD3(1, Float(phi), 0),
+            SIMD3(-1, -Float(phi), 0), SIMD3(1, -Float(phi), 0),
+            SIMD3(0, -1, Float(phi)), SIMD3(0, 1, Float(phi)),
+            SIMD3(0, -1, -Float(phi)), SIMD3(0, 1, -Float(phi)),
+            SIMD3(Float(phi), 0, -1), SIMD3(Float(phi), 0, 1),
+            SIMD3(-Float(phi), 0, -1), SIMD3(-Float(phi), 0, 1)
         ]
+        let directions = unitVertices.map { simd_normalize($0) * radius }
         let triangles: [UInt32] = [
-            4, 0, 1, 4, 1, 2, 4, 2, 3, 4, 3, 0,
-            5, 1, 0, 5, 2, 1, 5, 3, 2, 5, 0, 3
+            0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11,
+            1, 5, 9, 5, 11, 4, 11, 10, 2, 10, 7, 6, 7, 1, 8,
+            3, 9, 4, 3, 4, 2, 3, 2, 6, 3, 6, 8, 3, 8, 9,
+            4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7, 9, 8, 1
         ]
         let validPoints = points.filter { $0.x.isFinite && $0.y.isFinite && $0.z.isFinite }
         var positions: [SIMD3<Float>] = []
         var normals: [SIMD3<Float>] = []
         var triangleIndices: [UInt32] = []
-        positions.reserveCapacity(validPoints.count * directions.count)
-        normals.reserveCapacity(validPoints.count * directions.count)
+        positions.reserveCapacity(validPoints.count * unitVertices.count)
+        normals.reserveCapacity(validPoints.count * unitVertices.count)
         triangleIndices.reserveCapacity(validPoints.count * triangles.count)
 
         for point in validPoints {
             positions.append(contentsOf: directions.map { point + $0 })
-            normals.append(contentsOf: directions.map { simd_normalize($0) })
-            let base = UInt32(positions.count - directions.count)
+            normals.append(contentsOf: unitVertices.map { simd_normalize($0) })
+            let base = UInt32(positions.count - unitVertices.count)
             triangleIndices.append(contentsOf: triangles.map { base + $0 })
         }
 

@@ -1,16 +1,19 @@
 import SwiftUI
 import AVFoundation
 import ARKit
+import UIKit
 
 /// Hosts the selected live capture engine. Auto-Pilot begins with a camera-only Vision pass,
 /// then swaps into the concrete engine it selected without fabricating a scene decision.
 struct CaptureCoordinatorView: View {
     @EnvironmentObject var stateMachine: ProcessingStateMachine
+    @Environment(\.scenePhase) private var scenePhase
     let captureMode: CaptureMode
     let attemptID: UUID
     let recommendedObjectFrameCount: Int
     var onCancel: (() -> Void)?
     @State private var resolvedAutoPilotMode: CaptureMode?
+    @State private var idleTimerLease = CaptureIdleTimerLease()
 
     init(
         captureMode: CaptureMode,
@@ -36,7 +39,32 @@ struct CaptureCoordinatorView: View {
                 || stateMachine.activeCaptureAttemptID != attemptID {
                 stateMachine.send(.startCapture(captureMode, attemptID: attemptID))
             }
+            updateIdleTimerLease()
         }
+        .onChange(of: shouldKeepDisplayAwake) { _, _ in updateIdleTimerLease() }
+        .onDisappear(perform: restoreIdleTimer)
+    }
+
+    private var shouldKeepDisplayAwake: Bool {
+        CaptureDisplayAwakePolicy.shouldKeepAwake(
+            state: stateMachine.state,
+            activeAttemptID: stateMachine.activeCaptureAttemptID,
+            attemptID: attemptID,
+            isSceneActive: scenePhase == .active
+        )
+    }
+
+    private func updateIdleTimerLease() {
+        guard let value = idleTimerLease.update(
+            isCapturing: shouldKeepDisplayAwake,
+            currentValue: UIApplication.shared.isIdleTimerDisabled
+        ) else { return }
+        UIApplication.shared.isIdleTimerDisabled = value
+    }
+
+    private func restoreIdleTimer() {
+        guard let value = idleTimerLease.restore() else { return }
+        UIApplication.shared.isIdleTimerDisabled = value
     }
 
     @ViewBuilder private var captureContent: some View {
@@ -112,21 +140,27 @@ private struct AutoPilotCaptureEngine: View {
             AutoPilotCameraPreview(session: controller.session)
                 .ignoresSafeArea()
 
-            VStack(spacing: 14) {
-                Spacer()
-                ProgressView().tint(.white)
-                Text("Analyzing live scene")
-                    .font(.headline)
-                    .foregroundStyle(.white)
+            HStack(spacing: 10) {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(.white)
                 Text(controller.statusText)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.76))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
+                    .font(.system(.subheadline, design: .rounded, weight: .medium))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .contentTransition(.opacity)
             }
-            .padding(22)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .padding(32)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(.black.opacity(0.52), in: Capsule())
+            .overlay(Capsule().strokeBorder(.white.opacity(0.14), lineWidth: 1))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .padding(.horizontal, 16)
+            .padding(.top, 64)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Analyzing live scene")
+            .accessibilityValue(controller.statusText)
         }
         .onAppear {
             controller.onResolved = onResolved
@@ -139,7 +173,7 @@ private struct AutoPilotCaptureEngine: View {
 
 private final class AutoPilotCaptureController: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     let session = AVCaptureSession()
-    @Published private(set) var statusText = "Looking for an object, room, or outdoor scene…"
+    @Published private(set) var statusText = "Detecting scan type"
 
     var onResolved: ((CaptureMode) -> Void)?
     var onFailure: ((String) -> Void)?
@@ -218,7 +252,7 @@ private final class AutoPilotCaptureController: NSObject, ObservableObject, AVCa
     private func scheduleObjectFallback() {
         guard !isResolving else { return }
         let workItem = DispatchWorkItem { [weak self] in
-            self?.resolve(.object, detail: "Using Object capture. You can choose a different mode before starting another scan.")
+            self?.resolve(.object, detail: "Starting Object capture")
         }
         timeoutWorkItem = workItem
         frameQueue.asyncAfter(deadline: .now() + 5, execute: workItem)
@@ -255,7 +289,7 @@ private final class AutoPilotCaptureController: NSObject, ObservableObject, AVCa
         }
 
         guard consecutiveSuggestions >= 3 else { return }
-        resolve(resolvedMode, detail: "Using \(resolvedMode.rawValue) capture.")
+        resolve(resolvedMode, detail: "Starting \(resolvedMode.rawValue) scan")
     }
 
     private func resolve(_ mode: CaptureMode, detail: String) {

@@ -254,13 +254,15 @@ final class GuidedSurfaceCoverageTests: XCTestCase {
         XCTAssertGreaterThan(coverage.hapticMilestone, 0)
     }
 
-    func testBatchedSurfaceDotMeshUsesOneMarkerPerPoint() {
+    func testBatchedSurfaceDotMeshUsesSmoothShadedLowPolyMarkers() {
         let mesh = GuidedSurfaceDotMesh.build(points: [.zero, SIMD3<Float>(1, 2, 3)])
 
-        XCTAssertEqual(mesh.positions.count, 12)
-        XCTAssertEqual(mesh.normals.count, 12)
-        XCTAssertEqual(mesh.triangleIndices.count, 48)
-        XCTAssertEqual(mesh.triangleIndices.max(), 11)
+        XCTAssertEqual(mesh.positions.count, 24)
+        XCTAssertEqual(mesh.normals.count, 24)
+        XCTAssertEqual(mesh.triangleIndices.count, 120)
+        XCTAssertEqual(mesh.triangleIndices.max(), 23)
+        XCTAssertTrue(mesh.normals.allSatisfy { abs(simd_length($0) - 1) < 0.0001 })
+        XCTAssertTrue(mesh.positions.prefix(12).allSatisfy { abs(simd_length($0) - 0.0045) < 0.0001 })
     }
 
     func testCoverageSkipsNonFiniteAndOutOfRangeWorldPoints() {

@@ -135,10 +135,23 @@ public struct BlenderModelConverter: Sendable {
         process.standardOutput = outputPipe
         process.standardError = outputPipe
 
+        let terminationStatuses = AsyncStream<Int32> { continuation in
+            process.terminationHandler = { terminatedProcess in
+                continuation.yield(terminatedProcess.terminationStatus)
+                continuation.finish()
+            }
+        }
+
         do {
             try process.run()
         } catch {
             throw ConverterError.processFailed(error.localizedDescription)
+        }
+        let terminationTask = Task {
+            for await status in terminationStatuses {
+                return status
+            }
+            return process.terminationStatus
         }
         let output = await withTaskCancellationHandler {
             await Task.detached(priority: .utility) {
@@ -147,10 +160,10 @@ public struct BlenderModelConverter: Sendable {
         } onCancel: {
             Self.terminateProcessGroup(process)
         }
-        process.waitUntilExit()
+        let terminationStatus = await terminationTask.value
         if Task.isCancelled { throw CancellationError() }
-        guard process.terminationStatus == 0 else {
-            let detail = String(data: output, encoding: .utf8) ?? "Blender exited with status \(process.terminationStatus)."
+        guard terminationStatus == 0 else {
+            let detail = String(data: output, encoding: .utf8) ?? "Blender exited with status \(terminationStatus)."
             throw ConverterError.processFailed(String(detail.suffix(900)).trimmingCharacters(in: .whitespacesAndNewlines))
         }
         guard Self.isValidOutput(at: stagingURL, for: format) else {

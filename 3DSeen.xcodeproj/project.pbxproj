@@ -159,6 +159,7 @@
 		CFD0500359BA71DF96DAA76B /* 3DSeenIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = CA8798C371C22F3700560089 /* 3DSeenIcon.icon */; };
 		D0CBA0375333C13FC38AFBFF /* ComputeOption.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70A9B012C4A9D6C001FE697B /* ComputeOption.swift */; };
 		D1D233A818CB7CB0E912741B /* GuidedSurfaceCoverageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88DFC3B6289EC43C4FB9F587 /* GuidedSurfaceCoverageTests.swift */; };
+		D2337A538763134A3D3394C9 /* CaptureDisplayAwakeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 416545449D83F1BB9E65B195 /* CaptureDisplayAwakeTests.swift */; };
 		D352A51421B97389F39FD80A /* HandoffProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60DF3F918AC67A5FC851F598 /* HandoffProtocol.swift */; };
 		D4E47FBFB8E7D4BBDF6CC384 /* SplatRoundTripTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40C30F34558AA0A12627CAB5 /* SplatRoundTripTests.swift */; };
 		D69521135E4351DF56ABC3CA /* CompactSplatFileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09C9FD9CDF8F18FC70EF9B3E /* CompactSplatFileTests.swift */; };
@@ -237,6 +238,7 @@
 		3FD1D9DF0008E6C70E565D89 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		408269989B88069C5E20274C /* CaptureCoordinatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureCoordinatorView.swift; sourceTree = "<group>"; };
 		40C30F34558AA0A12627CAB5 /* SplatRoundTripTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplatRoundTripTests.swift; sourceTree = "<group>"; };
+		416545449D83F1BB9E65B195 /* CaptureDisplayAwakeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureDisplayAwakeTests.swift; sourceTree = "<group>"; };
 		4461CB2D25A6C72D95D52207 /* LiDARCaptureFrames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiDARCaptureFrames.swift; sourceTree = "<group>"; };
 		44807A4146F6D3C1EE584B6D /* GuidedScanCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidedScanCore.swift; sourceTree = "<group>"; };
 		448C3D9F066DE7EC78999311 /* ScanHandoffArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanHandoffArchive.swift; sourceTree = "<group>"; };
@@ -543,6 +545,7 @@
 			children = (
 				281F78B7D402BE66E74A9771 /* AutoPilotTests.swift */,
 				FFDD3136F73284BD19201AB0 /* BoundedMeshAnchorStoreTests.swift */,
+				416545449D83F1BB9E65B195 /* CaptureDisplayAwakeTests.swift */,
 				E2D63C1AF9F8FD5E2C6AFC43 /* CaptureTelemetryTests.swift */,
 				64953E3F4E46190D0E5C36FE /* ComputeDetailCapabilityTests.swift */,
 				C1A28D2A5101900B49581CE0 /* GuidedScannerTests.swift */,
@@ -835,6 +838,7 @@
 				0B98DA421C4EC7CFC7DA9F9A /* AutoPilotTests.swift in Sources */,
 				58873C98237C01EC4F4743F7 /* BoundedArchiveExtractorTests.swift in Sources */,
 				F0058E2ED91AA837FCDFE011 /* BoundedMeshAnchorStoreTests.swift in Sources */,
+				D2337A538763134A3D3394C9 /* CaptureDisplayAwakeTests.swift in Sources */,
 				E5D1820F52E8DC53581193E6 /* CaptureTelemetryTests.swift in Sources */,
 				4095D1BC6D04B6BDC2CF1CD0 /* CompactSplatFileTests.swift in Sources */,
 				E1D81375B20049AEEEC86FF2 /* ComputeDetailCapabilityTests.swift in Sources */,
@@ -1055,7 +1059,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Sources/macOS/3DSeen-macOS.entitlements";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = RSDJXF7DXN;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -1134,7 +1138,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = 3DSeenIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = RSDJXF7DXN;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Sources/iOS/Info.plist;
@@ -1157,7 +1161,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = 3DSeenIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = RSDJXF7DXN;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Sources/iOS/Info.plist;
@@ -1262,7 +1266,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Sources/macOS/3DSeen-macOS.entitlements";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = RSDJXF7DXN;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;

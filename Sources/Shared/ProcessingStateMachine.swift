@@ -30,6 +30,39 @@ public enum AppState: Equatable {
     case thermalThrottled(savedStateURL: URL)
 }
 
+/// Keeps capture-specific UI effects scoped to the active scan attempt.
+enum CaptureDisplayAwakePolicy {
+    static func shouldKeepAwake(
+        state: AppState,
+        activeAttemptID: UUID?,
+        attemptID: UUID,
+        isSceneActive: Bool
+    ) -> Bool {
+        guard isSceneActive else { return false }
+        guard activeAttemptID == attemptID else { return false }
+        guard case .capturing = state else { return false }
+        return true
+    }
+}
+
+/// Temporarily disables the idle timer while a capture is active and restores the
+/// value that was in effect before the scan began.
+struct CaptureIdleTimerLease {
+    private var previousValue: Bool?
+
+    mutating func update(isCapturing: Bool, currentValue: Bool) -> Bool? {
+        guard isCapturing else { return restore() }
+        guard previousValue == nil else { return nil }
+        previousValue = currentValue
+        return currentValue ? nil : true
+    }
+
+    mutating func restore() -> Bool? {
+        defer { previousValue = nil }
+        return previousValue
+    }
+}
+
 public struct CaptureCompletion: Equatable, Sendable {
     public let attemptID: UUID
     public let mode: CaptureMode
