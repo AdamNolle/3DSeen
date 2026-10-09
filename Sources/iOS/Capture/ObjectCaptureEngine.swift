@@ -456,7 +456,10 @@ private struct GuidedObjectARView: UIViewRepresentable {
                         receiveValue: { [weak self, weak nextAnchor] mesh in
                         guard let self, let nextAnchor,
                               self.installedMeshRevision == preview.revision else { return }
-                        let entity = ModelEntity(mesh: mesh, materials: [Self.blueprintMaterial()])
+                        let entity = ModelEntity(
+                            mesh: mesh,
+                            materials: [CapturePreviewMaterials.blueprintSurface()]
+                        )
                         nextAnchor.addChild(entity)
                         guard let textureURL = batch.textureURL else { return }
                         if let texture = self.meshTextures[textureURL] {
@@ -482,18 +485,6 @@ private struct GuidedObjectARView: UIViewRepresentable {
                     )
                     .store(in: &meshRequests)
             }
-        }
-
-        private static func blueprintMaterial() -> PhysicallyBasedMaterial {
-            var material = PhysicallyBasedMaterial()
-            material.baseColor = .init(
-                tint: UIColor(red: 0.09, green: 0.31, blue: 0.92, alpha: 1),
-                texture: nil
-            )
-            material.roughness = 0.7
-            material.faceCulling = .none
-            material.blending = .transparent(opacity: 0.34)
-            return material
         }
 
         private static func texturedMaterial(_ texture: TextureResource) -> PhysicallyBasedMaterial {

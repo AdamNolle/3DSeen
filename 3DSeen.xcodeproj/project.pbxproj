@@ -128,6 +128,7 @@
 		AA464BDF86FCE76EDD5F882E /* PBRMaterialTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1867E16CD3C9B0B46E98823F /* PBRMaterialTests.swift */; };
 		AAF5D0F35FCEB5BB7F1AE0A8 /* MaterialOverrideLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = A62228C3C6D40D57E5609FAF /* MaterialOverrideLibrary.swift */; };
 		ACB180BF6FB8355B721C6C8A /* CaptureQualityAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E98F370212A0EB3C878F8F5D /* CaptureQualityAnalyzer.swift */; };
+		ACDB18C33340B94A8273A4E1 /* CapturePreviewMaterials.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E6FAD9C74C5CF67502A4329 /* CapturePreviewMaterials.swift */; };
 		AE8F535CD9B1D83E75355533 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFCC585299A17E4BD48468C3 /* ContentView.swift */; };
 		AF5998B414E507B278960DEA /* ComputeCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D83DD0DC72326B02DADE40A /* ComputeCoordinator.swift */; };
 		B3CEF8F359F33CB80B9FA481 /* ModelExportSharePackageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAFF5950B8FF0B71FAB5CC2D /* ModelExportSharePackageTests.swift */; };
@@ -213,6 +214,7 @@
 		0ABA6E8C22956A44B83CEA87 /* HandoffTrust.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffTrust.swift; sourceTree = "<group>"; };
 		0BEDEB7EFB54C45767689D41 /* MacLibraryPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacLibraryPane.swift; sourceTree = "<group>"; };
 		0CBF9733CFA99C004E8AAAF6 /* GuidedCaptureTemporarySource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuidedCaptureTemporarySource.swift; sourceTree = "<group>"; };
+		0E6FAD9C74C5CF67502A4329 /* CapturePreviewMaterials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapturePreviewMaterials.swift; sourceTree = "<group>"; };
 		0E7DB58CB14F3185D5564E53 /* WizardFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WizardFlowUITests.swift; sourceTree = "<group>"; };
 		0E9069508A6BB2A6AF3157E7 /* HandoffTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffTransport.swift; sourceTree = "<group>"; };
 		10DEAF503F471822B4E715BC /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -402,6 +404,7 @@
 			isa = PBXGroup;
 			children = (
 				408269989B88069C5E20274C /* CaptureCoordinatorView.swift */,
+				0E6FAD9C74C5CF67502A4329 /* CapturePreviewMaterials.swift */,
 				0CBF9733CFA99C004E8AAAF6 /* GuidedCaptureTemporarySource.swift */,
 				ECFEBEDA5D72BCD7B00A41D8 /* GuidedObjectCaptureController.swift */,
 				73F041A48B09A08901142E55 /* GuidedObjectCaptureController+AR.swift */,
@@ -946,6 +949,7 @@
 				C70103EF267A9540CD99E9F3 /* BoundedMeshAnchorStore.swift in Sources */,
 				963C111EC42D504BC96AB7DE /* BriefingScreen.swift in Sources */,
 				115B1546366E464ABE2A4F77 /* CaptureCoordinatorView.swift in Sources */,
+				ACDB18C33340B94A8273A4E1 /* CapturePreviewMaterials.swift in Sources */,
 				ACB180BF6FB8355B721C6C8A /* CaptureQualityAnalyzer.swift in Sources */,
 				4467A3C868558569446D39A1 /* CaptureScreen.swift in Sources */,
 				257348DA1AAF64E91058725F /* CompactSplatFile.swift in Sources */,

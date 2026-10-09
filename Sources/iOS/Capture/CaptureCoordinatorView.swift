@@ -145,11 +145,10 @@ private struct AutoPilotCaptureEngine: View {
                     .controlSize(.small)
                     .tint(.white)
                 Text(controller.statusText)
-                    .font(.system(.subheadline, design: .rounded, weight: .medium))
+                    .font(.sf(14, .medium))
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .contentTransition(.opacity)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)

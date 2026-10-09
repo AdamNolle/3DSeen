@@ -671,7 +671,10 @@ extension RoomCaptureController {
                     receiveValue: { [weak self, weak anchor] mesh in
                         guard let self, let anchor, self.installedPreviewRevision == preview.revision,
                               !self.isCancelled else { return }
-                        let entity = ModelEntity(mesh: mesh, materials: [Self.blueprintMeshMaterial()])
+                        let entity = ModelEntity(
+                            mesh: mesh,
+                            materials: [CapturePreviewMaterials.blueprintSurface()]
+                        )
                         if let objectIdentifier = batch.objectIdentifier {
                             let objectNode = self.previewObjectNodes[objectIdentifier] ?? {
                                 let node = Entity()
@@ -720,15 +723,6 @@ extension RoomCaptureController {
         previewAnchor = nil
         texturedTriangleCount = 0
         previewTriangleCount = 0
-    }
-
-    private static func blueprintMeshMaterial() -> PhysicallyBasedMaterial {
-        var material = PhysicallyBasedMaterial()
-        material.baseColor = .init(tint: UIColor(red: 0.09, green: 0.31, blue: 0.92, alpha: 1), texture: nil)
-        material.roughness = 0.7
-        material.faceCulling = .none
-        material.blending = .transparent(opacity: 0.34)
-        return material
     }
 
     private static func texturedMeshMaterial(_ texture: TextureResource) -> PhysicallyBasedMaterial {

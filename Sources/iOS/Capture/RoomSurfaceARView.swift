@@ -41,16 +41,14 @@ struct RoomSurfaceARView: UIViewRepresentable {
         private let anchor = AnchorEntity(world: .zero)
         private let dotEntity = ModelEntity()
         private let objectDotEntity = ModelEntity()
-        private let dotMaterial: PhysicallyBasedMaterial = {
-            var material = PhysicallyBasedMaterial()
-            material.baseColor = .init(tint: UIColor(red: 0.12, green: 0.66, blue: 1, alpha: 1), texture: nil)
-            material.roughness = 0.38
+        private let dotMaterial: UnlitMaterial = {
+            var material = UnlitMaterial()
+            material.color = .init(tint: UIColor(red: 0.12, green: 0.66, blue: 1, alpha: 1), texture: nil)
             return material
         }()
-        private let objectDotMaterial: PhysicallyBasedMaterial = {
-            var material = PhysicallyBasedMaterial()
-            material.baseColor = .init(tint: UIColor(red: 0.88, green: 0.96, blue: 1, alpha: 1), texture: nil)
-            material.roughness = 0.32
+        private let objectDotMaterial: UnlitMaterial = {
+            var material = UnlitMaterial()
+            material.color = .init(tint: UIColor(red: 0.88, green: 0.96, blue: 1, alpha: 1), texture: nil)
             return material
         }()
         private let dotBuildQueue = DispatchQueue(label: "com.adamnolle.3DSeen.room-surface-dots", qos: .userInitiated)
@@ -135,7 +133,7 @@ struct RoomSurfaceARView: UIViewRepresentable {
         private func installDotMesh(
             _ geometry: GuidedSurfaceDotMesh,
             on entity: ModelEntity,
-            material: PhysicallyBasedMaterial,
+            material: UnlitMaterial,
             name: String,
             revision: UInt64
         ) {
