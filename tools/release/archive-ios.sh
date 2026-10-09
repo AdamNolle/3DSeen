@@ -65,13 +65,10 @@ xcodebuild archive \
   -archivePath "$ARCHIVE_PATH" \
   MARKETING_VERSION="$MARKETING_VERSION" \
   CURRENT_PROJECT_VERSION="$CURRENT_PROJECT_VERSION" \
-  DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-  CODE_SIGN_STYLE=Manual \
-  CODE_SIGN_IDENTITY='Apple Distribution' \
-  PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME"
+  IOS_PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME"
 
 rm -rf "$EXPORT_PATH"
-xcodebuild -exportArchive \
+PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH" xcodebuild -exportArchive \
   -archivePath "$ARCHIVE_PATH" \
   -exportPath "$EXPORT_PATH" \
   -exportOptionsPlist "$EXPORT_OPTIONS"
